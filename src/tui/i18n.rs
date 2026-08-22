@@ -40,6 +40,7 @@ pub(crate) fn startup_history(language: UiLanguage, ascii: bool) -> Vec<String> 
     let mut history = match language {
         UiLanguage::ZhCn => vec![
             format!("{agent} 欢迎使用 nl2sh，请直接描述要完成的 Android Shell 任务。"),
+            format!("{hint} 这是 KONKA 内部便捷体验版本。已自动设置内置大模型，已检测到是 Konka 的小伙伴在使用。欢迎使用反馈。"),
             format!("{hint} 常用示例：查看已安装应用及版本信息"),
             format!("{hint} 常用示例：查看系统版本、CPU、内存和存储空间"),
             format!("{hint} 常用示例：查找占用空间最大的十个文件"),
@@ -51,6 +52,7 @@ pub(crate) fn startup_history(language: UiLanguage, ascii: bool) -> Vec<String> 
         ],
         UiLanguage::En => vec![
             format!("{agent} Welcome to nl2sh. Describe an Android shell task to begin."),
+            format!("{hint} This is the KONKA internal convenience edition. The built-in model is configured automatically for Konka colleagues. Feedback is welcome."),
             format!("{hint} Example: show installed applications and version information"),
             format!("{hint} Example: show Android version, CPU, memory, and storage"),
             format!("{hint} Example: find the ten largest files"),
@@ -134,9 +136,15 @@ mod tests {
         assert!(chinese.len() >= 8);
         assert!(english.len() >= 8);
         assert!(chinese.iter().any(|line| line.contains("应用")));
+        assert!(chinese
+            .iter()
+            .any(|line| line.contains("KONKA 内部便捷体验版本")));
         assert!(chinese.iter().any(|line| line.contains("/config")));
         assert!(chinese.iter().any(|line| line.contains("Shift+拖选")));
         assert!(english.iter().any(|line| line.contains("applications")));
+        assert!(english
+            .iter()
+            .any(|line| line.contains("KONKA internal convenience edition")));
         assert!(english.iter().any(|line| line.contains("Shift+drag")));
         assert!(english.iter().any(|line| line.contains("Ctrl+Q")));
         assert!(chinese.iter().any(|line| line.contains("Ernest-su/nl2sh")));

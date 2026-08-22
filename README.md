@@ -125,7 +125,7 @@ RUST_TARGET=armv7-linux-androideabi ./android-run.sh
 
 ## 配置
 
-默认配置位于解析符号链接后的可执行文件目录，名称为 `config.toml`。配置不存在时，直接运行 `nl2sh` 会先进入 TUI，不再自动启动向导；使用 `/config` 完成全部配置，或分别用 `/provider` 配置 Endpoint、API Key、API 类型并用 `/model` 配置模型。配置完成前普通任务不会发送给模型。`nl2sh --init` 仍可显式创建配置且不会覆盖已有文件。配置以 `0600` 权限创建，请注意终端屏幕和录屏中可能保留输入的 Key。也可传入 `--config /path/config.toml`。
+默认配置位于解析符号链接后的可执行文件目录，名称为 `config.toml`。配置不存在且以 TUI 启动时，程序会用 2 秒超时探测 KONKA 内部便捷体验服务；若收到任意 HTTP 响应，则以 `0600` 权限自动创建使用 `deepseek-v4-flash-0731` 模型和 Responses 协议的 `KK-FREE-TEST` 配置。已有配置文件绝不参与探测或改写；内网服务不可达时仍直接进入 TUI，不自动启动向导，可使用 `/config` 完成全部配置，或分别用 `/provider` 配置 Endpoint、API Key、API 类型并用 `/model` 配置模型。配置完成前普通任务不会发送给模型。`nl2sh --init` 仍可显式创建配置且不会覆盖已有文件。请注意终端屏幕和录屏中可能保留输入的 Key。也可传入 `--config /path/config.toml`。
 
 ```bash
 cp config.toml.example config.toml

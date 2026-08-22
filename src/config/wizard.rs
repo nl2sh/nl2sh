@@ -389,7 +389,7 @@ fn serialize(cfg: &Config) -> Result<String> {
     toml::to_string_pretty(cfg).context("failed to serialize configuration")
 }
 
-fn write_new(path: &Path, cfg: &Config) -> Result<()> {
+pub(super) fn write_new(path: &Path, cfg: &Config) -> Result<()> {
     let text = serialize(cfg)?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);

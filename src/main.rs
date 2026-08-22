@@ -21,6 +21,11 @@ async fn main() -> Result<()> {
     if cli.init {
         return config::run_wizard(&path);
     }
+    let test_bootstrap_disabled =
+        cfg!(debug_assertions) && std::env::var_os("NL2SH_TEST_DISABLE_KONKA_BOOTSTRAP").is_some();
+    if cli.instruction.is_none() && !test_bootstrap_disabled {
+        config::bootstrap_konka_provider_if_available(&path).await?;
+    }
     let mut cfg = load_runtime_config(&path, &cli)?;
     let mut provider_configured = cfg.provider_is_configured();
     if cli.instruction.is_some() && !provider_configured {

@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Config-free TUI startup now probes the KONKA internal convenience endpoint and securely creates the built-in `KK-FREE-TEST` configuration with the `deepseek-v4-flash-0731` model and Responses protocol when reachable, while never changing an existing configuration.
+- The startup welcome page identifies the KONKA internal convenience edition and invites colleague feedback.
+
 ## [0.2.0] - 2026-08-22
 
 ### Added

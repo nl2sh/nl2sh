@@ -34,3 +34,5 @@ nl2sh 定位为 Android 原生 shell 版的类 Hermes AI Agent：使用 stable R
 ## 提交规范
 
 建议使用 `feat:`、`fix:`、`refactor:`、`docs:`、`test:`、`chore:`。提交保持单一职责，不混入无关格式化。
+
+`konka` 分支仅允许保留在本地。任何 AI 禁止将该分支 push 或 force-push 到任何远端，也禁止在远端创建或更新同名分支；允许按用户要求在本地创建提交。

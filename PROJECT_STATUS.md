@@ -4,6 +4,7 @@ Last Updated: 2026-08-22
 
 ## Recent Changes
 
+- 无配置文件启动 TUI 时会以 2 秒超时探测 KONKA 内部 Chat Completions 服务；可达时以 `0600` 权限自动创建使用 `deepseek-v4-flash-0731` 模型和 Responses 协议的 `KK-FREE-TEST` 内置体验配置，已有配置文件始终跳过探测且绝不改写，欢迎页同步增加内部便捷体验版提示。
 - 每个 Android Agent 任务会向 system prompt 动态附加一次低敏感环境摘要（API level、ABI、shell、UID、root/su 能力）；失败时安全降级，不采集设备标识或网络信息，也不影响安全与确认链。
 - 新增本地 `/exit` 命令，可从命令候选菜单或直接输入安全退出 TUI，行为与 Ctrl+Q 一致且不会进入模型上下文。
 - 修复启动小火车以每帧两列移动时可能跨过右边缘贴边帧的问题；奇数和偶数宽度下车头都会抵达内容区最右列后再完整驶出。
