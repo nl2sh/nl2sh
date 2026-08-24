@@ -56,21 +56,37 @@ impl Input {
     }
 
     fn remove_sgr_mouse_report(&mut self) {
-        let Some(start) = self.text.rfind("[<") else {
-            return;
-        };
-        let candidate = &self.text[start + 2..self.text.len().saturating_sub(1)];
-        let mut fields = candidate.split(';');
-        let valid = (0..3).all(|_| {
-            fields
-                .next()
-                .is_some_and(|field| !field.is_empty() && field.chars().all(|c| c.is_ascii_digit()))
-        }) && fields.next().is_none();
-        if valid {
-            self.text.truncate(start);
+        if strip_trailing_sgr_mouse_report(&mut self.text) {
             self.cursor = self.text.len();
         }
     }
+}
+
+/// Removes a complete trailing SGR mouse report, including the degraded form
+/// seen when an adb terminal drops the leading CSI bytes.
+pub(super) fn strip_trailing_sgr_mouse_report(text: &mut String) -> bool {
+    if !matches!(text.chars().next_back(), Some('M' | 'm')) {
+        return false;
+    }
+    let Some(angle) = text.rfind('<') else {
+        return false;
+    };
+    let candidate = &text[angle + 1..text.len().saturating_sub(1)];
+    let mut fields = candidate.split(';');
+    let valid = (0..3).all(|_| {
+        fields
+            .next()
+            .is_some_and(|field| !field.is_empty() && field.chars().all(|c| c.is_ascii_digit()))
+    }) && fields.next().is_none();
+    if !valid {
+        return false;
+    }
+    let start = angle
+        .checked_sub(1)
+        .filter(|index| text.as_bytes().get(*index) == Some(&b'['))
+        .unwrap_or(angle);
+    text.truncate(start);
+    true
 }
 
 impl From<&str> for Input {
@@ -93,6 +109,11 @@ mod tests {
             input.push(character);
         }
         assert_eq!(input.text, "保留这些文字");
+
+        for character in "<35;46;8M".chars() {
+            input.push(character);
+        }
+        assert_eq!(input.text, "保留这些文字");
     }
 
     #[test]
@@ -102,6 +123,10 @@ mod tests {
             input.push(character);
         }
         assert_eq!(input.text, "echo [<not-a-mouse>]");
+        for character in " <35;46;XM".chars() {
+            input.push(character);
+        }
+        assert_eq!(input.text, "echo [<not-a-mouse>] <35;46;XM");
     }
 
     #[test]

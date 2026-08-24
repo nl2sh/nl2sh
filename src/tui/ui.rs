@@ -15,13 +15,26 @@ use unicode_width::UnicodeWidthChar;
 
 fn title_line(app: &App, theme: Theme) -> Line<'static> {
     let separator = || Span::styled(" | ", theme.style(theme.text_muted));
-    vec![
+    let mut spans = vec![
         Span::styled(
             format!("nl2sh v{}", env!("CARGO_PKG_VERSION")),
             theme.bold(theme.text_primary),
         ),
         separator(),
         Span::styled(app.mode.clone(), theme.style(theme.cyan)),
+    ];
+    if let Some(balance) = &app.provider_balance {
+        spans.push(separator());
+        spans.push(Span::styled(
+            match app.language {
+                UiLanguage::ZhCn => "余额 ",
+                UiLanguage::En => "balance ",
+            },
+            theme.style(theme.text_secondary),
+        ));
+        spans.push(Span::styled(balance.clone(), theme.style(theme.success)));
+    }
+    spans.extend([
         separator(),
         Span::styled(
             app.root.clone(),
@@ -40,8 +53,8 @@ fn title_line(app: &App, theme: Theme) -> Line<'static> {
             if app.ascii { "ASCII" } else { "Unicode" },
             theme.style(theme.text_secondary),
         ),
-    ]
-    .into()
+    ]);
+    spans.into()
 }
 
 fn shortcut_line(language: UiLanguage, theme: Theme) -> Line<'static> {
@@ -186,9 +199,11 @@ fn status_color(app: &App, theme: Theme) -> Color {
     }
 }
 
-fn popup_color(dangerous: bool, theme: Theme) -> Color {
+fn popup_color(dangerous: bool, informational: bool, theme: Theme) -> Color {
     if dangerous {
         theme.error
+    } else if informational {
+        theme.accent
     } else {
         theme.warning
     }
@@ -353,11 +368,14 @@ pub fn draw(f: &mut Frame, app: &App) {
                 Block::default()
                     .borders(Borders::ALL)
                     .style(Style::default().bg(theme.background_alt))
-                    .border_style(popup_style(theme, popup_color(popup.dangerous, theme)))
+                    .border_style(popup_style(
+                        theme,
+                        popup_color(popup.dangerous, popup.informational, theme),
+                    ))
                     .title(Line::styled(
                         popup.title.as_str(),
                         theme
-                            .bold(popup_color(popup.dangerous, theme))
+                            .bold(popup_color(popup.dangerous, popup.informational, theme))
                             .bg(theme.background_alt),
                     )),
             ),
@@ -384,18 +402,20 @@ fn render_command_menu(f: &mut Frame, app: &App, input_area: ratatui::layout::Re
         .enumerate()
         .map(|(index, command)| {
             let description = match (app.language, *command) {
+                (UiLanguage::ZhCn, "/balance") => "查询 Provider 余额",
                 (UiLanguage::ZhCn, "/clear") => "清空当前会话",
                 (UiLanguage::ZhCn, "/config") => "重新配置模型服务",
+                (UiLanguage::ZhCn, "/setting") => "打开设置（/config 别名）",
                 (UiLanguage::ZhCn, "/exit") => "安全退出",
                 (UiLanguage::ZhCn, "/help") => "显示帮助",
-                (UiLanguage::ZhCn, "/model") => "配置模型",
-                (UiLanguage::ZhCn, "/provider") => "配置 API 服务",
+                (UiLanguage::ZhCn, "/update") => "检查版本更新",
+                (UiLanguage::En, "/balance") => "Query provider balance",
                 (UiLanguage::En, "/clear") => "Clear the current session",
                 (UiLanguage::En, "/config") => "Reconfigure the model provider",
+                (UiLanguage::En, "/setting") => "Open Settings (/config alias)",
                 (UiLanguage::En, "/exit") => "Quit safely",
                 (UiLanguage::En, "/help") => "Show help",
-                (UiLanguage::En, "/model") => "Configure the model",
-                (UiLanguage::En, "/provider") => "Configure the API provider",
+                (UiLanguage::En, "/update") => "Check for updates",
                 _ => "",
             };
             let style = if index == selected {
@@ -458,7 +478,11 @@ fn input_editor_line(app: &App, width: usize, theme: Theme) -> Line<'static> {
         used += character_width;
     }
     let base = theme.style(theme.text_primary).bg(theme.background_alt);
-    let cursor = if app.cursor_visible { "│" } else { " " };
+    let cursor = if app.cursor_visible && app.popup.is_none() {
+        "│"
+    } else {
+        " "
+    };
     Line::from(vec![
         Span::styled("> ", theme.style(theme.accent).bg(theme.background_alt)),
         Span::styled(before, base),
@@ -528,6 +552,14 @@ fn conversation_lines(app: &App, width: usize, theme: Theme) -> Vec<Line<'_>> {
             }
         } else if let Some(visible) = entry.strip_prefix(super::output::LIVE_OUTPUT_PREFIX) {
             lines.push(conversation_line(visible, theme));
+        } else if let Some(stream) = entry.strip_prefix(super::output::LLM_STREAM_PREFIX) {
+            let (phase, text) = stream.split_once(':').unwrap_or(("0", stream));
+            lines.extend(streaming_agent_lines(
+                text,
+                phase.parse().unwrap_or(0),
+                theme,
+                app.ascii,
+            ));
         } else if starts_with_any(entry, &["[AGENT]", "🤖"]) {
             lines.extend(markdown::render(entry, width, theme, app.ascii));
         } else {
@@ -535,6 +567,58 @@ fn conversation_lines(app: &App, width: usize, theme: Theme) -> Vec<Line<'_>> {
         }
     }
     lines
+}
+
+fn streaming_agent_lines(
+    text: &str,
+    phase: usize,
+    theme: Theme,
+    ascii: bool,
+) -> Vec<Line<'static>> {
+    let prefix = if ascii { "[AGENT] " } else { "🤖 " };
+    let characters = text.chars().collect::<Vec<_>>();
+    let gradient_start = characters.len().saturating_sub(32);
+    let mut lines = vec![Line::from(Span::styled(prefix, theme.bold(theme.special)))];
+    for (index, character) in characters.into_iter().enumerate() {
+        if character == '\n' {
+            lines.push(Line::default());
+            continue;
+        }
+        let tail_index = index.saturating_sub(gradient_start);
+        let color = if index < gradient_start {
+            theme.text_primary
+        } else {
+            animated_gradient_color(theme, tail_index, phase)
+        };
+        let span = Span::styled(character.to_string(), theme.style(color));
+        if let Some(line) = lines.last_mut() {
+            line.spans.push(span);
+        }
+    }
+    lines
+}
+
+fn animated_gradient_color(theme: Theme, index: usize, phase: usize) -> Color {
+    let wave = (index + phase) % 24;
+    let amount = if wave <= 12 { wave } else { 24 - wave };
+    match (theme.text_primary, theme.accent) {
+        (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => Color::Rgb(
+            blend_channel(r1, r2, amount),
+            blend_channel(g1, g2, amount),
+            blend_channel(b1, b2, amount),
+        ),
+        _ => match amount {
+            0..=3 => theme.text_primary,
+            4..=7 => theme.text_secondary,
+            _ => theme.accent,
+        },
+    }
+}
+
+fn blend_channel(from: u8, to: u8, amount: usize) -> u8 {
+    let from = usize::from(from);
+    let to = usize::from(to);
+    ((from * (12 - amount) + to * amount) / 12) as u8
 }
 
 fn buddha_art_lines(art: &str, theme: Theme) -> Vec<Line<'static>> {
@@ -575,21 +659,21 @@ fn buddha_art_lines(art: &str, theme: Theme) -> Vec<Line<'static>> {
 }
 
 const TRAIN_BODY: [&str; 6] = [
-    "      ====        ________                 ",
-    "  _D _|  |_______/        \\__I_I_____===__",
-    "   |(_)---  |   H|  NL2SH  |   |        | ",
-    "   /     |  |   H|_________|   |        | ",
-    "  |      |  |   H          |   |        | ",
-    "  '---(O)------------(O)----(O)----(O)--' ",
+    "                 ________        ====      ",
+    "__===_____I_I__/        \\_______|  |_ D_  ",
+    " |        |   |  NL2SH  |H   |  ---(_)|   ",
+    " |        |   |_________|H   |  |     \\   ",
+    " |        |   |          H   |  |      |  ",
+    " '--(O)----(O)----(O)------------(O)---'  ",
 ];
-const TRAIN_ENGINE_FRONT_COLUMN: usize = 3;
+const TRAIN_ENGINE_FRONT_COLUMN: usize = 39;
 
 fn welcome_train_lines(frame: u16, width: usize, theme: Theme) -> Vec<Line<'static>> {
     let smoke = match (frame / 3) % 4 {
-        0 => "       ( )   (@@)   ( )                    ",
-        1 => "    (  )  (@)    (  )                      ",
-        2 => "  (@)    (  )  (@)                         ",
-        _ => "      (@@)   ( )    o                      ",
+        0 => "                    ( )   (@@)   ( )       ",
+        1 => "                      (  )    (@)  (  )    ",
+        2 => "                         (@)  (  )    (@)  ",
+        _ => "                      o    ( )   (@@)      ",
     };
     let position = usize::from(frame).saturating_mul(WELCOME_TRAIN_SPEED) as isize
         - WELCOME_TRAIN_WIDTH as isize;
@@ -800,6 +884,14 @@ fn bottom_left_rect(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn informational_popup_uses_accent_instead_of_risk_color() {
+        let theme = Theme::for_mode(crate::tui::theme::ColorMode::Ansi256);
+        assert_eq!(popup_color(false, true, theme), theme.accent);
+        assert_eq!(popup_color(false, false, theme), theme.warning);
+        assert_eq!(popup_color(true, false, theme), theme.error);
+    }
     use crate::tui::{app::PopupView, input::Input};
     use ratatui::{backend::TestBackend, Terminal};
 
@@ -828,6 +920,7 @@ mod tests {
             turn: 2,
             max_context: 10,
             status: "idle".into(),
+            provider_balance: None,
             popup: None,
         };
         terminal.draw(|frame| draw(frame, &app))?;
@@ -862,8 +955,8 @@ mod tests {
         assert!(menu.contains("/clear"));
         assert!(menu.contains("/exit"));
         assert!(menu.contains("/help"));
-        assert!(menu.contains("/model"));
-        assert!(menu.contains("/provider"));
+        assert!(menu.contains("/setting"));
+        assert!(!menu.contains("/provider"));
         assert!(terminal
             .backend()
             .buffer()
@@ -940,6 +1033,30 @@ mod tests {
     }
 
     #[test]
+    fn streaming_agent_tail_has_animated_gradient_and_completed_text_is_plain() {
+        let theme = Theme::for_mode(super::super::theme::ColorMode::TrueColor);
+        let first = streaming_agent_lines("streaming response", 0, theme, true);
+        let next = streaming_agent_lines("streaming response", 5, theme, true);
+        assert_eq!(first[0].spans[0].content, "[AGENT] ");
+        assert!(first[0]
+            .spans
+            .iter()
+            .skip(1)
+            .any(|span| span.style.fg != Some(theme.text_primary)));
+        assert!(first[0]
+            .spans
+            .iter()
+            .zip(&next[0].spans)
+            .any(|(left, right)| left.style.fg != right.style.fg));
+
+        let completed = markdown::render("[AGENT] streaming response", 80, theme, true);
+        assert!(completed
+            .iter()
+            .flat_map(|line| &line.spans)
+            .all(|span| span.style.fg != Some(theme.accent)));
+    }
+
+    #[test]
     fn title_status_and_confirmation_follow_semantic_roles() {
         let theme = Theme::for_mode(super::super::theme::ColorMode::TrueColor);
         let mut app = App {
@@ -962,6 +1079,7 @@ mod tests {
             turn: 3,
             max_context: 10,
             status: "空闲；上次执行 4 步".into(),
+            provider_balance: None,
             popup: None,
         };
         let title = title_line(&app, theme);
@@ -1010,6 +1128,7 @@ mod tests {
             turn: 0,
             max_context: 10,
             status: "waiting for confirmation".into(),
+            provider_balance: None,
             popup: Some(PopupView {
                 title: "Security confirmation".into(),
                 lines: vec![
@@ -1024,6 +1143,7 @@ mod tests {
                     "  6. UNIQUE_OPTION_RESIDUE".into(),
                 ],
                 dangerous: false,
+                informational: false,
             }),
         };
         terminal.draw(|frame| draw(frame, &app))?;
@@ -1032,6 +1152,7 @@ mod tests {
             title: "Security confirmation".into(),
             lines: vec!["High risk: type YES, then Enter:".into(), "Y".into()],
             dangerous: true,
+            informational: false,
         });
         terminal.draw(|frame| draw(frame, &app))?;
 
@@ -1090,6 +1211,7 @@ mod tests {
             turn: 1,
             max_context: 10,
             status: "idle".into(),
+            provider_balance: None,
             popup: None,
         };
         terminal.draw(|frame| draw(frame, &app))?;
@@ -1136,7 +1258,7 @@ mod tests {
     #[test]
     fn welcome_train_moves_across_the_viewport_and_contains_branding() {
         let theme = Theme::for_mode(crate::tui::theme::ColorMode::Ansi256);
-        let middle = welcome_train_lines(32, 80, theme);
+        let middle = welcome_train_lines(64, 80, theme);
         let rendered = middle
             .iter()
             .flat_map(|line| line.spans.iter())
@@ -1149,27 +1271,27 @@ mod tests {
         assert!(before_entry
             .iter()
             .all(|line| line.spans.iter().all(|span| span.content.is_empty())));
-        let after_exit = welcome_train_lines(62, 80, theme);
+        let after_exit = welcome_train_lines(124, 80, theme);
         assert!(after_exit
             .iter()
             .all(|line| line.spans.iter().all(|span| span.content.is_empty())));
 
-        let at_right_edge = welcome_train_lines(60, 80, theme);
+        let at_right_edge = welcome_train_lines(84, 80, theme);
         assert!(at_right_edge.iter().any(|line| {
             line.spans
                 .iter()
                 .map(|span| span.content.as_ref())
                 .collect::<String>()
-                .ends_with("_D")
+                .ends_with("D_")
         }));
 
-        let at_odd_width_right_edge = welcome_train_lines(60, 79, theme);
+        let at_odd_width_right_edge = welcome_train_lines(83, 79, theme);
         assert!(at_odd_width_right_edge.iter().any(|line| {
             line.spans
                 .iter()
                 .map(|span| span.content.as_ref())
                 .collect::<String>()
-                .ends_with("_D")
+                .ends_with("D_")
         }));
     }
 }

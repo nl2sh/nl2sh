@@ -1,7 +1,15 @@
 api_key = "sk-xxx"
 model = "gpt-4o-mini"
+model_context_window = 128000
+# model_max_output_tokens = 16384
 endpoint = "https://api.openai.com/v1"
 api_type = "responses"
+proxy_enabled = false
+proxy_type = "http"
+proxy_address = ""
+proxy_username = ""
+proxy_password = ""
+proxy_bypass = "localhost,127.0.0.1,::1"
 
 max_context_turns = 16
 max_agent_steps = 24

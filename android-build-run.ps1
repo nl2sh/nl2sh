@@ -2,11 +2,9 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $ProjectDir = $PSScriptRoot
-$Target = if ($env:RUST_TARGET) { $env:RUST_TARGET } else { "aarch64-linux-android" }
 $ApiLevel = if ($env:ANDROID_API_LEVEL) { $env:ANDROID_API_LEVEL } else { "26" }
 $AndroidDir = if ($env:ANDROID_DIR) { $env:ANDROID_DIR } else { "/data/local/tmp" }
 $RemoteBinary = "$AndroidDir/nl2sh"
-$LocalBinary = Join-Path $ProjectDir "target\$Target\release\nl2sh"
 $NdkDir = if ($env:ANDROID_NDK_HOME) { $env:ANDROID_NDK_HOME } elseif ($env:ANDROID_NDK_ROOT) { $env:ANDROID_NDK_ROOT } else { $null }
 $AdbArgs = @()
 
@@ -17,7 +15,50 @@ if ([string]::IsNullOrWhiteSpace($NdkDir)) { throw "set ANDROID_NDK_HOME or ANDR
 if (-not (Test-Path -LiteralPath $NdkDir -PathType Container)) { throw "Android NDK directory does not exist: $NdkDir" }
 if ($ApiLevel -notmatch '^\d+$' -or [int]$ApiLevel -lt 26) { throw "ANDROID_API_LEVEL must be an integer greater than or equal to 26: $ApiLevel" }
 if ($AndroidDir -notmatch '^/[A-Za-z0-9._/-]+$') { throw "ANDROID_DIR must be a safe absolute Android path: $AndroidDir" }
-if ($env:ADB_SERIAL) { $AdbArgs += @("-s", $env:ADB_SERIAL) }
+if ($env:ADB_SERIAL) {
+    $DeviceState = (& adb -s $env:ADB_SERIAL get-state 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $DeviceState -ne "device") { throw "ADB_SERIAL is not a usable device: $($env:ADB_SERIAL)" }
+    $SelectedSerial = $env:ADB_SERIAL
+} else {
+    function Get-AdbDevices {
+        $Lines = @(& adb devices 2>$null)
+        return @($Lines | Select-Object -Skip 1 | ForEach-Object {
+            if ($_ -match '^(\S+)\s+device\s*$') { $Matches[1] }
+        })
+    }
+    $Devices = @(Get-AdbDevices)
+    if ($Devices.Count -eq 0) {
+        Write-Host "No connected ADB device was found."
+        $DeviceIp = Read-Host "Enter Android device IP or IP:port"
+        if ([string]::IsNullOrWhiteSpace($DeviceIp)) { throw "no IP address was entered" }
+        & adb connect $DeviceIp
+        if ($LASTEXITCODE -ne 0) { throw "adb connect failed: $DeviceIp" }
+        $Devices = @(Get-AdbDevices)
+    }
+    if ($Devices.Count -eq 0) { throw "no usable ADB device is connected" }
+    if ($Devices.Count -eq 1) {
+        $SelectedSerial = $Devices[0]
+    } else {
+        Write-Host "Multiple ADB devices are connected:"
+        for ($Index = 0; $Index -lt $Devices.Count; $Index++) { Write-Host "  $($Index + 1). $($Devices[$Index])" }
+        $Choice = Read-Host "Enter device number"
+        if ($Choice -notmatch '^[1-9][0-9]*$' -or [int]$Choice -gt $Devices.Count) { throw "invalid device number" }
+        $SelectedSerial = $Devices[[int]$Choice - 1]
+    }
+}
+$AdbArgs = @("-s", $SelectedSerial)
+Write-Host "Selected device: $SelectedSerial"
+
+$AbiList = (& adb @AdbArgs shell getprop ro.product.cpu.abilist 2>$null | Out-String).Trim()
+if ([string]::IsNullOrWhiteSpace($AbiList)) { $AbiList = (& adb @AdbArgs shell getprop ro.product.cpu.abi 2>$null | Out-String).Trim() }
+Write-Host "Device ABI: $AbiList"
+if (($AbiList -split ',') -contains "arm64-v8a") { $DetectedTarget = "aarch64-linux-android" }
+elseif (($AbiList -split ',') -contains "armeabi-v7a") { $DetectedTarget = "armv7-linux-androideabi" }
+else { throw "unsupported device ABI '$AbiList'; supported ABIs are arm64-v8a and armeabi-v7a" }
+if ($env:RUST_TARGET -and $env:RUST_TARGET -ne $DetectedTarget) { throw "RUST_TARGET=$($env:RUST_TARGET) does not match device ABI $AbiList ($DetectedTarget)" }
+$Target = if ($env:RUST_TARGET) { $env:RUST_TARGET } else { $DetectedTarget }
+$LocalBinary = Join-Path $ProjectDir "target\$Target\release\nl2sh"
+Write-Host "Selected Rust target: $Target"
 
 switch ($Target) {
     "aarch64-linux-android" { $ClangTarget = "aarch64-linux-android"; $CargoPrefix = "AARCH64_LINUX_ANDROID"; $CcSuffix = "aarch64_linux_android" }
@@ -33,9 +74,6 @@ if (-not (Test-Path -LiteralPath $Clang -PathType Leaf) -or -not (Test-Path -Lit
 $InstalledTargets = @(& rustup target list --installed)
 if ($LASTEXITCODE -ne 0) { throw "failed to list installed Rust targets" }
 if ($InstalledTargets -notcontains $Target) { throw "Rust target is missing. Run: rustup target add $Target" }
-
-$DeviceState = (& adb @AdbArgs get-state 2>$null | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $DeviceState -ne "device") { throw "no usable adb device; connect one or set ADB_SERIAL" }
 
 $AdbIsRoot = $false
 Write-Host "Restarting adbd with root privileges..."

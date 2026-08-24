@@ -108,6 +108,49 @@ pub struct Usage {
     pub output_tokens: Option<u64>,
 }
 
+impl Usage {
+    /// Adds provider-reported counters while preserving unknown values.
+    pub fn accumulate(&mut self, other: &Self) {
+        self.input_tokens = add_optional(self.input_tokens, other.input_tokens);
+        self.output_tokens = add_optional(self.output_tokens, other.output_tokens);
+    }
+
+    /// Returns the reported total when both input and output are known.
+    pub fn total_tokens(&self) -> Option<u64> {
+        Some(self.input_tokens?.saturating_add(self.output_tokens?))
+    }
+}
+
+fn add_optional(current: Option<u64>, next: Option<u64>) -> Option<u64> {
+    match (current, next) {
+        (Some(current), Some(next)) => Some(current.saturating_add(next)),
+        (None, Some(next)) => Some(next),
+        (Some(current), None) => Some(current),
+        (None, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::Usage;
+
+    #[test]
+    fn accumulates_usage_across_agent_steps() {
+        let mut usage = Usage::default();
+        usage.accumulate(&Usage {
+            input_tokens: Some(10),
+            output_tokens: Some(4),
+        });
+        usage.accumulate(&Usage {
+            input_tokens: Some(7),
+            output_tokens: Some(3),
+        });
+        assert_eq!(usage.input_tokens, Some(17));
+        assert_eq!(usage.output_tokens, Some(7));
+        assert_eq!(usage.total_tokens(), Some(24));
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Normalized reason a generation ended.
 pub enum FinishReason {

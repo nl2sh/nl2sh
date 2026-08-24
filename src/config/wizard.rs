@@ -1,4 +1,6 @@
 use super::{ApiType, Config, ConfirmPolicy, ExecuteUserMode, UiLanguage};
+use crate::provider_account::build_account_client;
+use crate::provider_metadata::{build_metadata_client, known_context_window, ModelMetadata};
 use anyhow::{bail, Context, Result};
 use crossterm::{
     cursor,
@@ -259,8 +261,170 @@ pub fn run_provider_configure(path: &Path) -> Result<()> {
 pub fn run_model_configure(path: &Path) -> Result<()> {
     let mut cfg = load_stored_or_default(path)?;
     cfg.model = prompt(label(cfg.ui_language, "模型", "Model"), &cfg.model)?;
+    let current = cfg
+        .model_context_window
+        .map_or_else(String::new, |value| value.to_string());
+    let context = prompt(
+        label(
+            cfg.ui_language,
+            "上下文窗口 Token（留空自动识别）",
+            "Context-window tokens (empty for automatic detection)",
+        ),
+        &current,
+    )?;
+    cfg.model_context_window = parse_optional_positive(&context)?;
+    let current_output = cfg
+        .model_max_output_tokens
+        .map_or_else(String::new, |value| value.to_string());
+    let output = prompt(
+        label(
+            cfg.ui_language,
+            "最大输出 Token（留空自动识别）",
+            "Maximum output tokens (empty for automatic detection)",
+        ),
+        &current_output,
+    )?;
+    cfg.model_max_output_tokens = parse_optional_positive(&output)?;
     cfg.validate_runtime()?;
     write_upsert(path, &cfg)
+}
+
+fn parse_optional_positive(value: &str) -> Result<Option<u64>> {
+    if value.trim().is_empty() {
+        return Ok(None);
+    }
+    let value = value
+        .trim()
+        .parse::<u64>()
+        .context("invalid positive token limit")?;
+    if value == 0 {
+        bail!("token limit must be positive")
+    }
+    Ok(Some(value))
+}
+
+/// Fetches models from the configured OpenAI-compatible endpoint and lets the user select one.
+pub async fn run_models_configure(path: &Path) -> Result<()> {
+    let mut cfg = load_stored_or_default(path)?;
+    println!(
+        "{}",
+        label(
+            cfg.ui_language,
+            "正在从 Provider 网络拉取可用模型…",
+            "Fetching available models from the provider…"
+        )
+    );
+    let result = build_metadata_client(&cfg).list_models(&cfg).await;
+    let models = match result {
+        Ok(models) if !models.is_empty() => models,
+        Ok(_) => {
+            println!(
+                "{}",
+                label(
+                    cfg.ui_language,
+                    "Provider 未返回模型，改为手工输入。",
+                    "The provider returned no models; switching to manual input."
+                )
+            );
+            return run_model_configure(path);
+        }
+        Err(error) => {
+            println!(
+                "{} {error:#}",
+                label(
+                    cfg.ui_language,
+                    "模型列表拉取失败，改为手工输入：",
+                    "Model discovery failed; switching to manual input:"
+                )
+            );
+            return run_model_configure(path);
+        }
+    };
+    for (index, model) in models.iter().enumerate() {
+        let context = model
+            .context_window
+            .map_or_else(|| "?".into(), |value| value.to_string());
+        println!("{:>3}. {}  context={context}", index + 1, model.id);
+    }
+    let choice = prompt(
+        label(
+            cfg.ui_language,
+            "选择编号或直接输入模型名称",
+            "Select a number or enter a model identifier",
+        ),
+        &cfg.model,
+    )?;
+    let selected = choice
+        .parse::<usize>()
+        .ok()
+        .and_then(|index| index.checked_sub(1))
+        .and_then(|index| models.get(index).cloned())
+        .unwrap_or_else(|| ModelMetadata {
+            context_window: known_context_window(&choice),
+            max_output_tokens: None,
+            id: choice,
+        });
+    cfg.model = selected.id;
+    if cfg.model_context_window.is_none() {
+        cfg.model_context_window = selected.context_window;
+    }
+    cfg.validate_runtime()?;
+    write_upsert(path, &cfg)
+}
+
+/// Queries and displays balances without persisting or logging account data.
+pub async fn run_balance_query(path: &Path) -> Result<()> {
+    let cfg = load_stored_or_default(path)?;
+    println!(
+        "{}",
+        label(
+            cfg.ui_language,
+            "正在从 Provider 网络查询余额…",
+            "Fetching provider balance…"
+        )
+    );
+    match build_account_client(&cfg) {
+        Ok(client) => match client.balances(&cfg).await {
+            Ok(balances) if balances.is_empty() => println!(
+                "{}",
+                label(
+                    cfg.ui_language,
+                    "Provider 未返回余额。",
+                    "The provider returned no balances."
+                )
+            ),
+            Ok(balances) => {
+                for balance in balances {
+                    println!("{} {}", balance.currency, balance.amount);
+                }
+            }
+            Err(error) => println!(
+                "{} {error:#}",
+                label(cfg.ui_language, "余额查询失败：", "Balance lookup failed:")
+            ),
+        },
+        Err(error) => println!(
+            "{} {error:#}",
+            label(
+                cfg.ui_language,
+                "当前 Provider 不支持余额查询：",
+                "Balance lookup is unsupported for this provider:"
+            )
+        ),
+    }
+    println!(
+        "{}",
+        label(
+            cfg.ui_language,
+            "余额仅显示在当前终端，不写入审计日志。按 Enter 返回。",
+            "Balance is shown only in this terminal and is not audited. Press Enter to return."
+        )
+    );
+    let mut ignored = String::new();
+    io::stdin()
+        .read_line(&mut ignored)
+        .context("failed to wait for balance acknowledgement")?;
+    Ok(())
 }
 
 fn load_stored_or_default(path: &Path) -> Result<Config> {
@@ -294,6 +458,12 @@ fn write_upsert(path: &Path, cfg: &Config) -> Result<()> {
     } else {
         write_new(path, cfg)
     }
+}
+
+/// Atomically persists a validated configuration from an in-TUI editor.
+pub fn save_config(path: &Path, cfg: &Config) -> Result<()> {
+    cfg.validate_runtime()?;
+    write_upsert(path, cfg)
 }
 
 fn parse_language(value: &str) -> Result<UiLanguage> {

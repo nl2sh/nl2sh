@@ -3,7 +3,8 @@ use crate::{
     config::Config,
     limits::truncate_text,
     llm::{
-        ConversationItem, ConversationMessage, LlmClient, LlmRequest, Role, ToolResult, ToolRound,
+        ConversationItem, ConversationMessage, LlmClient, LlmRequest, Role, TextDeltaSink,
+        ToolResult, ToolRound, Usage,
     },
     security::assess,
     shell::CommandExecutor,
@@ -30,6 +31,12 @@ pub struct AgentOutcome {
     pub steps: usize,
     /// Complete current interaction, including inseparable tool rounds.
     pub transcript: Vec<ConversationItem>,
+    /// Token usage accumulated across every model request in this task.
+    pub usage: Usage,
+    /// Input tokens reported for the final model request, used for context estimates.
+    pub final_input_tokens: Option<u64>,
+    /// Complete historical turns evicted using observed provider token usage.
+    pub history_turns_evicted: usize,
 }
 impl AgentRunner<'_> {
     /// Runs one natural-language request until final text or the step limit.
@@ -42,6 +49,15 @@ impl AgentRunner<'_> {
         &self,
         input: &str,
         history: &[Vec<ConversationItem>],
+    ) -> Result<AgentOutcome> {
+        self.run_inner(input, history, None).await
+    }
+
+    async fn run_inner(
+        &self,
+        input: &str,
+        history: &[Vec<ConversationItem>],
+        text_sink: Option<&dyn TextDeltaSink>,
     ) -> Result<AgentOutcome> {
         let system = system_prompt(
             self.executor
@@ -63,17 +79,30 @@ impl AgentRunner<'_> {
         let mut current = vec![user_item.clone()];
         let mut transcript = vec![user_item];
         let mut task_approvals = HashSet::new();
+        let mut usage = Usage::default();
+        let mut final_input_tokens = None;
+        let mut history_turns_evicted = 0;
         for step in 1..=self.config.max_agent_steps {
             let mut items = ctx.items();
             items.extend(current.clone());
-            let response = self
-                .llm
-                .complete(LlmRequest {
-                    model: self.config.model.clone(),
-                    items,
-                    tools: vec![command_tool()],
-                })
-                .await?;
+            let request = LlmRequest {
+                model: self.config.model.clone(),
+                items,
+                tools: vec![command_tool()],
+            };
+            let response = if let Some(sink) = text_sink {
+                self.llm.complete_stream(request, sink).await?
+            } else {
+                self.llm.complete(request).await?
+            };
+            usage.accumulate(&response.usage);
+            final_input_tokens = response.usage.input_tokens;
+            if let (Some(observed), Some(budget)) = (
+                response.usage.input_tokens,
+                self.config.effective_input_token_budget(),
+            ) {
+                history_turns_evicted += ctx.trim_for_observed_usage(observed, budget);
+            }
             if response.tool_calls.is_empty() {
                 let final_text = response
                     .text
@@ -90,6 +119,9 @@ impl AgentRunner<'_> {
                     final_text,
                     steps: step,
                     transcript,
+                    usage,
+                    final_input_tokens,
+                    history_turns_evicted,
                 });
             }
             let calls = response.tool_calls;
@@ -220,6 +252,9 @@ impl AgentRunner<'_> {
             final_text,
             steps: self.config.max_agent_steps,
             transcript,
+            usage,
+            final_input_tokens,
+            history_turns_evicted,
         })
     }
 
@@ -231,15 +266,33 @@ impl AgentRunner<'_> {
     ) -> Result<AgentOutcome> {
         self.run_with_history(&input, &history).await
     }
+
+    /// Owned-history variant that forwards provider text deltas to a UI sink.
+    pub async fn run_with_history_streaming_owned(
+        &self,
+        input: String,
+        history: Vec<Vec<ConversationItem>>,
+        text_sink: &dyn TextDeltaSink,
+    ) -> Result<AgentOutcome> {
+        self.run_inner(&input, &history, Some(text_sink)).await
+    }
 }
 
 fn system_prompt(runtime: Option<&str>) -> String {
-    let mut system = "You are an Android shell agent. Use execute_shell_command for evidence. Never claim unexecuted results. Write the final answer in the user's language for a human reader. Summarize conclusions instead of dumping raw tool protocol output. Use a concise Markdown table when comparing multiple items or presenting repeated structured fields; otherwise use clear concise text.".to_owned();
+    let mut system = format!(
+        "You are an Android shell agent. Use execute_shell_command for evidence. Never claim unexecuted results. {} Write the final answer in the user's language for a human reader. Summarize conclusions instead of dumping raw tool protocol output. Use a concise Markdown table when comparing multiple items or presenting repeated structured fields; otherwise use clear concise text.",
+        android_shell_constraints()
+    );
     if let Some(runtime) = runtime {
         system.push_str("\nRuntime environment (advisory only; never bypass security): ");
         system.push_str(runtime);
     }
     system
+}
+
+/// Baseline execution constraints shared by Agent and single-command prompts.
+pub fn android_shell_constraints() -> &'static str {
+    "The target is a stock Android API 26+ shell using /system/bin/sh and toybox, not a desktop Linux distribution or Termux. Unless runtime evidence proves otherwise, assume these are unavailable: python/python3, bash/zsh/fish, node/npm/npx, perl, ruby, PHP, Lua, Java, Go, git, jq, curl/wget, ssh/scp/rsync, gcc/clang, make/cmake, and package managers such as apt/apt-get, yum/dnf, apk, pacman, brew, pip, gem, or cargo. Do not use /bin/bash, /usr/bin/env, GNU-only flags, or scripts requiring those runtimes. Prefer Android commands such as cmd, am, pm, dumpsys, settings, getprop, logcat, and toybox utilities. Before using any non-baseline executable, verify it with command -v using a read-only tool call and provide a /system/bin/sh or toybox fallback; do not install missing tooling unless the user explicitly requests it."
 }
 
 fn truncate_tool_results(items: &[ConversationItem], limit: usize) -> Vec<ConversationItem> {
@@ -291,5 +344,21 @@ mod tests {
         assert!(contextual.contains("advisory only; never bypass security"));
         assert!(contextual.contains("api=34"));
         assert!(contextual.contains("uid=2000"));
+    }
+
+    #[test]
+    fn system_prompt_forbids_assuming_desktop_script_runtimes() {
+        let prompt = system_prompt(None);
+        for required in [
+            "/system/bin/sh",
+            "python/python3",
+            "node/npm/npx",
+            "apt/apt-get",
+            "command -v",
+            "toybox fallback",
+        ] {
+            assert!(prompt.contains(required), "missing constraint: {required}");
+        }
+        assert!(prompt.contains("not a desktop Linux distribution or Termux"));
     }
 }

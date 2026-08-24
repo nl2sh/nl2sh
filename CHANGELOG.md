@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- 设置面板文本字段新增 UTF-8 安全的 Left/Right/Home/End 光标移动，插入、Backspace 和 Delete 均围绕当前光标执行，密码字段保持掩码。
+- 在统一设置面板的“模型与智能体”Tab 恢复后台模型发现；可在 TUI 内拉取、选择并回填模型及 Provider 元数据，失败时保留手工输入。
+- 修复部分 adb 终端丢失 CSI 前缀后将 `<35;46;8M` 一类 SGR 鼠标报告写入主输入框或设置字段的问题。
+- 所有以 `/` 开头的输入统一限定为本地命令，未知命令在本地提示，绝不提交给 LLM；修复 `/update` 落入 Agent 提交流程的问题。
+- 修复 `/config` 打开设置后仍被提交给模型的问题；设置面板接管输入焦点并显示独立输入边界、背景和闪烁光标。
+- 移除 `/provider`、`/model`、`/models`、`/proxy`，统一使用 `/config` 或其别名 `/setting`。
+- 新增 `update`/`/update` 和启动后台版本检查；按 ABI 下载、SHA-256 校验并原子替换，支持暂不更新或跳过指定版本。
+- 将 Provider、模型、Agent、安全、界面和代理配置整合为多 Tab TUI 设置面板，最大步骤/轮次显示推荐值 24/16。
+
 格式基于 Keep a Changelog。
 
 ## [Unreleased]
@@ -8,6 +19,21 @@
 
 - Config-free TUI startup now probes the KONKA internal convenience endpoint and securely creates the built-in `KK-FREE-TEST` configuration with the `deepseek-v4-flash-0731` model and Responses protocol when reachable, while never changing an existing configuration.
 - The startup welcome page identifies the KONKA internal convenience edition and invites colleague feedback.
+- Agent tasks now accumulate provider-reported input/output token usage across every tool-calling step and show the task totals in the TUI status line.
+- A `/models` flow now fetches the current provider's model list with a visible network-loading message and falls back to manual model entry without logging credentials or raw account responses.
+- Provider metadata is normalized behind a dedicated client for OpenAI, DeepSeek, SiliconFlow, and Ollama; known or user-overridden context windows drive an estimated context-usage percentage in the TUI.
+- A non-audited `/balance` command uses documented bearer-token endpoints for DeepSeek and SiliconFlow; unsupported providers fail visibly without attempting private console APIs.
+- Supported provider balances refresh every 60 seconds and remain visible in the TUI title bar; failures retain the last successful in-memory value without adding account data to conversation, configuration, or audit history.
+- Agent history now contracts by complete oldest turns when observed provider input tokens cross the known context-window safety watermark, preserving the system instruction, current interaction, and complete tool rounds.
+- Added an in-TUI `/proxy` editor for HTTP CONNECT, SOCKS5/SOCKS5H, authentication, bypass rules, and a non-destructive master switch; all Provider clients now share the same credential-safe proxy policy.
+- Fragmented CSI/SS3 left and right arrow sequences are now reconstructed inside the proxy editor instead of being mistaken for a standalone Escape and closing the popup.
+- Agent and command prompts now explicitly target stock Android `/system/bin/sh` and toybox, requiring evidence before using desktop scripting runtimes, development tools, or package managers.
+- Fragmented `ESC O Q` F2 sequences are now normalized on ordinary input paths, preventing stray `OQ` text and reliably toggling tool-result expansion.
+- Chat Completions and Responses now stream model text into the Agent TUI over SSE, with an animated semantic gradient while generation is active and normal Markdown styling immediately after completion.
+- Release archives now contain both ARM64 and ARMv7 binaries in ABI-specific directories; Linux and double-clickable Windows BAT launchers select or connect an ADB device, detect its ABI, and deploy the matching binary automatically.
+- Source build/deploy launchers are now named `android-build-run.sh` and `android-build-run.ps1`; they use the same ADB device selection flow and automatically compile the Rust target matching the selected device ABI.
+- Local `pack-release.sh` and `pack-release.ps1` helpers build both Android ABIs and create the same combined `nl2sh-android.zip` layout and SHA256 checksum used by the GitHub release workflow.
+- README, user-guide, and release-package TUI media now use the animated `screenshots/nl2sh.gif` demonstration instead of the previous static screenshot.
 
 ## [0.2.0] - 2026-08-22
 
@@ -73,6 +99,8 @@
 
 ### Fixed
 
+- Fragmented CSI/SS3 arrow sequences from ADB terminals are reconstructed while the slash-command menu is open, so wrapping past the first or last item no longer closes the menu or inserts `A`/`B` characters after `/`.
+- Completing or cancelling a streamed LLM response now invalidates ratatui's retained frame and performs one full redraw, preventing stale gradient characters after the final Markdown layout replaces the streaming layout.
 - `android-run.sh` now applies the host terminal's current rows and columns to the allocated Android PTY before starting nl2sh, preventing an adb default width from truncating full-width TUI animations and layouts.
 - The startup train now advances by terminal columns across the actual conversation viewport, so its final visible engine reaches the right border before the animation ends on wide terminals.
 - The Buddha terminal illustration now measures its Chinese blessing row at the same 65-column display width as the surrounding ASCII frame, preventing right-edge protrusion.

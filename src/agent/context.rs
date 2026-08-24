@@ -27,4 +27,46 @@ impl ConversationContext {
             .chain(self.turns.iter().flatten().cloned())
             .collect()
     }
+
+    /// Shrinks retained history using the provider's observed input-token count.
+    ///
+    /// Only complete prior turns are removed. The system instruction and the
+    /// current in-flight turn remain outside this eviction boundary.
+    pub fn trim_for_observed_usage(&mut self, observed: u64, budget: u64) -> usize {
+        if observed <= budget || self.turns.is_empty() {
+            return 0;
+        }
+        let retained = self.turns.len();
+        let desired = ((retained as u128 * budget as u128) / observed as u128) as usize;
+        let remove = retained.saturating_sub(desired).max(1).min(retained);
+        self.turns.drain(0..remove);
+        remove
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn observed_usage_removes_only_oldest_complete_turns() {
+        let mut context = ConversationContext::new("system", 4);
+        for value in ["one", "two", "three", "four"] {
+            context.push_turn(vec![ConversationItem::Message(ConversationMessage::new(
+                Role::User,
+                value,
+            ))]);
+        }
+
+        assert_eq!(context.trim_for_observed_usage(100, 50), 2);
+        let retained = context
+            .items()
+            .into_iter()
+            .filter_map(|item| match item {
+                ConversationItem::Message(message) => Some(message.content),
+                ConversationItem::Tools(_) => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(retained, ["system", "three", "four"]);
+    }
 }

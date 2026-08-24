@@ -1,4 +1,6 @@
 /target
+/dist
+/.idea
 /config.toml
 *.swp
 *.log

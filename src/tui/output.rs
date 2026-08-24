@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 pub(super) const LIVE_OUTPUT_PREFIX: &str = "\u{1e}LIVE:";
 pub(super) const TOOL_RESULT_PREFIX: &str = "\u{1e}RESULT:";
+pub(super) const LLM_STREAM_PREFIX: &str = "\u{1e}LLM:";
 
 pub(super) struct SessionOutput {
     pub history: Arc<Mutex<Vec<String>>>,
@@ -77,7 +78,9 @@ pub(super) fn append_transcript(
     let mut visible = history
         .lock()
         .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?;
-    visible.retain(|entry| !entry.starts_with(LIVE_OUTPUT_PREFIX));
+    visible.retain(|entry| {
+        !entry.starts_with(LIVE_OUTPUT_PREFIX) && !entry.starts_with(LLM_STREAM_PREFIX)
+    });
     for item in &outcome.transcript {
         if let ConversationItem::Tools(round) = item {
             for call in &round.calls {
@@ -126,6 +129,73 @@ pub(super) fn append_transcript(
         outcome.final_text
     ));
     log.record("agent", &outcome.final_text)?;
+    Ok(())
+}
+
+pub(super) fn begin_llm_stream(history: &Arc<Mutex<Vec<String>>>) -> Result<()> {
+    let mut history = history
+        .lock()
+        .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?;
+    history.retain(|entry| !entry.starts_with(LLM_STREAM_PREFIX));
+    history.push(format!("{LLM_STREAM_PREFIX}0:"));
+    Ok(())
+}
+
+pub(super) fn append_llm_delta(
+    history: &Arc<Mutex<Vec<String>>>,
+    delta: &str,
+    max_bytes: usize,
+) -> Result<()> {
+    let mut history = history
+        .lock()
+        .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?;
+    let Some(entry) = history
+        .iter_mut()
+        .rev()
+        .find(|entry| entry.starts_with(LLM_STREAM_PREFIX))
+    else {
+        return Ok(());
+    };
+    let Some((header, text)) = entry
+        .split_once(':')
+        .and_then(|(_, rest)| rest.split_once(':'))
+    else {
+        return Ok(());
+    };
+    let mut combined = text.to_owned();
+    combined.push_str(delta);
+    *entry = format!(
+        "{LLM_STREAM_PREFIX}{header}:{}",
+        truncate_text(&combined, max_bytes)
+    );
+    Ok(())
+}
+
+pub(super) fn advance_llm_gradient(history: &Arc<Mutex<Vec<String>>>) -> Result<()> {
+    let mut history = history
+        .lock()
+        .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?;
+    if let Some(entry) = history
+        .iter_mut()
+        .rev()
+        .find(|entry| entry.starts_with(LLM_STREAM_PREFIX))
+    {
+        if let Some((phase, text)) = entry
+            .strip_prefix(LLM_STREAM_PREFIX)
+            .and_then(|value| value.split_once(':'))
+        {
+            let phase = phase.parse::<usize>().unwrap_or(0).wrapping_add(1) % 24;
+            *entry = format!("{LLM_STREAM_PREFIX}{phase}:{text}");
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn discard_llm_stream(history: &Arc<Mutex<Vec<String>>>) -> Result<()> {
+    history
+        .lock()
+        .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
+        .retain(|entry| !entry.starts_with(LLM_STREAM_PREFIX));
     Ok(())
 }
 

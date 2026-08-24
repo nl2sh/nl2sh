@@ -1,4 +1,4 @@
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum Mode {
@@ -11,6 +11,11 @@ pub enum ApiTypeArg {
     ChatCompletions,
     Responses,
 }
+#[derive(Debug, Clone, Copy, Subcommand)]
+pub enum Command {
+    /// Check for and install the latest compatible GitHub Release.
+    Update,
+}
 impl From<ApiTypeArg> for nl2sh::config::ApiType {
     fn from(value: ApiTypeArg) -> Self {
         match value {
@@ -22,9 +27,9 @@ impl From<ApiTypeArg> for nl2sh::config::ApiType {
 #[derive(Debug, Parser)]
 #[command(version, about = "Natural Language to Shell for Android")]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
     pub instruction: Option<String>,
-    #[arg(long)]
-    pub init: bool,
     #[arg(long)]
     pub config: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "agent")]
@@ -62,5 +67,11 @@ mod tests {
         assert_eq!(cli.endpoint.as_deref(), Some("http://localhost:11434/v1"));
         assert_eq!(cli.model.as_deref(), Some("local"));
         assert!(matches!(cli.api_type, Some(ApiTypeArg::ChatCompletions)));
+    }
+
+    #[test]
+    fn parses_update_command() {
+        let cli = Cli::try_parse_from(["nl2sh", "update"]).expect("update command should parse");
+        assert!(matches!(cli.command, Some(Command::Update)));
     }
 }

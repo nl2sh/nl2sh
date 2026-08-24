@@ -32,7 +32,7 @@ Android Runtime
 
 TUI 在命令运行期间展示有界实时输出，工具轮完成后移除对应临时行并以默认折叠项保存有界结果，F2 只改变显示展开状态。执行捕获、实时 UI、日志事件/文件和模型 Tool Result 分别应用配置上限；截断保留头尾并插入显式标记，模型不会把不完整结果误认为完整。最终回答提示要求按用户语言总结，多项结构化对比优先使用 Markdown 表格。
 
-Agent 最终文本由独立 Markdown 显示层转换成 ratatui `Line`/`Span`；工具、命令和原始输出绕过该层。表格使用 Unicode 显示宽度计算列宽，在内容区域内压缩并换行，窗口过窄时降级为键值列表。解析无法识别的行保持原文，显示转换不回写对话或日志。
+Provider 通过 SSE 将模型文本增量送入 Agent 的显示 sink；TUI 在当前响应尾部播放有界渐变动画，并在响应完成后立即切换为普通正文。流式工具调用只聚合名称和参数，完整响应解析完成后才进入安全分类与确认链，绝不边接收边执行。最终文本由独立 Markdown 显示层转换成 ratatui `Line`/`Span`；工具、命令和原始输出绕过该层。表格使用 Unicode 显示宽度计算列宽，在内容区域内压缩并换行，窗口过窄时降级为键值列表。解析无法识别的行保持原文，显示转换不回写对话或日志。
 
 TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Theme`/`Palette` 向 Widget、Markdown、工具结果、确认界面和状态栏提供语义样式，禁止各渲染模块自行硬编码业务颜色。主题只影响显示，不得改变安全评估、确认策略、root 行为、日志内容或 Tool Result；颜色也不得作为风险信息的唯一载体。
 
@@ -48,7 +48,11 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 |---|---|---|---|
 | `src/config` | `Config`、枚举、loader、wizard、分层校验 | 文件/缺省值/环境 → 可进入 TUI 的运行配置；完整 Provider 配置 → LLM 可用 | 不执行命令，不持有 UI 状态 |
 | `src/history` | `HistoryLog`、JSON Lines 事件与安全创建 | 交互事件 → 可刷新诊断日志 | 不记录 provider 凭据，不参与安全决策 |
-| `src/llm` | `LlmClient`、统一消息/工具类型、两个 HTTP adapter、retry | `LlmRequest` → `LlmResponse` | 不进行安全判断或执行工具 |
+| `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
+| `src/provider_metadata` | `ProviderMetadataClient`、Provider 识别、模型列表与上下文元数据归一化 | Provider 配置 → `ModelMetadata` 列表 | 只读网络访问，不记录凭据/原始账户响应，不参与模型推理与安全判断 |
+| `src/provider_account` | `ProviderAccountClient`、余额结果归一化 | Provider 凭据 → 可显示余额 | 仅调用公开只读接口；不记录凭据、余额或原始响应，不参与推理、安全或执行 |
+| `src/network` | 统一 rustls HTTP Client、HTTP/SOCKS 代理、认证和绕过策略 | `Config` → `reqwest::Client` | 代理凭据不得进入日志、错误详情或模型上下文；关闭总开关不清理配置 |
+| `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、工具 schema、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
 | `src/security` | normalize、side-effect 分类、内置/自定义规则、`SecurityAssessment` | 原始命令 → 风险和确认要求 | 不依赖 TUI、LLM 或执行器 |
 | `src/shell` | `CommandExecutor`、root invocation、process group、pipeline/PTY 边界 | 已批准命令 → `ExecutionResult` | 不自行降低风险或批准命令 |
@@ -58,7 +62,7 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 
 ## Agent 执行流程
 
-只读操作在 balanced/risk_only 下自动执行；普通修改必须确认；Dangerous/Critical 需要二次确认。root 只是执行属性，不改变分类。审批界面提供固定编号与快捷键，可仅允许本次、拒绝、编辑或选择执行模式；对非 Root、非强确认且最高为 Mutating 的命令，还可在当前 Agent 任务内记住完整命令的精确许可。该许可不持久化、不按前缀匹配，Runner 会在每次复用前重新检查当前评估仍满足条件。拒绝、失败或超时都会生成明确的失败 Tool Result。每轮可能处理模型返回的多个调用，完成后把结果加入下一请求；达到 `max_agent_steps` 立即停止并返回原因。上下文按完整 turn 删除最旧单元，system message 始终保留。
+只读操作在 balanced/risk_only 下自动执行；普通修改必须确认；Dangerous/Critical 需要二次确认。root 只是执行属性，不改变分类。审批界面提供固定编号与快捷键，可仅允许本次、拒绝、编辑或选择执行模式；对非 Root、非强确认且最高为 Mutating 的命令，还可在当前 Agent 任务内记住完整命令的精确许可。该许可不持久化、不按前缀匹配，Runner 会在每次复用前重新检查当前评估仍满足条件。拒绝、失败或超时都会生成明确的失败 Tool Result。每轮可能处理模型返回的多个调用，完成后把结果加入下一请求；达到 `max_agent_steps` 立即停止并返回原因。上下文按完整 turn 删除最旧单元，system message 始终保留；当 Provider 报告的实际输入 Token 超过已知窗口的输入安全水位时，Runner 按观测比例淘汰最旧完整历史，并把淘汰数同步给 TUI 会话状态，当前交互和 Tool Round 不拆分。该机制不得自动放宽 `max_agent_steps`：步骤上限同时是成本和安全预算，用户配置始终权威，Token 预算只能提前停止或减少历史，不能绕过确认链。
 
 Command 模式使用严格 system prompt，仅接受第一条清理后的非空命令，处理 code fence 和 `Command:` 前缀，不尝试拼装多条候选。
 
@@ -83,6 +87,8 @@ nl2sh
 `auto` 只在安全层/规则判断需要 root 时提升；`normal` 永不提升；`root` 要求 root 或可用 su。su 不可用、授权失败或命令失败均不静默降级。整个原始命令作为独立 argv 传给 `su -c`，因此引号、管道、重定向和换行不会经过 nl2sh 的字符串拼接。root 修改和危险命令仍遵循确认策略，提示包含 ROOT。
 
 ## LLM Provider
+
+LLM、模型发现、Ollama 元数据和余额查询必须通过 `src/network` 构造客户端，以保证代理开关、认证、绕过和超时一致。显式关闭代理时调用 `no_proxy`，不隐式继承宿主环境；HTTP、SOCKS5 与 SOCKS5H 均保持 Provider HTTPS 的端到端 TLS。代理配置弹窗只展示密码掩码，保存后原子替换配置并重建客户端。
 
 `LlmClient::complete` 是业务唯一入口。Chat adapter 映射 messages、function tools、tool_calls；Responses adapter 映射 input、function tool、function_call 和 function_call_output。`ConversationItem` 把文本与完整 `ToolRound` 按真实顺序保存，因此截断只删除完整 user/tool/assistant turn，不会产生孤立 tool output。统一类型还包括 `ConversationMessage`、`ToolDefinition`、`ToolCall`、`ToolResult`、`Usage`、`FinishReason`。新增 provider 只需实现 trait，不能把供应商 JSON 泄漏到 Agent。
 
@@ -115,3 +121,11 @@ Confirmation policy
 - 新配置来源：在 loader 合并并记录优先级，再统一 validate。
 - 新 UI：仅依赖 Agent/trait API，不访问 provider JSON。
 - 新 shell parser：输出规范化 command segments，保持 `SecurityAssessment` API。
+
+## 更新与设置
+
+启动更新检查是只读后台任务，失败不阻塞 TUI；仅在发现更高版本且匹配本机 ABI 时提示。立即更新会先恢复终端，再下载裸二进制及 SHA-256，校验通过后在当前目录原子替换。跳过版本写入配置，普通暂不更新不持久化。
+
+`/config` 与别名 `/setting` 使用单一 TUI 设置面板承载服务、模型与 Agent、执行与安全、界面和网络分类；其他分散配置命令不再暴露。两者属于严格本地命令，打开面板后不得进入模型上下文。Tab/Shift+Tab 只切分类，Up/Down 只移动字段，Left/Right 只调整当前值；保存后主循环重新加载配置和客户端。
+
+Agent TUI 在输入分发边界保留 `/` 前缀命名空间：所有去除前导空白后以 `/` 开头的输入均为本地命令，已知命令执行本地动作，未知命令只产生本地提示。任何斜杠命令都不得写入模型用户历史或调用 LLM。

@@ -94,7 +94,8 @@
 
 ## Phase 11 0.1.0 发布基线 — 完成
 
-- [x] CI release matrix：tag 触发并行构建 AArch64/ARMv7 Android release，打包快速启动脚本与校验和，发布 GitHub Release。
+- [x] CI release matrix：tag 触发并行构建 AArch64/ARMv7 Android release，合并为双 ABI 单一压缩包，附带自动选设备/ABI 的 Linux 与 Windows BAT 启动脚本及校验和，发布 GitHub Release。
+- [x] Linux/Windows 本地 release 打包脚本：构建双 ABI，并生成与 GitHub Release 相同结构的统一 ZIP 和 SHA256 校验文件。
 - [x] MIT license、0.1.0 changelog 基线和 Android 双 ABI 发布工作流。
 
 ## Phase 12 0.2.0 稳定性迭代 — 完成
@@ -108,3 +109,18 @@
 - [ ] 增加普通 PR CI 质量门禁。
 - [ ] 完成 root/非 root 真机安全矩阵。
 - [x] 准备 0.2.0 版本、双 ABI 发布工作流与本地交叉编译验证；标签发布状态由 GitHub Actions 最终结果确认。
+
+## Phase 13 Provider 可观测性与发现 — 完成
+
+- [x] 跨 Agent 工具步骤累计输入/输出 Token，并在 TUI 展示任务总计。
+- [x] `/models` 在线模型发现、手工回退、Provider 元数据抽象及上下文窗口覆盖/占用估算。
+- [x] OpenAI、DeepSeek、SiliconFlow 与 Ollama 模型发现适配。
+- [x] `/balance` 通过公开 Bearer Token 接口查询 DeepSeek 与 SiliconFlow 余额；结果不进入日志或模型上下文，其他 Provider 明确降级为不支持。
+- [x] 支持余额的 Provider 在 TUI 定时刷新并常驻显示；按模型窗口、输出预留和实际输入 Token 动态收缩完整历史轮次。
+- [x] `/proxy` TUI 弹窗配置 HTTP/SOCKS 代理；统一所有 Provider 网络客户端，总开关关闭时保留代理字段。
+
+## Phase 14 自更新与统一设置 — 完成
+
+- [x] `update` 命令按 Android ABI 获取最新 GitHub Release，校验 SHA-256 后原子替换可执行文件。
+- [x] 每次 Agent TUI 启动后台检查更新，并提供立即更新、暂不更新和跳过此版本。
+- [x] 配置命令统一进入分类 Tab 设置面板；最大 Agent 步数和上下文轮次显示推荐值 24/16。

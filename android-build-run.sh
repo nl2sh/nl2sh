@@ -2,10 +2,8 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET="${RUST_TARGET:-aarch64-linux-android}"
 ANDROID_DIR="${ANDROID_DIR:-/data/local/tmp}"
 REMOTE_BINARY="${ANDROID_DIR}/nl2sh"
-LOCAL_BINARY="${PROJECT_DIR}/target/${TARGET}/release/nl2sh"
 
 restore_host_terminal() {
   # adb transports the remote TUI's control sequences to this terminal.  If
@@ -40,24 +38,82 @@ run_remote() {
   "${ADB[@]}" shell -t "${remote_command}"
 }
 
-if ! command -v adb >/dev/null 2>&1; then
-  echo "error: adb was not found in PATH" >&2
+die() {
+  echo "error: $*" >&2
   exit 1
-fi
+}
+
+collect_devices() {
+  DEVICE_SERIALS=()
+  while read -r serial state _; do
+    if [[ "${state:-}" == "device" ]]; then
+      DEVICE_SERIALS+=("${serial}")
+    fi
+  done < <(adb devices 2>/dev/null | tr -d '\r' | tail -n +2)
+}
+
+select_device() {
+  if [[ -n "${ADB_SERIAL:-}" ]]; then
+    [[ "$(adb -s "${ADB_SERIAL}" get-state 2>/dev/null || true)" == "device" ]] \
+      || die "ADB_SERIAL is not a usable device: ${ADB_SERIAL}"
+    SELECTED_SERIAL="${ADB_SERIAL}"
+    return
+  fi
+
+  collect_devices
+  if ((${#DEVICE_SERIALS[@]} == 0)); then
+    echo "No connected ADB device was found."
+    read -r -p "Enter Android device IP or IP:port: " device_ip
+    [[ -n "${device_ip:-}" ]] || die "no IP address was entered"
+    adb connect "${device_ip}"
+    collect_devices
+  fi
+  ((${#DEVICE_SERIALS[@]} > 0)) || die "no usable ADB device is connected"
+  if ((${#DEVICE_SERIALS[@]} == 1)); then
+    SELECTED_SERIAL="${DEVICE_SERIALS[0]}"
+    return
+  fi
+
+  echo "Multiple ADB devices are connected:"
+  local index
+  for index in "${!DEVICE_SERIALS[@]}"; do
+    printf '  %d. %s\n' "$((index + 1))" "${DEVICE_SERIALS[index]}"
+  done
+  read -r -p "Enter device number: " choice
+  [[ "${choice:-}" =~ ^[1-9][0-9]*$ ]] || die "invalid device number"
+  ((choice <= ${#DEVICE_SERIALS[@]})) || die "device number is out of range"
+  SELECTED_SERIAL="${DEVICE_SERIALS[choice - 1]}"
+}
+
+command -v adb >/dev/null 2>&1 || die "adb was not found in PATH"
 if [[ ! "${ANDROID_DIR}" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
   echo "error: ANDROID_DIR must be a safe absolute Android path: ${ANDROID_DIR}" >&2
   exit 1
 fi
 
-ADB=(adb)
-if [[ -n "${ADB_SERIAL:-}" ]]; then
-  ADB+=( -s "${ADB_SERIAL}" )
-fi
+select_device
+ADB=(adb -s "${SELECTED_SERIAL}")
+echo "Selected device: ${SELECTED_SERIAL}"
 
-if [[ "$("${ADB[@]}" get-state 2>/dev/null)" != "device" ]]; then
-  echo "error: no usable adb device; connect one or set ADB_SERIAL" >&2
-  exit 1
+ABILIST="$("${ADB[@]}" shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\r')"
+if [[ -z "${ABILIST}" ]]; then
+  ABILIST="$("${ADB[@]}" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
 fi
+echo "Device ABI: ${ABILIST}"
+if [[ ",${ABILIST}," == *",arm64-v8a,"* ]]; then
+  DETECTED_TARGET="aarch64-linux-android"
+elif [[ ",${ABILIST}," == *",armeabi-v7a,"* ]]; then
+  DETECTED_TARGET="armv7-linux-androideabi"
+else
+  die "unsupported device ABI '${ABILIST}'; supported ABIs are arm64-v8a and armeabi-v7a"
+fi
+if [[ -n "${RUST_TARGET:-}" && "${RUST_TARGET}" != "${DETECTED_TARGET}" ]]; then
+  die "RUST_TARGET=${RUST_TARGET} does not match device ABI ${ABILIST} (${DETECTED_TARGET})"
+fi
+TARGET="${RUST_TARGET:-${DETECTED_TARGET}}"
+LOCAL_BINARY="${PROJECT_DIR}/target/${TARGET}/release/nl2sh"
+export RUST_TARGET="${TARGET}"
+echo "Selected Rust target: ${TARGET}"
 
 ADB_IS_ROOT=false
 echo "Restarting adbd with root privileges..."

@@ -84,36 +84,83 @@ jobs:
       - name: Verify binary ABI
         run: file "target/${{ matrix.target }}/release/nl2sh"
 
+      - name: Prepare self-update asset
+        run: |
+          set -euo pipefail
+          case "${{ matrix.target }}" in
+            aarch64-linux-android) ABI="arm64-v8a" ;;
+            armv7-linux-androideabi) ABI="armeabi-v7a" ;;
+          esac
+          ASSET="nl2sh-android-${ABI}"
+          cp "target/${{ matrix.target }}/release/nl2sh" "${ASSET}"
+          sha256sum -- "${ASSET}" > "${ASSET}.sha256"
+
+      - name: Upload compiled binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/nl2sh
+
+      - name: Upload self-update assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-${{ matrix.target }}
+          path: |
+            nl2sh-android-*
+
+  package:
+    name: Assemble combined Android package
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download arm64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-aarch64-linux-android
+          path: artifacts/aarch64-linux-android
+
+      - name: Download ARMv7 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-armv7-linux-androideabi
+          path: artifacts/armv7-linux-androideabi
+
       - name: Assemble package
         run: |
           set -euo pipefail
-          NAME="nl2sh-${{ matrix.target }}"
-          mkdir -p "dist/${NAME}"
-          cp "target/${{ matrix.target }}/release/nl2sh" "dist/${NAME}/nl2sh"
-          cp android-run-linux.sh android-run-windows.ps1 config.toml.example 使用说明.md "dist/${NAME}/"
+          NAME="nl2sh-android"
+          mkdir -p "dist/${NAME}/bin/arm64-v8a" "dist/${NAME}/bin/armeabi-v7a"
+          cp artifacts/aarch64-linux-android/nl2sh "dist/${NAME}/bin/arm64-v8a/nl2sh"
+          cp artifacts/armv7-linux-androideabi/nl2sh "dist/${NAME}/bin/armeabi-v7a/nl2sh"
+          cp android-run-linux.sh android-run-windows.bat config.toml.example 使用说明.md "dist/${NAME}/"
           cp -r screenshots "dist/${NAME}/screenshots"
-          chmod +x "dist/${NAME}/nl2sh" "dist/${NAME}/android-run-linux.sh"
+          chmod +x "dist/${NAME}/android-run-linux.sh" \
+            "dist/${NAME}/bin/arm64-v8a/nl2sh" \
+            "dist/${NAME}/bin/armeabi-v7a/nl2sh"
 
       - name: Create archives
         run: |
           set -euo pipefail
-          NAME="nl2sh-${{ matrix.target }}"
+          NAME="nl2sh-android"
           tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
           (cd dist && zip -q -r "${NAME}.zip" "${NAME}")
-          (cd dist && sha256sum -- *.tar.gz *.zip > SHA256SUMS)
+          (cd dist && sha256sum -- "${NAME}.tar.gz" "${NAME}.zip" > SHA256SUMS)
 
-      - name: Upload package artifacts
+      - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}
+          name: release-package
           path: |
-            dist/*.tar.gz
-            dist/*.zip
+            dist/nl2sh-android.tar.gz
+            dist/nl2sh-android.zip
             dist/SHA256SUMS
 
   release:
     name: Publish release
-    needs: build
+    needs: package
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
@@ -146,3 +193,7 @@ jobs:
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
             artifacts/**/SHA256SUMS
+            artifacts/**/nl2sh-android-arm64-v8a
+            artifacts/**/nl2sh-android-arm64-v8a.sha256
+            artifacts/**/nl2sh-android-armeabi-v7a
+            artifacts/**/nl2sh-android-armeabi-v7a.sha256
