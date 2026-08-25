@@ -75,6 +75,18 @@ pub(super) fn append_transcript(
     ascii: bool,
     log: &HistoryLog,
 ) -> Result<()> {
+    log.record(
+        "task_finished",
+        &format!(
+            "steps={} tool_calls={} active_ms={} stalled_steps={} replans={} limit={:?}",
+            outcome.stats.steps_used,
+            outcome.stats.tool_calls_used,
+            outcome.stats.active_time.as_millis(),
+            outcome.stats.stalled_steps,
+            outcome.stats.replans,
+            outcome.stats.limit_reached
+        ),
+    )?;
     let mut visible = history
         .lock()
         .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?;

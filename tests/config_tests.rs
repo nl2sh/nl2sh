@@ -1,5 +1,6 @@
 use nl2sh::config::{
-    load_from, load_or_default_unvalidated, load_unvalidated, ApiType, Config, UiLanguage,
+    load_from, load_or_default_unvalidated, load_unvalidated, AgentMode, ApiType, Config,
+    UiLanguage,
 };
 use std::fs;
 use tempfile::tempdir;
@@ -14,12 +15,52 @@ fn normal_toml_and_defaults() -> anyhow::Result<()> {
     )?;
     let cfg = load_from(&path)?;
     assert_eq!(cfg.model, "local");
-    assert_eq!(cfg.api_type, ApiType::Responses);
-    assert_eq!(cfg.max_agent_steps, 24);
+    assert_eq!(cfg.api_type, ApiType::Auto);
+    assert_eq!(cfg.max_agent_steps, 50);
+    assert_eq!(cfg.max_tool_calls, 100);
     assert_eq!(cfg.max_context_turns, 16);
     assert_eq!(cfg.model_tool_output_max_bytes, 128 * 1024);
     assert_eq!(cfg.history_log_max_bytes, 10 * 1024 * 1024);
     assert_eq!(cfg.ui_language, UiLanguage::ZhCn);
+    assert!(cfg.show_buddha_ascii_art);
+    assert!(cfg.show_train_ascii_art);
+    Ok(())
+}
+
+#[test]
+fn agent_mode_applies_a_preset_unless_limits_are_explicit() -> anyhow::Result<()> {
+    let dir = tempdir()?;
+    let path = dir.path().join("mode.toml");
+    fs::write(
+        &path,
+        "model='local'\nendpoint='http://localhost/v1'\nagent_mode='fast'\n",
+    )?;
+    let fast = load_from(&path)?;
+    assert_eq!(fast.agent_mode, AgentMode::Fast);
+    assert_eq!((fast.max_agent_steps, fast.max_tool_calls), (20, 40));
+
+    fs::write(
+        &path,
+        "model='local'\nendpoint='http://localhost/v1'\nagent_mode='deep'\nmax_agent_steps=80\n",
+    )?;
+    let custom = load_from(&path)?;
+    assert_eq!(custom.max_agent_steps, 80);
+    assert_eq!(custom.max_tool_calls, 200);
+    Ok(())
+}
+
+#[test]
+fn automatic_api_type_is_defaulted_and_omitted_when_saved() -> anyhow::Result<()> {
+    let encoded = toml::to_string(&Config::default())?;
+    assert!(!encoded.lines().any(|line| line.starts_with("api_type")));
+    let decoded: Config = toml::from_str(&encoded)?;
+    assert_eq!(decoded.api_type, ApiType::Auto);
+
+    let forced = toml::to_string(&Config {
+        api_type: ApiType::ChatCompletions,
+        ..Config::default()
+    })?;
+    assert!(forced.contains("api_type = \"chat_completions\""));
     Ok(())
 }
 

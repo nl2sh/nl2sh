@@ -23,6 +23,11 @@ pub struct TerminalGuard {
     terminal: Terminal<CrosstermBackend<Stdout>>,
     mouse: bool,
 }
+
+pub(super) fn windows_scroll_fallback() -> bool {
+    std::env::var_os("NL2SH_WINDOWS_SCROLL").is_some()
+}
+
 impl TerminalGuard {
     pub fn enter() -> Result<Self> {
         enable_raw_mode()?;
@@ -31,10 +36,13 @@ impl TerminalGuard {
             let _ = disable_raw_mode();
             return Err(error.into());
         }
-        if let Err(error) = execute!(out, EnableMouseCapture) {
-            let _ = execute!(out, LeaveAlternateScreen, Show);
-            let _ = disable_raw_mode();
-            return Err(error.into());
+        let mouse = !windows_scroll_fallback();
+        if mouse {
+            if let Err(error) = execute!(out, EnableMouseCapture) {
+                let _ = execute!(out, LeaveAlternateScreen, Show);
+                let _ = disable_raw_mode();
+                return Err(error.into());
+            }
         }
         let terminal = match Terminal::new(CrosstermBackend::new(out)) {
             Ok(terminal) => terminal,
@@ -45,10 +53,7 @@ impl TerminalGuard {
                 return Err(error.into());
             }
         };
-        Ok(Self {
-            terminal,
-            mouse: true,
-        })
+        Ok(Self { terminal, mouse })
     }
     pub fn terminal(&mut self) -> &mut Terminal<CrosstermBackend<Stdout>> {
         &mut self.terminal

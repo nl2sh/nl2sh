@@ -48,6 +48,8 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 |---|---|---|---|
 | `src/config` | `Config`、枚举、loader、wizard、分层校验 | 文件/缺省值/环境 → 可进入 TUI 的运行配置；完整 Provider 配置 → LLM 可用 | 不执行命令，不持有 UI 状态 |
 | `src/history` | `HistoryLog`、JSON Lines 事件与安全创建 | 交互事件 → 可刷新诊断日志 | 不记录 provider 凭据，不参与安全决策 |
+| `src/file_tools` | `FileToolExecutor`、结构化读取/搜索/补丁 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
+| `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
 | `src/provider_metadata` | `ProviderMetadataClient`、Provider 识别、模型列表与上下文元数据归一化 | Provider 配置 → `ModelMetadata` 列表 | 只读网络访问，不记录凭据/原始账户响应，不参与模型推理与安全判断 |
 | `src/provider_account` | `ProviderAccountClient`、余额结果归一化 | Provider 凭据 → 可显示余额 | 仅调用公开只读接口；不记录凭据、余额或原始响应，不参与推理、安全或执行 |
@@ -56,13 +58,25 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 | `src/agent` | `AgentRunner`、上下文完整交互单元、工具 schema、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
 | `src/security` | normalize、side-effect 分类、内置/自定义规则、`SecurityAssessment` | 原始命令 → 风险和确认要求 | 不依赖 TUI、LLM 或执行器 |
 | `src/shell` | `CommandExecutor`、root invocation、process group、pipeline/PTY 边界 | 已批准命令 → `ExecutionResult` | 不自行降低风险或批准命令 |
-| `src/tui` | terminal guard、session 状态机、独立 output/history 生命周期、事件、输入、中英文文案、ratatui 渲染 | key/mouse event → 用户输入 | 不解析 OpenAI JSON，不直接执行；启动帮助不进入模型上下文 |
+| `src/tui` | terminal guard、session 状态机、独立 output/history 生命周期、事件、输入、`@` 文件候选、中英文文案、ratatui 渲染 | key/mouse event → 用户输入 | 不解析 OpenAI JSON，不直接执行；启动帮助不进入模型上下文 |
+| `src/file_references` | 识别用户输入中 `@` 后最长的已存在路径前缀并解析为绝对路径 | 原始用户文本 → 保留原文并附加有界路径提示 | 不读取文件内容、不执行命令；内容仍由结构化文件工具按上限读取 |
+| `src/ima` | 腾讯 ima 知识库只读发现、搜索与原文读取 | 独立 Client ID/API Key → 有界知识库结果 | 强制直连且不使用代理；不提供任何写接口，不泄露长期凭据、临时 header 或签名 URL |
 
 公共 trait 允许测试以 mock 替换网络、执行、确认和 root 探测。依赖方向保持 `UI → Agent → abstractions`，security 与 shell 彼此通过调用参数协作，无循环依赖。
 
 ## Agent 执行流程
 
-只读操作在 balanced/risk_only 下自动执行；普通修改必须确认；Dangerous/Critical 需要二次确认。root 只是执行属性，不改变分类。审批界面提供固定编号与快捷键，可仅允许本次、拒绝、编辑或选择执行模式；对非 Root、非强确认且最高为 Mutating 的命令，还可在当前 Agent 任务内记住完整命令的精确许可。该许可不持久化、不按前缀匹配，Runner 会在每次复用前重新检查当前评估仍满足条件。拒绝、失败或超时都会生成明确的失败 Tool Result。每轮可能处理模型返回的多个调用，完成后把结果加入下一请求；达到 `max_agent_steps` 立即停止并返回原因。上下文按完整 turn 删除最旧单元，system message 始终保留；当 Provider 报告的实际输入 Token 超过已知窗口的输入安全水位时，Runner 按观测比例淘汰最旧完整历史，并把淘汰数同步给 TUI 会话状态，当前交互和 Tool Round 不拆分。该机制不得自动放宽 `max_agent_steps`：步骤上限同时是成本和安全预算，用户配置始终权威，Token 预算只能提前停止或减少历史，不能绕过确认链。
+只读操作在 balanced/risk_only 下自动执行；普通修改必须确认；Dangerous/Critical 需要二次确认。root 只是执行属性，不改变分类。审批界面提供固定编号与快捷键，可仅允许本次、拒绝、编辑或选择执行模式；对非 Root、非强确认且最高为 Mutating 的命令，还可在当前 Agent 任务内记住完整命令的精确许可。该许可不持久化、不按前缀匹配，Runner 会在每次复用前重新检查当前评估仍满足条件。拒绝、失败或超时都会生成明确的失败 Tool Result。
+
+审批面板按命令或 diff 的 Unicode 显示宽度和实际换行高度动态调整，最大范围受终端与输入区约束。超高内容在独立正文区通过滚轮或 PageUp/PageDown 浏览，编号选择、强确认和编辑输入固定在底部；布局与滚动不改变风险等级或确认语义。
+
+Agent 文件操作优先使用 `read_file`、`list_dir`、`search_text` 和 `apply_patch`，不依赖设备端 `sed` 或 shell 重定向。路径不设工作区沙箱：允许绝对路径、父目录组件并跟随符号链接；读取、遍历、匹配和文件大小仍有硬上限，最终 Tool Result 继续使用配置的模型输出上限。`apply_patch` 在内存中验证唯一替换并生成 diff，确认前不打开目标进行写入，每次调用均单独确认，批准后才原子替换。
+
+TUI 输入中的 `@路径` 提供本地文件/目录候选，支持相对路径、绝对路径、`~/`、`./` 与 `../`，Up/Down 选择并以 Enter 或 Tab 补全；Right 保持普通光标右移。提交时按“最长已存在路径前缀”解析，因此 `@test.txt写的是什么内容` 不要求路径后有空格；解析结果只向 Agent 附加绝对路径，实际内容仍由有界结构化文件工具读取。路径解析不会执行文件内容，也不会改变 shell 安全分类、确认或 root 策略。
+
+Runner 以一次完整模型判断及其零个或多个工具结果为一个 Step，并独立维护 Step、Tool Call、活跃运行时间、连续停滞与重复动作预算。Fast/Normal/Deep 预设分别为 20/40/10 分钟、50/100/30 分钟和 100/200/60 分钟；显式字段可逐项覆盖预设，但 `hard_max_agent_steps` 始终取更小值。模型请求受剩余任务时限约束；命令执行沿用执行器自身的 TERM/KILL/wait 超时链，并在其安全回收后立即检查任务时限，避免取消 Future 造成 PTY fd 或子进程泄漏。等待安全确认的时间不计入活跃时间。相同规范化命令连续得到相同结果三次后，下一次会在执行边界前拒绝；连续无新证据达到阈值时注入强制重新规划提示，达到终止阈值时停止。80%/90% Step 水位会要求模型收敛。所有预算检查均位于安全链之外且不能批准命令、降低风险、跳过确认或改变 root 策略。
+
+每轮可能处理模型返回的多个调用，完成后把结果加入下一请求。上下文按完整 turn 删除最旧单元，system message 始终保留；当 Provider 报告的实际输入 Token 超过已知窗口的输入安全水位时，Runner 按观测比例淘汰最旧完整历史，并把淘汰数同步给 TUI 会话状态，当前交互和 Tool Round 不拆分。Token 预算只能提前停止或减少历史，不能放大任务预算或绕过确认链。
 
 Command 模式使用严格 system prompt，仅接受第一条清理后的非空命令，处理 code fence 和 `Command:` 前缀，不尝试拼装多条候选。
 
@@ -70,7 +84,7 @@ Command 模式使用严格 system prompt，仅接受第一条清理后的非空�
 
 设计边界为 `CommandExecutor → pty/pipeline → process`。pipeline 分别捕获 stdout/stderr，子进程成为独立进程组，超时和信号针对组发送，随后 `wait` 防止 zombie。PTY 中 stdout/stderr 本来会合并；任意输出在进入 ratatui 前必须过滤破坏屏幕状态的 ANSI 控制序列。
 
-`pty` 使用 `nix::openpty` 创建 master/slave，通过 `setsid` 与 `TIOCSCTTY` 让 slave 成为 controlling terminal，并把三个标准流连接到 slave。master 以非阻塞方式读取，因此 PTY 下 stdout/stderr 合并；结果进入 Agent 前通过保守 ANSI filter。交互模式启用本地 raw mode，轮询 stdin 写入 master，把 master 原始输出写向本地终端，并用 `TIOCGWINSZ/TIOCSWINSZ` 同步尺寸。退出、超时或 Ctrl+C 后恢复本地终端并 wait 子进程。pipeline 是无 PTY fallback，保留分离 stdout/stderr。未使用 portable-pty；Android Bionic 兼容仍需交叉编译与真机验证。
+`pty` 使用 `nix::openpty` 创建 master/slave，通过 `setsid` 与 `TIOCSCTTY` 让 slave 成为 controlling terminal，并把三个标准流连接到 slave。master 以非阻塞方式读取，因此 PTY 下 stdout/stderr 合并；结果进入 Agent 前通过保守 ANSI filter。交互模式启用本地 raw mode，轮询 stdin 写入 master，把 master 原始输出写向本地终端，并用 `TIOCGWINSZ/TIOCSWINSZ` 同步尺寸。退出、超时或 Ctrl+C 后恢复本地终端并 wait 子进程。pipeline 是无 PTY fallback，保留分离 stdout/stderr。未使用 portable-pty；Android Bionic 路径已完成交叉编译及 root/非 root、超时和全屏交互真机验证，仍需持续关注未覆盖设备与终端实现的兼容差异。
 
 ## Android root
 
@@ -90,7 +104,9 @@ nl2sh
 
 LLM、模型发现、Ollama 元数据和余额查询必须通过 `src/network` 构造客户端，以保证代理开关、认证、绕过和超时一致。显式关闭代理时调用 `no_proxy`，不隐式继承宿主环境；HTTP、SOCKS5 与 SOCKS5H 均保持 Provider HTTPS 的端到端 TLS。代理配置弹窗只展示密码掩码，保存后原子替换配置并重建客户端。
 
-`LlmClient::complete` 是业务唯一入口。Chat adapter 映射 messages、function tools、tool_calls；Responses adapter 映射 input、function tool、function_call 和 function_call_output。`ConversationItem` 把文本与完整 `ToolRound` 按真实顺序保存，因此截断只删除完整 user/tool/assistant turn，不会产生孤立 tool output。统一类型还包括 `ConversationMessage`、`ToolDefinition`、`ToolCall`、`ToolResult`、`Usage`、`FinishReason`。新增 provider 只需实现 trait，不能把供应商 JSON 泄漏到 Agent。
+ima 是这一通用 Provider 代理策略的显式例外：按产品边界使用独立 rustls `Client`，始终调用 `no_proxy` 且禁止重定向。Agent 只在完整配置 Client ID/API Key 且启用时暴露 `ima_list_knowledge_bases`、`ima_search`、`ima_read`。搜索结果与正文受硬上限约束；原文 URL 只接受 HTTPS 的 ima、微信文章或腾讯 COS 白名单域名，临时请求 header 仅用于该次下载，不进入 Tool Result、日志或会话。远程知识内容按不可信用户数据处理，不能提升指令优先级。
+
+`LlmClient::complete` 是业务唯一入口。Chat adapter 映射 messages、function tools、tool_calls；Responses adapter 映射 input、function tool、function_call 和 function_call_output。默认 `auto` 协议在首次真实请求优先尝试 Responses，仅在 404/405、明确的端点不支持或尚未产生内容的响应结构不匹配时回退 Chat Completions，并在当前 client 生命周期缓存成功协议；鉴权、限流、5xx、超时和已产生流式内容后的错误不得触发协议切换。显式协议配置与 CLI 覆盖仍强制使用指定 adapter。`ConversationItem` 把文本与完整 `ToolRound` 按真实顺序保存，因此截断只删除完整 user/tool/assistant turn，不会产生孤立 tool output。统一类型还包括 `ConversationMessage`、`ToolDefinition`、`ToolCall`、`ToolResult`、`Usage`、`FinishReason`。新增 provider 只需实现 trait，不能把供应商 JSON 泄漏到 Agent。
 
 ## 安全架构
 
@@ -126,6 +142,12 @@ Confirmation policy
 
 启动更新检查是只读后台任务，失败不阻塞 TUI；仅在发现更高版本且匹配本机 ABI 时提示。立即更新会先恢复终端，再下载裸二进制及 SHA-256，校验通过后在当前目录原子替换。跳过版本写入配置，普通暂不更新不持久化。
 
-`/config` 与别名 `/setting` 使用单一 TUI 设置面板承载服务、模型与 Agent、执行与安全、界面和网络分类；其他分散配置命令不再暴露。两者属于严格本地命令，打开面板后不得进入模型上下文。Tab/Shift+Tab 只切分类，Up/Down 只移动字段，Left/Right 只调整当前值；保存后主循环重新加载配置和客户端。
+`/config` 与别名 `/setting` 使用单一 TUI 设置面板承载服务、模型与 Agent、执行与安全、界面和网络分类；其他分散配置命令不再暴露。两者属于严格本地命令，打开面板后不得进入模型上下文。服务分类与旧向导共享内置 Provider 预设，选择预设只联动 Endpoint，保留 API Key、模型和协议，自定义 Endpoint 显示为 Custom。Tab/Shift+Tab 只切分类，Up/Down 只移动字段，Left/Right 只调整当前值；保存后主循环重新加载配置和客户端。界面分类独立控制佛像与小火车 ASCII Art，并提供显式的日志清除操作；日志清除仅截断当前 JSONL 文件并恢复后续记录能力，不清理当前会话或改变安全链。
 
 Agent TUI 在输入分发边界保留 `/` 前缀命名空间：所有去除前导空白后以 `/` 开头的输入均为本地命令，已知命令执行本地动作，未知命令只产生本地提示。任何斜杠命令都不得写入模型用户历史或调用 LLM。
+
+每个已完成 Agent turn 自动保存到配置文件同目录的 `sessions/` 私有目录，文件以 `0600` 原子替换。`/sessions` 负责列表、恢复、重命名和删除；恢复只装载完整 turn，并重新应用上下文轮数和 Tool Result 上限。会话文档仅包含 provider-neutral 对话项，不包含 `Config`，因此 API Key、代理密码、余额和仅当前任务有效的审批许可不会落盘。
+
+设置编辑器在单次打开期间分别持有 Ollama 与 Custom 的 Endpoint 草稿；离开对应 Provider 前保存当前值，切回时恢复。其他内置 Provider 仍使用固定预设地址，编辑其地址会转入 Custom。
+
+`/shell` 是显式的用户直控边界：它暂停 alternate-screen TUI，并在当前执行用户模式下启动 Android `/system/bin/sh -i`（开发主机条件使用 `/bin/sh -i`）。其中输入直接属于用户而非 LLM 输出，不进入模型、安全分类或审计内容；键入 `exit` 或发送 EOF 后必须 wait 子 shell、恢复 raw mode、鼠标捕获和 alternate screen，并显式清除 ratatui 差分缓存后完整重绘原会话。由于该子 shell 在事件循环内被直接 await，不能依赖循环的暂停状态边沿检测触发重绘。

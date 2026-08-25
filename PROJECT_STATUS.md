@@ -1,10 +1,20 @@
 # Project Status
 
-Last Updated: 2026-08-24
+Last Updated: 2026-08-25
 
 ## Recent Changes
 
 - 无配置文件启动 TUI 时会以 2 秒超时探测 KONKA 内部 Chat Completions 服务；可达时以 `0600` 权限自动创建使用 `deepseek-v4-flash-0731` 模型和 Responses 协议的 `KK-FREE-TEST` 内置体验配置，已有配置文件始终跳过探测且绝不改写，欢迎页同步增加内部便捷体验版提示。
+- 新增可选的腾讯 ima 只读知识库连接器：独立 Client ID/API Key、始终无代理直连，仅提供知识库发现、搜索与有界原文读取 Tool；支持笔记正文和受控临时 URL，禁止写操作、重定向、非 HTTPS/非白名单来源及凭据进入模型、日志或会话。
+- TUI 输入新增 `@` 文件/目录引用候选：支持相对路径、绝对路径、`@~`、`@/`、`@.` 和父目录路径，Up/Down 选择、Enter/Tab 补全，目录可继续下钻；Right 保持普通光标右移。提交时按最长已存在路径前缀解析，`@test.txt写的是什么内容` 无需额外空格；只附加绝对路径提示，内容仍由有界结构化文件工具读取，安全与确认链不变。
+- 命令批准弹窗改为内容驱动的动态宽高：长命令和结构化 diff 超过终端可用高度时可用滚轮或 PageUp/PageDown 浏览，上方正文独立滚动，底部审批选项、强确认或编辑输入保持可见。
+- 新增结构化 `read_file`、`list_dir`、`search_text` 与 `apply_patch` Agent 工具：路径不设工作区边界并支持绝对路径、父目录和符号链接，读取/遍历/匹配/文件大小仍有界；补丁先展示 diff 并确认，再原子写入。
+- 新增私有会话快照与 `/sessions` 管理：已完成 turn 自动保存，支持列表、恢复、重命名和删除；恢复重新应用上下文与 Tool Result 上限，Provider 凭据、代理密码、余额和临时审批许可不进入会话文件。
+- Windows ADB 启动路径新增 alternate-scroll 兼容模式：不请求远端鼠标捕获，让 Windows Terminal 将滚轮转换为 Up/Down 事件，再由 TUI 滚动历史；Linux 路径保留原生鼠标捕获，命令候选菜单仍优先使用方向键导航。
+- Agent Runtime 新增独立 Step、Tool Call、活跃任务时长、连续停滞、重复动作和系统硬 Step 上限；默认 Normal 为 50 Step、100 Tool、30 分钟，另有 Fast/Deep 预设。确认等待不计时，所有命令仍完整经过安全分类和确认链。
+- 相同规范化命令连续产生相同结果三次后会在下一次执行前阻止；连续无进展会先强制重新规划再终止，80%/90% Step 水位提示模型优先收敛。任务结束状态和审计事件新增步骤、工具调用、活跃时长、停滞、重规划及限制原因摘要。
+- LLM 协议默认改为可省略配置的 `auto`：首次请求优先 Responses，仅在尚未输出内容的协议结构不匹配时回退 Chat Completions 并缓存；401、429、5xx、超时和部分流式输出错误不会误触发切换，显式协议仍可强制覆盖。
+- 设置面板“界面”分类新增清除审计日志操作，以及默认开启、互相独立的佛像与小火车 ASCII Art 开关；清除后当前进程可继续写入新日志。
 - 设置面板文本字段现在维护独立 UTF-8 光标，支持 Left/Right/Home/End 定位编辑；切换字段或分类时同步到新字段末尾，密码掩码光标仍与原始字符位置一致。
 - 统一设置面板的“模型与智能体”Tab 新增在线模型列表操作，后台复用 Provider 元数据客户端，成功后在面板内选择并回填模型、上下文窗口和最大输出 Token，失败不覆盖当前手工配置。
 - 输入边界现在同时过滤完整 `[<b;x;yM/m` 和 adb 丢失 CSI 后的 `<b;x;yM/m` SGR 鼠标报告，并覆盖主输入框与设置文本字段。
@@ -51,16 +61,24 @@ Last Updated: 2026-08-24
 - Build status: 0.2.0 的 `cargo check --all-targets` 与 Linux release 构建通过。
 - Test status: 0.2.0 的单元、Agent loop 与非 TUI 集成测试通过；两个依赖原始 ANSI 文本连续匹配的伪终端测试受启动动画差分输出影响，发布前需修复。
 - Android cross-compile status: 0.2.0 已使用 NDK r28c、API 26 成功构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
-- Android device validation: 已在 API 34 `armeabi-v7a` 设备完成部署、Agent/PTY 和 TUI smoke test。
+- Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
 - CI release workflow: 已添加 `.github/workflows/release.yml`，在推送 `v*` tag 时用 GitHub Actions 并行交叉编译 `aarch64-linux-android` 与 `armv7-linux-androideabi`，将两个程序放入统一包的 ABI 子目录，并与自动选择设备/ABI 的 Linux/Windows BAT 启动脚本、`config.toml.example`、`使用说明.md` 打包为单一 `.tar.gz`/`.zip`，附带 SHA256 校验和发布到 GitHub Release；`workflow_dispatch` 可手动触发草稿发布。
-- Known blockers: 尚未验证真实 root 提权、修改确认、超时和全屏交互程序；CI workflow 尚未在真实 GitHub Actions 上运行验证。
+- Known blockers: CI workflow 尚未在真实 GitHub Actions 上运行验证。
 
 ## Completed
 
+- 动态宽高、长内容可滚动且操作区固定的审批弹窗；Up/Down 仍只负责选项导航。
+- 结构化文件工具的无工作区路径限制、资源大小、唯一替换、确认前不写入和原子替换边界。
+- 会话自动保存与 `/sessions` 列表、恢复、重命名、删除；私有文件权限及敏感运行态排除。
+- `/shell` 退出后显式清除 ratatui 差分缓存，确保恢复 alternate screen 后完整重绘 TUI，而非只绘制差异导致界面缺失。
+- Provider 设置在面板会话内分别保留 Ollama 与 Custom 的 Endpoint 草稿，切换到其他内置服务商再返回时恢复此前输入。
+- 统一 TUI 设置面板的“服务”分类恢复内置 Provider 选择，复用向导中的 OpenAI、DeepSeek、Moonshot/Kimi、SiliconFlow、Ollama 与 Custom 预设；切换只回填 Endpoint，不覆盖 API Key、模型或协议。
+- 本地 `/shell` 可暂停 TUI 并进入系统交互 shell，使用 `exit` 或 Ctrl+D 后回收子进程、恢复终端并重绘原会话；shell 内容不进入模型上下文或审计日志。
 - Android shell 版类 Hermes AI Agent 的产品定位，以单文件 Android 可执行程序和丰富 TUI 为主要交付形态。
 - 模块化 Cargo 工程、CLI、配置加载/校验/向导。
 - 两种 OpenAI API adapter 与统一 LLM trait。
 - Agent loop、shell tool、真实结果回传和最大轮数。
+- Agent 任务级 Step/Tool/时间/停滞/重复动作组合预算、Fast/Normal/Deep 预设和不可由普通配置绕过的硬 Step 上限。
 - 四级安全评估、内置/自定义规则和确认接口。
 - root 模式解析、su 参数化执行、pipeline timeout 和进程组清理。
 - 可持续多轮输入、完整历史回放、滚动和 terminal guard 的 TUI。
@@ -102,14 +120,15 @@ Last Updated: 2026-08-24
 - MIT `LICENSE` 已纳入仓库；Cargo 版本为 0.2.0。
 - 实时 TUI、捕获式工具结果、发给模型的 Tool Result、JSONL 单事件和单文件均有可配置上限；截断会插入明确标记。
 - TUI 输出与历史生命周期已从 session 控制器拆为独立模块，同时保留新的审批菜单和任务级精确命令许可。
+- 真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵已完成，覆盖提权与确认链、超时回收，以及全屏程序退出后的终端恢复和 TUI 重绘。
 
 ## In Progress
 
-- 扩展真机 smoke test，覆盖 root 提权、修改确认、超时和全屏交互程序。
+- 观察 `v0.2.0` GitHub Actions，确认双 ABI 归档与 Release 发布流程。
 
 ## Pending / Known Issues
 
-- PTY 已在 API 34 ARMv7 真机执行只读命令；不同 su/fullscreen 程序仍可能需要兼容调整。
+- 真机矩阵已覆盖 root/非 root、超时和全屏交互程序；未覆盖的设备、su 或终端实现仍可能存在兼容差异。
 - 源码编译启动脚本仅自动映射 `arm64-v8a` 与 `armeabi-v7a`；其他设备 ABI 会明确拒绝，显式 `RUST_TARGET` 与设备不匹配时也会停止。
 - Agent TUI 在 LLM 和捕获式命令执行期间保持同一 ratatui frame；全屏交互命令会临时挂起 TUI，退出后恢复并完整重绘。
 - 新主题已完成渲染与样式测试，仍需在不同 adb shell 宿主的 TrueColor/ANSI 256、窄屏和实际电视显示效果下做真机可读性验证。
@@ -124,6 +143,17 @@ Last Updated: 2026-08-24
 
 ## Verification Performed
 
+- ima 只读连接器：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings` 与 74 项默认库测试通过，1 项显式凭据 live smoke 默认忽略；使用 `NL2SH_IMA_CLIENT_ID`/`NL2SH_IMA_API_KEY` 单独运行该 smoke 后，真实知识库发现和库内搜索通过且未输出账户响应；在 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 均指向不可用地址时仍通过，验证 ima 强制直连。mock 回归覆盖搜索、媒体信息、笔记正文、认证 header 与凭据不进入 Tool Result，来源策略覆盖非 HTTPS/非白名单拒绝。凭据和真实响应未写入仓库；全量测试仍只有既有启动动画 ANSI 差分文本匹配用例超时。
+- `@` 文件/目录引用：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings` 与 71 项库测试通过；新增回归覆盖句中光标补全、相对 `@.`、绝对路径、`@~`、目录标记，以及 `@test.txt写的是什么内容` 的最长已存在路径解析。全量 `cargo test` 的其余测试通过，既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 仍因启动动画 ANSI 差分文本匹配超时。
+- 结构化文件工具、会话恢复与长内容审批布局：`cargo fmt --all -- --check`、`cargo check` 和 66 项库测试通过；全量 `cargo test` 的 CLI、Agent、取消、配置、日志、LLM mock、PTY、root、安全及 4 项 TUI 测试通过，既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 仍因启动动画 ANSI 差分文本匹配超时。新增回归覆盖 Tool schema、绝对/父目录/符号链接路径、确认前不写入、原子替换、会话保存/恢复/重命名/删除、凭据脱敏，以及审批正文滚动与固定操作区。
+- Windows ADB 滚轮诊断确认：默认鼠标捕获模式下设备端只收到退出按键，滚轮事件未到达进程；禁用捕获后 Windows Terminal 稳定发送 Up/Down 事件。兼容实现的 `cargo fmt --all -- --check` 与 Linux 目标 `cargo check` 通过；新增单元测试覆盖 SGR 降级输入。`cargo test` 的 61 项库测试及其他非 TUI 测试通过，全量测试仅既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时而失败。
+- `/shell` 返回完整重绘：`cargo fmt --all -- --check`、`cargo check` 和 `/shell` 伪终端回归通过；回归在 `exit` 后要求重新出现完整框架的 `Ctrl+Q` 提示，并继续验证安全退出与 shell 内容不写入日志。
+- Ollama/Custom Endpoint 草稿保留：`cargo fmt --all -- --check`、`cargo check` 与 8 项设置面板测试通过；新增回归覆盖自定义 Ollama 地址和 Custom 地址在切换其他 Provider 后分别恢复。
+- TUI 内置 Provider 恢复：`cargo fmt --all -- --check`、`cargo check`、59 项库测试及其余非 TUI 集成测试通过；新增回归覆盖预设识别、Endpoint 联动、Custom 编辑，以及 API Key、模型和协议不被覆盖。全量 `cargo test` 仅既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
+- `/shell` 直控终端：`cargo fmt --all -- --check`、`cargo check` 与新增伪终端回归通过；回归覆盖普通命令执行、`exit` 返回、TUI 子进程继续存活、安全退出，以及 shell 内容不写入审计日志。全量 `cargo test` 的其余测试通过，既有启动动画原始 ANSI 连续文本匹配用例 `agent_reply_remains_in_live_tui_until_ctrl_q` 仍超时。
+- Agent 任务运行预算：stable Rust 1.98.0 下 `cargo fmt --all -- --check` 与 `cargo check` 通过；58 项库测试、3 项主程序测试、13 项 Agent loop、取消、配置、日志、10 项 LLM mock、PTY、root、安全以及 3 项其他 TUI 测试通过，共 108 项。全量 `cargo test` 仅既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 失败，单独重跑仍因启动动画 ratatui 差分 ANSI 输出无法形成连续“审计日志保留”原始文本而超时。
+- LLM 自动协议协商：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings` 与 NDK r28/API 26 AArch64 release 构建通过；58 项库测试、CLI、Agent loop、取消、配置、日志、10 项 LLM mock、PTY、root 与安全测试通过。回归覆盖 Responses 成功、结构不匹配回退并缓存 Chat Completions、SSE 回退、部分文本后禁止重放，以及 503 不误判；全量 `cargo test` 的 4 项 TUI 伪终端测试中 3 项通过，既有启动动画原始 ANSI 文本匹配用例 `agent_reply_remains_in_live_tui_until_ctrl_q` 仍超时。
+- 设置面板日志与 ASCII Art 开关：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings` 通过；58 项库测试、CLI、Agent、配置、日志、LLM mock、PTY、root 与安全测试通过。全量 `cargo test` 的 4 项 TUI 伪终端测试中 3 项通过，既有启动动画原始 ANSI 文本匹配用例 `agent_reply_remains_in_live_tui_until_ctrl_q` 仍超时。
 - 设置入口与焦点修复：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings`、53 项库测试和 `/config` 伪终端回归通过；回归确认 `/config` 只记录为本地命令、不作为用户消息提交，并覆盖设置文本字段边界/光标及命令候选收敛。
 - 自更新与统一设置：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings`、53 项库测试及非 TUI 集成测试通过；三个配置伪终端用例已迁移到设置面板并通过，一个既有启动动画原始 ANSI 连续匹配用例仍超时。
 
@@ -156,6 +186,5 @@ Last Updated: 2026-08-24
 
 ## Next Steps
 
-1. 在 root 与非 root 设备补测确认、提权、超时和全屏程序。
-2. 根据真机结果优化窄屏布局和全屏交互程序切换。
-3. 观察 `v0.2.0` GitHub Actions，确认双 ABI 归档与 Release 发布成功。
+1. 根据真机结果继续优化窄屏布局和全屏交互程序切换。
+2. 观察 `v0.2.0` GitHub Actions，确认双 ABI 归档与 Release 发布成功。

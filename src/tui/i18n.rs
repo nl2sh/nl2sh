@@ -3,6 +3,7 @@ use crate::{config::UiLanguage, security::RiskLevel};
 const OPEN_SOURCE_SUPPORT: &str = "⭐ 这个项目完全开源、单二进制、本地执行。点个 Star 或提个 Issue 已经是莫大支持。点击支持 -> https://github.com/Ernest-su/nl2sh";
 const DONATION_SUPPORT: &str = "❤️ 如果 nl2sh 帮你少敲了几条 adb 命令、省下了调试 Android 设备的时间，欢迎请我喝杯咖啡 ☕  点击赞赏 -> https://suqishuo.cn/uploads/wechatpay.png";
 pub(crate) const BUDDHA_ART_PREFIX: &str = "\u{1e}BUDDHA:";
+pub(crate) const WELCOME_TRAIN_ANCHOR: &str = "\u{1e}WELCOME_TRAIN";
 const BUDDHA_ART: &str = r#"\\ \\ \\ \\ \\ \\ \\ \\ || || || || || || // // // // // // // //
 \\ \\ \\ \\ \\ \\ \\        _ooOoo_          // // // // // // //
 \\ \\ \\ \\ \\ \\          o8888888o            // // // // // //
@@ -26,15 +27,20 @@ const BUDDHA_ART: &str = r#"\\ \\ \\ \\ \\ \\ \\ \\ || || || || || || // // // /
 // // //   佛祖保佑   终端一念清净  adb 万事如意 _/\_    \\ \\ \\
 // // // // // // || || || || || || || || || || \\ \\ \\ \\ \\ \\"#;
 
-fn support_history() -> Vec<String> {
-    vec![
-        OPEN_SOURCE_SUPPORT.into(),
-        DONATION_SUPPORT.into(),
-        format!("{BUDDHA_ART_PREFIX}{BUDDHA_ART}"),
-    ]
+fn support_history(show_buddha_ascii_art: bool) -> Vec<String> {
+    let mut history = vec![OPEN_SOURCE_SUPPORT.into(), DONATION_SUPPORT.into()];
+    if show_buddha_ascii_art {
+        history.push(format!("{BUDDHA_ART_PREFIX}{BUDDHA_ART}"));
+    }
+    history
 }
 
-pub(crate) fn startup_history(language: UiLanguage, ascii: bool) -> Vec<String> {
+pub(crate) fn startup_history(
+    language: UiLanguage,
+    ascii: bool,
+    show_buddha_ascii_art: bool,
+    show_train_ascii_art: bool,
+) -> Vec<String> {
     let agent = if ascii { "[AGENT]" } else { "🤖" };
     let hint = if ascii { "[HINT]" } else { "💡" };
     let mut history = match language {
@@ -45,7 +51,7 @@ pub(crate) fn startup_history(language: UiLanguage, ascii: bool) -> Vec<String> 
             format!("{hint} 常用示例：查看系统版本、CPU、内存和存储空间"),
             format!("{hint} 常用示例：查找占用空间最大的十个文件"),
             format!("{hint} 常用示例：查看正在运行的进程和网络连接"),
-            format!("{hint} 常用命令：/help 帮助；/clear 清空；/exit 退出；/config 完整配置"),
+            format!("{hint} 常用命令：/shell 普通终端；/help 帮助；/clear 清空；/exit 退出"),
             format!("{hint} 设置：/config 或 /setting 打开统一多 Tab 面板"),
             format!("{hint} 更新：/update 手工检查；启动时自动后台检查"),
             format!("{hint} 操作说明：滚轮浏览历史；Shift+拖选文字后用右键菜单复制"),
@@ -58,24 +64,33 @@ pub(crate) fn startup_history(language: UiLanguage, ascii: bool) -> Vec<String> 
             format!("{hint} Example: show Android version, CPU, memory, and storage"),
             format!("{hint} Example: find the ten largest files"),
             format!("{hint} Example: show running processes and network connections"),
-            format!("{hint} Commands: /help help; /clear clear; /exit quit; /config configure all"),
+            format!("{hint} Commands: /shell terminal; /help help; /clear clear; /exit quit"),
             format!("{hint} Settings: /config or /setting opens the unified tabbed panel"),
             format!("{hint} Updates: /update checks manually; startup checks in the background"),
             format!("{hint} Controls: wheel browses history; Shift+drag selects text for context-menu copy"),
             format!("{hint} Controls: Ctrl+C cancels or clears input; Ctrl+Q quits safely"),
         ],
     };
-    history.extend(support_history());
+    history.extend(support_history(show_buddha_ascii_art));
+    if show_train_ascii_art {
+        history.push(WELCOME_TRAIN_ANCHOR.into());
+    }
     history
 }
 
-pub(crate) fn help_history(language: UiLanguage, ascii: bool) -> Vec<String> {
+pub(crate) fn help_history(
+    language: UiLanguage,
+    ascii: bool,
+    show_buddha_ascii_art: bool,
+) -> Vec<String> {
     let hint = if ascii { "[HINT]" } else { "💡" };
     let mut history = match language {
         UiLanguage::ZhCn => vec![
             format!("{hint} /help 显示此帮助"),
             format!("{hint} /clear 清空当前会话的对话、模型上下文和输入历史；审计日志保留"),
+            format!("{hint} /sessions 列出会话；支持 resume NAME、rename OLD NEW、delete NAME"),
             format!("{hint} /exit 安全退出"),
+            format!("{hint} /shell 进入普通命令终端；输入 exit 或按 Ctrl+D 返回 TUI"),
             format!("{hint} /config 打开统一多 Tab 设置面板（Ctrl+S 保存）"),
             format!("{hint} /balance 查询支持的 Provider 余额，结果不写入日志"),
             format!("{hint} /setting 是 /config 的别名"),
@@ -87,7 +102,9 @@ pub(crate) fn help_history(language: UiLanguage, ascii: bool) -> Vec<String> {
         UiLanguage::En => vec![
             format!("{hint} /help show this help"),
             format!("{hint} /clear clear this session's conversation, model context, and input history; keep the audit log"),
+            format!("{hint} /sessions list sessions; supports resume NAME, rename OLD NEW, delete NAME"),
             format!("{hint} /exit quit safely"),
+            format!("{hint} /shell open a regular command terminal; type exit or press Ctrl+D to return to the TUI"),
             format!("{hint} /config open the unified tabbed settings panel (Ctrl+S saves)"),
             format!("{hint} /balance query supported provider balances without logging them"),
             format!("{hint} /setting is an alias for /config"),
@@ -97,7 +114,7 @@ pub(crate) fn help_history(language: UiLanguage, ascii: bool) -> Vec<String> {
             format!("{hint} Ctrl+C cancels or clears input; Ctrl+Q quits safely"),
         ],
     };
-    history.extend(support_history());
+    history.extend(support_history(show_buddha_ascii_art));
     history
 }
 
@@ -135,8 +152,8 @@ mod tests {
 
     #[test]
     fn startup_help_is_populated_in_both_languages() {
-        let chinese = startup_history(UiLanguage::ZhCn, true);
-        let english = startup_history(UiLanguage::En, true);
+        let chinese = startup_history(UiLanguage::ZhCn, true, true, true);
+        let english = startup_history(UiLanguage::En, true, true, true);
         assert!(chinese.len() >= 8);
         assert!(english.len() >= 8);
         assert!(chinese.iter().any(|line| line.contains("应用")));
@@ -156,12 +173,27 @@ mod tests {
         assert!(chinese.iter().any(|line| line.contains("点击赞赏 ->")));
         assert!(chinese.iter().any(|line| line.contains("佛祖保佑")));
 
-        let help = help_history(UiLanguage::ZhCn, true);
+        let help = help_history(UiLanguage::ZhCn, true, true);
         assert!(help.iter().any(|line| line.contains("/help")));
         assert!(help.iter().any(|line| line.contains("/exit")));
         assert!(help.iter().any(|line| line.contains("审计日志保留")));
         assert!(help.iter().any(|line| line.contains("suqishuo.cn")));
         assert!(help.iter().any(|line| line.contains("adb 万事如意")));
+    }
+
+    #[test]
+    fn startup_ascii_art_switches_are_independent() {
+        let train_only = startup_history(UiLanguage::En, true, false, true);
+        assert!(!train_only
+            .iter()
+            .any(|line| line.starts_with(BUDDHA_ART_PREFIX)));
+        assert!(train_only.iter().any(|line| line == WELCOME_TRAIN_ANCHOR));
+
+        let buddha_only = startup_history(UiLanguage::En, true, true, false);
+        assert!(buddha_only
+            .iter()
+            .any(|line| line.starts_with(BUDDHA_ART_PREFIX)));
+        assert!(!buddha_only.iter().any(|line| line == WELCOME_TRAIN_ANCHOR));
     }
 
     #[test]

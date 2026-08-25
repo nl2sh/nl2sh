@@ -129,6 +129,25 @@ impl HistoryLog {
             .with_context(|| format!("cannot flush history log {}", self.path.display()))
     }
 
+    /// Truncates the active log and resumes bounded logging from an empty file.
+    pub fn clear(&self) -> Result<()> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("history log lock is poisoned"))?;
+        state
+            .file
+            .flush()
+            .with_context(|| format!("cannot flush history log {}", self.path.display()))?;
+        state
+            .file
+            .set_len(0)
+            .with_context(|| format!("cannot clear history log {}", self.path.display()))?;
+        state.bytes = 0;
+        state.full = false;
+        Ok(())
+    }
+
     /// Returns the resolved log path shown to users and diagnostics.
     pub fn path(&self) -> &Path {
         &self.path

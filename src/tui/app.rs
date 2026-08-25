@@ -7,7 +7,10 @@ use super::{
 use crate::config::UiLanguage;
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKind};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+const MAX_FILE_SUGGESTIONS: usize = 100;
+const MAX_FILE_ENTRIES_SCANNED: usize = 1_000;
 pub(crate) const WELCOME_TRAIN_WIDTH: usize = 44;
 pub(crate) const WELCOME_TRAIN_SPEED: usize = 1;
 pub(crate) const WELCOME_TRAIN_FRAME_INTERVAL: Duration = Duration::from_millis(33);
@@ -18,6 +21,9 @@ pub struct App {
     pub input_history_draft: String,
     pub cursor_visible: bool,
     pub command_selection: usize,
+    pub file_selection: usize,
+    pub(crate) file_suggestion_query: Option<String>,
+    pub(crate) file_suggestions: Vec<String>,
     pub history: Vec<String>,
     /// Number of conversation rows kept above the automatic bottom position.
     pub conversation_scroll: usize,
@@ -41,7 +47,14 @@ pub struct App {
 #[derive(Clone)]
 pub struct PopupView {
     pub title: String,
+    /// Scrollable body lines.
     pub lines: Vec<String>,
+    /// Lines pinned above the popup's bottom border.
+    pub footer: Vec<String>,
+    /// Wrapped body row offset.
+    pub scroll: u16,
+    /// Stable minimum panel height across interaction stages.
+    pub min_height: u16,
     /// Whether the local assessment requires danger styling in addition to text.
     pub dangerous: bool,
     /// Whether this popup is informational rather than a security confirmation.
@@ -55,6 +68,10 @@ pub struct TuiOptions {
     pub root: String,
     /// Enables ASCII-only UI labels.
     pub ascii: bool,
+    /// Shows the Buddha ASCII art in welcome/help content.
+    pub show_buddha_ascii_art: bool,
+    /// Plays the startup train ASCII animation.
+    pub show_train_ascii_art: bool,
     /// Language used for interface labels and startup help.
     pub language: UiLanguage,
     /// API dialect label.
@@ -81,7 +98,12 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
     let mut term = TerminalGuard::enter()?;
     let show_welcome_train = history.is_empty();
     if show_welcome_train {
-        history = i18n::startup_history(options.language, options.ascii);
+        history = i18n::startup_history(
+            options.language,
+            options.ascii,
+            options.show_buddha_ascii_art,
+            options.show_train_ascii_art,
+        );
     }
     let mut app = App {
         input: Input::default(),
@@ -90,10 +112,13 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
         input_history_draft: String::new(),
         cursor_visible: true,
         command_selection: 0,
+        file_selection: 0,
+        file_suggestion_query: None,
+        file_suggestions: Vec::new(),
         history,
         conversation_scroll: 0,
         tool_results_expanded: false,
-        welcome_train_frame: show_welcome_train.then_some(0),
+        welcome_train_frame: (show_welcome_train && options.show_train_ascii_art).then_some(0),
         model: options.model,
         root: options.root,
         ascii: options.ascii,
@@ -109,7 +134,12 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
     let mut last_cursor_blink = Instant::now();
     let mut last_train_frame = Instant::now();
     let mut fragmented_arrow = events::FragmentedArrowFilter::default();
+    let windows_scroll = super::terminal::windows_scroll_fallback();
+    let mut windows_scroll_filter = events::WindowsScrollFilter::default();
     loop {
+        if windows_scroll {
+            apply_windows_scroll_action(&mut app, windows_scroll_filter.take_expired());
+        }
         if last_cursor_blink.elapsed() >= Duration::from_millis(500) {
             app.cursor_visible = !app.cursor_visible;
             last_cursor_blink = Instant::now();
@@ -119,7 +149,7 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
             app.advance_welcome_train(viewport_width);
             last_train_frame = Instant::now();
         }
-        term.terminal().draw(|f| ui::draw(f, &app))?;
+        term.terminal().draw(|f| ui::draw(f, &mut app))?;
         if let Some(event) = events::next()? {
             match event {
                 Event::Mouse(mouse) => match mouse.kind {
@@ -144,6 +174,9 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
                             app.tool_results_expanded = !app.tool_results_expanded
                         }
                         (KeyCode::Enter, _) => {
+                            if app.complete_selected_file_for_key(k.code) {
+                                continue;
+                            }
                             if app.complete_selected_command() {
                                 continue;
                             }
@@ -152,21 +185,38 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
                                 return Ok(Some(s));
                             }
                         }
+                        (KeyCode::Up, _) if app.file_menu_visible() => app.select_previous_file(),
+                        (KeyCode::Down, _) if app.file_menu_visible() => app.select_next_file(),
                         (KeyCode::Up, _) if app.command_menu_visible() => {
                             app.select_previous_command()
                         }
                         (KeyCode::Down, _) if app.command_menu_visible() => {
                             app.select_next_command()
                         }
+                        (KeyCode::Up | KeyCode::Down, _) if windows_scroll => {
+                            apply_windows_scroll_action(
+                                &mut app,
+                                windows_scroll_filter.push(k.code),
+                            )
+                        }
                         (KeyCode::Up, _) => app.previous_input(),
                         (KeyCode::Down, _) => app.next_input(),
                         (KeyCode::Left, _) => app.input.move_left(),
                         (KeyCode::Right, _) => app.input.move_right(),
+                        (KeyCode::Tab, _) if app.complete_selected_file_for_key(k.code) => {}
                         (KeyCode::Home, _) => app.input.move_home(),
                         (KeyCode::End, _) => app.input.move_end(),
                         (KeyCode::Backspace, _) => app.input.backspace(),
                         (KeyCode::Delete, _) => app.input.delete(),
-                        (KeyCode::Char(c), _) => app.input.push(c),
+                        (KeyCode::Char(c), _) => match app.input.push(c) {
+                            Some(super::input::SgrMouseReport::ScrollUp) => {
+                                app.scroll_conversation_up(3)
+                            }
+                            Some(super::input::SgrMouseReport::ScrollDown) => {
+                                app.scroll_conversation_down(3)
+                            }
+                            _ => {}
+                        },
                         _ => {}
                     }
                 }
@@ -176,7 +226,87 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
     }
 }
 
+fn apply_windows_scroll_action(app: &mut App, action: Option<events::WindowsScrollAction>) {
+    match action {
+        Some(events::WindowsScrollAction::ScrollUp(rows)) => app.scroll_conversation_up(rows),
+        Some(events::WindowsScrollAction::ScrollDown(rows)) => app.scroll_conversation_down(rows),
+        Some(events::WindowsScrollAction::InputHistoryUp) => app.previous_input(),
+        Some(events::WindowsScrollAction::InputHistoryDown) => app.next_input(),
+        None => {}
+    }
+}
+
 impl App {
+    pub(crate) fn refresh_file_suggestions(&mut self) {
+        let query = self
+            .active_file_reference()
+            .map(|(_, fragment)| fragment.to_owned());
+        if query == self.file_suggestion_query {
+            return;
+        }
+        self.file_suggestions = query.as_deref().map(file_suggestions).unwrap_or_default();
+        self.file_suggestion_query = query;
+        self.file_selection = 0;
+    }
+
+    pub(crate) fn file_suggestions(&self) -> &[String] {
+        &self.file_suggestions
+    }
+
+    fn active_file_reference(&self) -> Option<(usize, &str)> {
+        let before_cursor = self.input.text.get(..self.input.cursor())?;
+        let start = before_cursor
+            .char_indices()
+            .rev()
+            .find_map(|(index, character)| {
+                character
+                    .is_whitespace()
+                    .then_some(index + character.len_utf8())
+            })
+            .unwrap_or(0);
+        let fragment = before_cursor.get(start..)?;
+        fragment.strip_prefix('@').map(|path| (start, path))
+    }
+
+    pub(crate) fn file_menu_visible(&self) -> bool {
+        !self.file_suggestions().is_empty()
+    }
+
+    pub(crate) fn select_previous_file(&mut self) {
+        let count = self.file_suggestions().len();
+        if count > 0 {
+            self.file_selection = self.file_selection.checked_sub(1).unwrap_or(count - 1);
+        }
+    }
+
+    pub(crate) fn select_next_file(&mut self) {
+        let count = self.file_suggestions().len();
+        if count > 0 {
+            self.file_selection = (self.file_selection + 1) % count;
+        }
+    }
+
+    pub(crate) fn complete_selected_file(&mut self) -> bool {
+        let Some((start, fragment)) = self.active_file_reference() else {
+            return false;
+        };
+        let suggestions = self.file_suggestions();
+        let Some(path) = suggestions.get(self.file_selection % suggestions.len().max(1)) else {
+            return false;
+        };
+        if fragment == path {
+            return false;
+        }
+        let replacement = format!("@{path}");
+        self.input.replace_before_cursor(start, &replacement)
+    }
+
+    pub(crate) fn complete_selected_file_for_key(&mut self, key: KeyCode) -> bool {
+        matches!(key, KeyCode::Enter | KeyCode::Tab)
+            && self.file_menu_visible()
+            && self.complete_selected_file()
+    }
+
     pub(crate) fn advance_welcome_train(&mut self, viewport_width: usize) {
         if let Some(frame) = self.welcome_train_frame.as_mut() {
             let next_distance = usize::from(*frame)
@@ -192,7 +322,15 @@ impl App {
 
     pub(crate) fn command_suggestions(&self) -> Vec<&'static str> {
         const COMMANDS: &[&str] = &[
-            "/balance", "/clear", "/config", "/exit", "/help", "/setting", "/update",
+            "/balance",
+            "/clear",
+            "/config",
+            "/exit",
+            "/help",
+            "/setting",
+            "/shell",
+            "/update",
+            "/sessions",
         ];
         let query = self.input.text.trim();
         if !query.starts_with('/') || query.contains(char::is_whitespace) {
@@ -257,6 +395,9 @@ impl App {
         self.tool_results_expanded = false;
         self.welcome_train_frame = None;
         self.command_selection = 0;
+        self.file_selection = 0;
+        self.file_suggestion_query = None;
+        self.file_suggestions.clear();
     }
 
     pub(crate) fn previous_input(&mut self) {
@@ -301,6 +442,88 @@ impl App {
     }
 }
 
+fn file_suggestions(fragment: &str) -> Vec<String> {
+    let (expanded, display_prefix) = if fragment == "~" || fragment.starts_with("~/") {
+        let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) else {
+            return Vec::new();
+        };
+        let remainder = fragment
+            .strip_prefix('~')
+            .unwrap_or_default()
+            .trim_start_matches('/');
+        (PathBuf::from(home).join(remainder), "~/")
+    } else if fragment.starts_with('/') {
+        (PathBuf::from(fragment), "/")
+    } else {
+        (PathBuf::from(fragment), "")
+    };
+
+    let list_exact_directory =
+        matches!(fragment, "~" | "/" | "." | "..") || fragment.ends_with('/');
+    let (directory, query, typed_parent) = if list_exact_directory {
+        (expanded.as_path(), "", fragment.trim_end_matches('/'))
+    } else {
+        (
+            expanded.parent().unwrap_or_else(|| Path::new(".")),
+            expanded
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default(),
+            fragment
+                .rsplit_once('/')
+                .map(|(parent, _)| parent)
+                .unwrap_or(""),
+        )
+    };
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return Vec::new();
+    };
+    let mut matches = entries
+        .take(MAX_FILE_ENTRIES_SCANNED)
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            if !name.starts_with(query) || (query.is_empty() && name.starts_with('.')) {
+                return None;
+            }
+            let separator = if typed_parent.is_empty() || typed_parent == "/" {
+                ""
+            } else {
+                "/"
+            };
+            let mut shown = if display_prefix == "~/" {
+                let relative_parent = typed_parent.trim_start_matches('~').trim_matches('/');
+                if relative_parent.is_empty() {
+                    format!("~/{name}")
+                } else {
+                    format!("~/{relative_parent}/{name}")
+                }
+            } else if fragment.starts_with('/') {
+                format!(
+                    "/{typed_parent_trim}{name}",
+                    typed_parent_trim = typed_parent.trim_matches('/').to_string() + separator
+                )
+            } else if typed_parent.is_empty() {
+                name
+            } else {
+                format!("{typed_parent}/{name}")
+            };
+            if entry.path().is_dir() {
+                shown.push('/');
+            }
+            Some(shown)
+        })
+        .collect::<Vec<_>>();
+    matches.sort_by(|left, right| {
+        right
+            .ends_with('/')
+            .cmp(&left.ends_with('/'))
+            .then_with(|| left.cmp(right))
+    });
+    matches.truncate(MAX_FILE_SUGGESTIONS);
+    matches
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +536,9 @@ mod tests {
             input_history_draft: String::new(),
             cursor_visible: true,
             command_selection: 0,
+            file_selection: 0,
+            file_suggestion_query: None,
+            file_suggestions: Vec::new(),
             history: (0..rows).map(|row| row.to_string()).collect(),
             conversation_scroll: 0,
             tool_results_expanded: false,
@@ -396,5 +622,78 @@ mod tests {
         assert_eq!(app.conversation_scroll, 0);
         assert!(!app.tool_results_expanded);
         assert_eq!(app.welcome_train_frame, None);
+    }
+
+    #[test]
+    fn file_reference_completion_replaces_only_the_token_at_the_cursor() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        std::fs::create_dir(directory.path().join("folder"))?;
+        std::fs::write(directory.path().join("file.txt"), "test")?;
+        let mut app = app_with_history(0);
+        app.input
+            .set(format!("读取 @{}/ 后续", directory.path().display()));
+        for _ in 0.." 后续".chars().count() {
+            app.input.move_left();
+        }
+        app.refresh_file_suggestions();
+
+        let suggestions = app.file_suggestions();
+        assert!(suggestions.iter().any(|path| path.ends_with("/folder/")));
+        let file = suggestions
+            .iter()
+            .position(|path| path.ends_with("/file.txt"))
+            .ok_or_else(|| anyhow::anyhow!("file suggestion is missing"))?;
+        app.file_selection = file;
+        assert!(app.complete_selected_file());
+        assert_eq!(
+            app.input.text,
+            format!("读取 @{}/file.txt 后续", directory.path().display())
+        );
+        app.refresh_file_suggestions();
+        assert!(!app.complete_selected_file());
+        Ok(())
+    }
+
+    #[test]
+    fn file_reference_completion_accepts_enter_and_tab_but_not_right() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        std::fs::write(directory.path().join("file.txt"), "test")?;
+
+        for key in [KeyCode::Enter, KeyCode::Tab] {
+            let mut app = app_with_history(0);
+            app.input.set(format!("@{}/f", directory.path().display()));
+            app.refresh_file_suggestions();
+            assert!(app.complete_selected_file_for_key(key));
+            assert!(app.input.text.ends_with("/file.txt"));
+        }
+
+        let mut app = app_with_history(0);
+        app.input.set(format!("@{}/f", directory.path().display()));
+        app.refresh_file_suggestions();
+        assert!(!app.complete_selected_file_for_key(KeyCode::Right));
+        assert!(app.input.text.ends_with("/f"));
+        Ok(())
+    }
+
+    #[test]
+    fn dot_reference_lists_the_current_directory() {
+        let suggestions = file_suggestions(".");
+        assert!(suggestions.iter().any(|path| path == "./Cargo.toml"));
+    }
+
+    #[test]
+    fn tilde_reference_preserves_the_tilde_prefix() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        std::fs::create_dir(directory.path().join("documents"))?;
+        let previous_home = std::env::var_os("HOME");
+        std::env::set_var("HOME", directory.path());
+        let suggestions = file_suggestions("~");
+        if let Some(home) = previous_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        assert_eq!(suggestions, vec!["~/documents/"]);
+        Ok(())
     }
 }

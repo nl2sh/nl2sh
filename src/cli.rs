@@ -8,6 +8,7 @@ pub enum Mode {
 #[derive(Debug, Clone, Copy, ValueEnum)]
 #[value(rename_all = "snake_case")]
 pub enum ApiTypeArg {
+    Auto,
     ChatCompletions,
     Responses,
 }
@@ -19,6 +20,7 @@ pub enum Command {
 impl From<ApiTypeArg> for nl2sh::config::ApiType {
     fn from(value: ApiTypeArg) -> Self {
         match value {
+            ApiTypeArg::Auto => Self::Auto,
             ApiTypeArg::ChatCompletions => Self::ChatCompletions,
             ApiTypeArg::Responses => Self::Responses,
         }

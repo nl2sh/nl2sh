@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 title nl2sh Android Launcher
@@ -76,7 +77,7 @@ if errorlevel 1 goto :adb_fail
 if "!ADB_IS_ROOT!"=="true" (
   echo Starting %REMOTE_BINARY% through root adbd.
   echo Press Ctrl+Q in nl2sh to exit.
-  adb -s "!SERIAL!" shell -t "%REMOTE_BINARY%"
+  adb -s "!SERIAL!" shell -t env NL2SH_WINDOWS_SCROLL=1 "%REMOTE_BINARY%"
   set "RUN_EXIT=!ERRORLEVEL!"
   goto :done
 )
@@ -86,7 +87,7 @@ adb -s "!SERIAL!" shell su -c id >nul 2>&1
 if not errorlevel 1 (
   echo su access granted; starting %REMOTE_BINARY% as root.
   echo Press Ctrl+Q in nl2sh to exit.
-  adb -s "!SERIAL!" shell -t su -c "%REMOTE_BINARY%"
+  adb -s "!SERIAL!" shell -t su -c "NL2SH_WINDOWS_SCROLL=1 %REMOTE_BINARY%"
   set "RUN_EXIT=!ERRORLEVEL!"
   goto :done
 )
@@ -103,7 +104,7 @@ if not errorlevel 1 (
 
 echo WARNING: adb root and su are unavailable; starting as adb shell user.
 echo Press Ctrl+Q in nl2sh to exit.
-adb -s "!SERIAL!" shell -t "%REMOTE_BINARY%"
+adb -s "!SERIAL!" shell -t env NL2SH_WINDOWS_SCROLL=1 "%REMOTE_BINARY%"
 set "RUN_EXIT=!ERRORLEVEL!"
 goto :done
 

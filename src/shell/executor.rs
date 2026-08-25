@@ -129,6 +129,51 @@ impl ShellExecutor {
         self.tui_suspended = Some(flag);
         self
     }
+
+    /// Opens a direct user-controlled interactive shell through a PTY.
+    ///
+    /// This bypasses Agent classification because its input comes directly
+    /// from the user, while retaining terminal suspension and child cleanup.
+    pub async fn execute_user_shell(&self, command: &str) -> Result<ExecutionResult> {
+        self.execute_resolved(command, false, true, true).await
+    }
+
+    async fn execute_resolved(
+        &self,
+        command: &str,
+        needs_root: bool,
+        interactive: bool,
+        force_pty: bool,
+    ) -> Result<ExecutionResult> {
+        let (program, args) = resolve_invocation(
+            command,
+            self.config.execute_user_mode,
+            needs_root,
+            self.probe.as_ref(),
+        )?;
+        let timeout = if interactive {
+            self.config.interactive_execute_timeout_secs
+        } else {
+            self.config.execute_timeout_secs
+        };
+        let req = ExecutionRequest {
+            program,
+            args,
+            timeout_secs: timeout,
+            use_pty: force_pty || self.config.enable_pty,
+            interactive,
+            output: self.output.clone(),
+            capture_max_bytes: self.config.tool_output_max_bytes,
+            tui_active: self.tui_active,
+            tui_suspended: self.tui_suspended.clone(),
+        };
+        let _activity = TuiActivityGuard::new(req.interactive, req.tui_suspended.clone());
+        if req.use_pty {
+            pty::execute(req).await
+        } else {
+            pipeline::execute(req).await
+        }
+    }
 }
 #[async_trait]
 impl CommandExecutor for ShellExecutor {
@@ -163,34 +208,8 @@ impl CommandExecutor for ShellExecutor {
         needs_root: bool,
         interactive: bool,
     ) -> Result<ExecutionResult> {
-        let (program, args) = resolve_invocation(
-            command,
-            self.config.execute_user_mode,
-            needs_root,
-            self.probe.as_ref(),
-        )?;
-        let timeout = if interactive {
-            self.config.interactive_execute_timeout_secs
-        } else {
-            self.config.execute_timeout_secs
-        };
-        let req = ExecutionRequest {
-            program,
-            args,
-            timeout_secs: timeout,
-            use_pty: self.config.enable_pty,
-            interactive,
-            output: self.output.clone(),
-            capture_max_bytes: self.config.tool_output_max_bytes,
-            tui_active: self.tui_active,
-            tui_suspended: self.tui_suspended.clone(),
-        };
-        let _activity = TuiActivityGuard::new(req.interactive, req.tui_suspended.clone());
-        if req.use_pty {
-            pty::execute(req).await
-        } else {
-            pipeline::execute(req).await
-        }
+        self.execute_resolved(command, needs_root, interactive, false)
+            .await
     }
 }
 

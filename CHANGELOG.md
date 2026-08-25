@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Changed `@` path suggestions so Enter or Tab inserts the selected candidate, while Right keeps its normal cursor-movement behavior.
+- Added an optional read-only Tencent ima knowledge-base connector with no-proxy direct networking, dynamically exposed list/search/read Agent tools, bounded original-content retrieval, strict temporary-URL origin policy, and credential/session/log redaction; no ima write operations are implemented.
+- Added `@` file and directory references in the TUI with bounded path suggestions, Up/Down selection, Enter/Tab completion, relative/absolute/tilde paths, and longest-existing-prefix parsing for prompts such as `@test.txt写的是什么内容`; referenced content remains behind bounded structured file tools.
+- Made the confirmation panel size itself from wrapped content; oversized commands and diffs scroll with the wheel or PageUp/PageDown while approval controls remain pinned.
+- Added bounded `read_file`, `list_dir`, `search_text`, and `apply_patch` tools without a workspace path sandbox; edits show a diff and require confirmation before an atomic write.
+- Added private session autosave plus `/sessions` list, resume, rename, and delete operations; credentials, balances, and temporary approvals are excluded.
+- Fixed history scrolling through Windows ADB terminals with a launcher-enabled alternate-scroll mode that leaves remote mouse capture disabled and maps terminal-generated Up/Down events to conversation scrolling; Linux keeps native mouse capture.
+- Completed the Android device validation matrix for root/non-root execution, mutation confirmation, command timeout cleanup, and fullscreen interactive programs with terminal/TUI restoration.
+- Fixed incomplete TUI frames after leaving `/shell` by explicitly invalidating ratatui's retained buffer before redrawing the restored alternate screen.
+- TUI Settings now keeps separate in-session Endpoint drafts for Ollama and Custom, restoring each value after switching through other Provider presets.
+- Restored built-in Provider selection inside the unified TUI Settings panel, sharing the OpenAI, DeepSeek, Moonshot/Kimi, SiliconFlow, Ollama, and Custom presets with the legacy wizard while preserving API keys, models, and protocol choices.
+- Added `/shell` to suspend the TUI and open a direct interactive system shell; `exit` or Ctrl+D restores and fully redraws the existing TUI without sending shell content to the model or audit log.
+- Agent tasks now enforce independent step, tool-call, active-time, stalled-progress, repeated-action, and hard-step budgets. Fast/Normal/Deep presets are available; confirmation waits are excluded from active time, while safety classification and confirmation remain mandatory.
+- Repeated normalized commands with unchanged results are blocked before a fourth execution, stalled rounds force replanning before termination, and 80%/90% step warnings ask the model to converge. Task summaries now expose steps, tool calls, active duration, replans, and the terminating limit.
 - 设置面板文本字段新增 UTF-8 安全的 Left/Right/Home/End 光标移动，插入、Backspace 和 Delete 均围绕当前光标执行，密码字段保持掩码。
 - 在统一设置面板的“模型与智能体”Tab 恢复后台模型发现；可在 TUI 内拉取、选择并回填模型及 Provider 元数据，失败时保留手工输入。
 - 修复部分 adb 终端丢失 CSI 前缀后将 `<35;46;8M` 一类 SGR 鼠标报告写入主输入框或设置字段的问题。
@@ -19,6 +33,8 @@
 
 - Config-free TUI startup now probes the KONKA internal convenience endpoint and securely creates the built-in `KK-FREE-TEST` configuration with the `deepseek-v4-flash-0731` model and Responses protocol when reachable, while never changing an existing configuration.
 - The startup welcome page identifies the KONKA internal convenience edition and invites colleague feedback.
+- API protocol now defaults to automatic negotiation: Responses is preferred, safe protocol mismatches fall back to Chat Completions, and the successful dialect is cached without treating authentication, rate-limit, 5xx, timeout, or partial-stream failures as negotiation signals.
+- The unified Settings UI now provides an audit-log clear action and independent, default-on switches for the Buddha and startup-train ASCII art.
 - Agent tasks now accumulate provider-reported input/output token usage across every tool-calling step and show the task totals in the TUI status line.
 - A `/models` flow now fetches the current provider's model list with a visible network-loading message and falls back to manual model entry without logging credentials or raw account responses.
 - Provider metadata is normalized behind a dedicated client for OpenAI, DeepSeek, SiliconFlow, and Ollama; known or user-overridden context windows drive an estimated context-usage percentage in the TUI.

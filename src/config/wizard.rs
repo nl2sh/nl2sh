@@ -14,7 +14,7 @@ use std::{
     path::Path,
 };
 
-const PROVIDERS: &[ProviderPreset] = &[
+pub(crate) const PROVIDERS: &[ProviderPreset] = &[
     ProviderPreset::new("OpenAI", "https://api.openai.com/v1"),
     ProviderPreset::new("DeepSeek", "https://api.deepseek.com"),
     ProviderPreset::new("Moonshot / Kimi", "https://api.moonshot.cn/v1"),
@@ -23,7 +23,8 @@ const PROVIDERS: &[ProviderPreset] = &[
     ProviderPreset::custom("Custom", "自定义"),
 ];
 
-struct ProviderPreset {
+#[derive(Clone, Copy)]
+pub(crate) struct ProviderPreset {
     name_en: &'static str,
     name_zh_cn: &'static str,
     endpoint: Option<&'static str>,
@@ -46,12 +47,27 @@ impl ProviderPreset {
         }
     }
 
-    fn name(&self, language: UiLanguage) -> &'static str {
+    pub(crate) fn name(&self, language: UiLanguage) -> &'static str {
         match language {
             UiLanguage::ZhCn => self.name_zh_cn,
             UiLanguage::En => self.name_en,
         }
     }
+
+    pub(crate) fn endpoint(&self) -> Option<&'static str> {
+        self.endpoint
+    }
+}
+
+pub(crate) fn provider_index(endpoint: &str) -> usize {
+    PROVIDERS
+        .iter()
+        .position(|provider| {
+            provider.endpoint.is_some_and(|preset| {
+                preset.trim_end_matches('/') == endpoint.trim_end_matches('/')
+            })
+        })
+        .unwrap_or(PROVIDERS.len() - 1)
 }
 
 struct RawModeGuard;
@@ -93,10 +109,10 @@ pub fn run_wizard(path: &Path) -> Result<()> {
     let api = prompt(
         label(
             ui_language,
-            "API 类型 (responses/chat_completions)",
-            "API type (responses/chat_completions)",
+            "API 类型 (auto/responses/chat_completions)",
+            "API type (auto/responses/chat_completions)",
         ),
-        "responses",
+        "auto",
     )?;
     let confirm = prompt(
         label(
@@ -117,6 +133,7 @@ pub fn run_wizard(path: &Path) -> Result<()> {
     let api_type = parse(
         &api,
         &[
+            ("auto", ApiType::Auto),
             ("responses", ApiType::Responses),
             ("chat_completions", ApiType::ChatCompletions),
         ],
@@ -192,20 +209,22 @@ pub fn run_configure(path: &Path) -> Result<()> {
     }
     cfg.model = prompt(label(cfg.ui_language, "模型", "Model"), &cfg.model)?;
     let default_api = match cfg.api_type {
+        ApiType::Auto => "auto",
         ApiType::Responses => "responses",
         ApiType::ChatCompletions => "chat_completions",
     };
     let api = prompt(
         label(
             cfg.ui_language,
-            "API 类型 (responses/chat_completions)",
-            "API type (responses/chat_completions)",
+            "API 类型 (auto/responses/chat_completions)",
+            "API type (auto/responses/chat_completions)",
         ),
         default_api,
     )?;
     cfg.api_type = parse(
         &api,
         &[
+            ("auto", ApiType::Auto),
             ("responses", ApiType::Responses),
             ("chat_completions", ApiType::ChatCompletions),
         ],
@@ -235,20 +254,22 @@ pub fn run_provider_configure(path: &Path) -> Result<()> {
         cfg.api_key = api_key;
     }
     let default_api = match cfg.api_type {
+        ApiType::Auto => "auto",
         ApiType::Responses => "responses",
         ApiType::ChatCompletions => "chat_completions",
     };
     let api = prompt(
         label(
             cfg.ui_language,
-            "API 类型 (responses/chat_completions)",
-            "API type (responses/chat_completions)",
+            "API 类型 (auto/responses/chat_completions)",
+            "API type (auto/responses/chat_completions)",
         ),
         default_api,
     )?;
     cfg.api_type = parse(
         &api,
         &[
+            ("auto", ApiType::Auto),
             ("responses", ApiType::Responses),
             ("chat_completions", ApiType::ChatCompletions),
         ],
@@ -481,15 +502,7 @@ fn label(language: UiLanguage, zh_cn: &'static str, en: &'static str) -> &'stati
 }
 
 fn select_endpoint(language: UiLanguage, current: &str) -> Result<String> {
-    let custom_index = PROVIDERS.len() - 1;
-    let mut selected = PROVIDERS
-        .iter()
-        .position(|provider| {
-            provider.endpoint.is_some_and(|endpoint| {
-                endpoint.trim_end_matches('/') == current.trim_end_matches('/')
-            })
-        })
-        .unwrap_or(custom_index);
+    let mut selected = provider_index(current);
     let mut stdout = io::stdout();
     let _raw_mode = RawModeGuard::enter()?;
     let rendered_lines = PROVIDERS.len() + 1;

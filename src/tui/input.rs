@@ -4,12 +4,13 @@ pub struct Input {
     cursor: usize,
 }
 impl Input {
-    pub fn push(&mut self, c: char) {
+    pub(super) fn push(&mut self, c: char) -> Option<SgrMouseReport> {
         self.text.insert(self.cursor, c);
         self.cursor += c.len_utf8();
         if matches!(c, 'M' | 'm') {
-            self.remove_sgr_mouse_report();
+            return self.remove_sgr_mouse_report();
         }
+        None
     }
     pub fn backspace(&mut self) {
         if let Some((previous, _)) = self.text[..self.cursor].char_indices().next_back() {
@@ -46,6 +47,14 @@ impl Input {
         self.text = value;
         self.cursor = self.text.len();
     }
+    pub fn replace_before_cursor(&mut self, start: usize, value: &str) -> bool {
+        if start > self.cursor || !self.text.is_char_boundary(start) {
+            return false;
+        }
+        self.text.replace_range(start..self.cursor, value);
+        self.cursor = start.saturating_add(value.len());
+        true
+    }
     pub fn clear(&mut self) {
         self.text.clear();
         self.cursor = 0;
@@ -55,38 +64,58 @@ impl Input {
         std::mem::take(&mut self.text)
     }
 
-    fn remove_sgr_mouse_report(&mut self) {
-        if strip_trailing_sgr_mouse_report(&mut self.text) {
+    fn remove_sgr_mouse_report(&mut self) -> Option<SgrMouseReport> {
+        let report = take_trailing_sgr_mouse_report(&mut self.text);
+        if report.is_some() {
             self.cursor = self.text.len();
         }
+        report
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum SgrMouseReport {
+    ScrollUp,
+    ScrollDown,
+    Other,
 }
 
 /// Removes a complete trailing SGR mouse report, including the degraded form
 /// seen when an adb terminal drops the leading CSI bytes.
 pub(super) fn strip_trailing_sgr_mouse_report(text: &mut String) -> bool {
+    take_trailing_sgr_mouse_report(text).is_some()
+}
+
+/// Removes and classifies a complete trailing SGR mouse report. Some Windows
+/// adb terminal paths deliver these bytes as ordinary key events instead of a
+/// crossterm mouse event.
+pub(super) fn take_trailing_sgr_mouse_report(text: &mut String) -> Option<SgrMouseReport> {
     if !matches!(text.chars().next_back(), Some('M' | 'm')) {
-        return false;
+        return None;
     }
-    let Some(angle) = text.rfind('<') else {
-        return false;
-    };
+    let angle = text.rfind('<')?;
     let candidate = &text[angle + 1..text.len().saturating_sub(1)];
     let mut fields = candidate.split(';');
-    let valid = (0..3).all(|_| {
-        fields
-            .next()
-            .is_some_and(|field| !field.is_empty() && field.chars().all(|c| c.is_ascii_digit()))
-    }) && fields.next().is_none();
-    if !valid {
-        return false;
+    let button = fields.next().and_then(|field| field.parse::<u16>().ok())?;
+    let column = fields.next().and_then(|field| field.parse::<u16>().ok())?;
+    let row = fields.next().and_then(|field| field.parse::<u16>().ok())?;
+    if fields.next().is_some() || column == 0 || row == 0 {
+        return None;
     }
     let start = angle
         .checked_sub(1)
         .filter(|index| text.as_bytes().get(*index) == Some(&b'['))
         .unwrap_or(angle);
     text.truncate(start);
-    true
+
+    // Bits 2-4 are keyboard modifiers and bit 5 is the motion flag. Some
+    // Windows terminal/adb paths retain the motion flag on wheel reports,
+    // producing 96/97 instead of the canonical 64/65.
+    match button & !(4 | 8 | 16 | 32) {
+        64 => Some(SgrMouseReport::ScrollUp),
+        65 => Some(SgrMouseReport::ScrollDown),
+        _ => Some(SgrMouseReport::Other),
+    }
 }
 
 impl From<&str> for Input {
@@ -100,31 +129,66 @@ impl From<&str> for Input {
 
 #[cfg(test)]
 mod tests {
-    use super::Input;
+    use super::{Input, SgrMouseReport};
 
     #[test]
     fn strips_fragmented_sgr_mouse_reports_from_user_input() {
         let mut input = Input::from("保留这些文字");
         for character in "[<35;96;3M".chars() {
-            input.push(character);
+            let _ = input.push(character);
         }
         assert_eq!(input.text, "保留这些文字");
 
         for character in "<35;46;8M".chars() {
-            input.push(character);
+            let _ = input.push(character);
         }
         assert_eq!(input.text, "保留这些文字");
+    }
+
+    #[test]
+    fn classifies_fragmented_vertical_wheel_reports() {
+        let mut input = Input::from("保留这些文字");
+        let mut report = None;
+        for character in "<64;46;8M".chars() {
+            if let Some(parsed) = input.push(character) {
+                report = Some(parsed);
+            }
+        }
+        assert_eq!(report, Some(SgrMouseReport::ScrollUp));
+        assert_eq!(input.text, "保留这些文字");
+
+        for character in "[<69;46;8M".chars() {
+            if let Some(parsed) = input.push(character) {
+                report = Some(parsed);
+            }
+        }
+        assert_eq!(report, Some(SgrMouseReport::ScrollDown));
+        assert_eq!(input.text, "保留这些文字");
+
+        for (sequence, expected) in [
+            ("<96;46;8M", SgrMouseReport::ScrollUp),
+            ("<97;46;8M", SgrMouseReport::ScrollDown),
+        ] {
+            report = None;
+            for character in sequence.chars() {
+                if let Some(parsed) = input.push(character) {
+                    report = Some(parsed);
+                }
+            }
+            assert_eq!(report, Some(expected));
+            assert_eq!(input.text, "保留这些文字");
+        }
     }
 
     #[test]
     fn preserves_normal_bracketed_input() {
         let mut input = Input::default();
         for character in "echo [<not-a-mouse>]".chars() {
-            input.push(character);
+            let _ = input.push(character);
         }
         assert_eq!(input.text, "echo [<not-a-mouse>]");
         for character in " <35;46;XM".chars() {
-            input.push(character);
+            let _ = input.push(character);
         }
         assert_eq!(input.text, "echo [<not-a-mouse>] <35;46;XM");
     }
@@ -133,7 +197,7 @@ mod tests {
     fn edits_unicode_text_at_the_cursor() {
         let mut input = Input::from("你a");
         input.move_left();
-        input.push('好');
+        let _ = input.push('好');
         assert_eq!(input.text, "你好a");
         input.backspace();
         assert_eq!(input.text, "你a");

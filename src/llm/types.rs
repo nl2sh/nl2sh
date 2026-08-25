@@ -70,7 +70,7 @@ pub struct ToolResult {
     pub success: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// One ordered model-call/tool-output interaction unit.
 pub struct ToolRound {
     /// Calls emitted together by the assistant.
@@ -80,7 +80,7 @@ pub struct ToolRound {
 }
 
 /// One ordered provider-neutral conversation item.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ConversationItem {
     /// A system, user, or assistant text message.
     Message(ConversationMessage),

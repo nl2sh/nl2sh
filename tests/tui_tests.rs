@@ -122,7 +122,7 @@ async fn missing_config_enters_tui_and_config_command_runs_setup() -> anyhow::Re
     wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
 
     let loaded = nl2sh::config::load_unvalidated(Some(&config))?;
-    assert_eq!(loaded.max_agent_steps, 24);
+    assert_eq!(loaded.max_agent_steps, 50);
     assert_eq!(loaded.max_context_turns, 16);
     assert!(process.child.try_wait()?.is_none());
     process.master.write_all(b"/exit\r")?;
@@ -130,6 +130,33 @@ async fn missing_config_enters_tui_and_config_command_runs_setup() -> anyhow::Re
         .await??
         .success());
     assert!(std::fs::read_to_string(directory.path().join("nl2sh.log"))?.contains("/exit"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn slash_shell_runs_commands_and_exit_restores_tui() -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("missing.toml");
+    std::fs::write(&config, "enable_pty=false\n")?;
+    let mut process = spawn_tui(&config)?;
+
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+    process.master.write_all(b"/shell\r")?;
+    sleep(Duration::from_millis(150)).await;
+    process
+        .master
+        .write_all(b"printf 'shell-mode-ok\\n'\rexit\r")?;
+    wait_for_text(&mut process.master, "shell-mode-ok", Duration::from_secs(3)).await?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+
+    assert!(process.child.try_wait()?.is_none());
+    let log = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
+    assert!(log.contains("/shell"));
+    assert!(!log.contains("shell-mode-ok"));
+    process.master.write_all(&[0x11])?;
+    assert!(timeout(Duration::from_secs(3), process.child.wait())
+        .await??
+        .success());
     Ok(())
 }
 

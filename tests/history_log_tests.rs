@@ -34,6 +34,22 @@ fn history_limits_are_explicit_and_bounded() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn clearing_history_resets_the_file_and_allows_new_records() -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    let path = directory.path().join("history.jsonl");
+    let log = HistoryLog::open(&config, std::path::Path::new("history.jsonl"))?;
+    log.record("before", "old")?;
+    log.clear()?;
+    assert_eq!(fs::metadata(&path)?.len(), 0);
+    log.record("after", "new")?;
+    let contents = fs::read_to_string(path)?;
+    assert!(!contents.contains("old"));
+    assert!(contents.contains("new"));
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn new_history_log_is_private() -> anyhow::Result<()> {

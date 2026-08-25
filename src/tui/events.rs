@@ -14,6 +14,78 @@ pub(super) struct FragmentedArrowFilter {
     state: ArrowSequenceState,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum WindowsScrollAction {
+    ScrollUp(usize),
+    ScrollDown(usize),
+    InputHistoryUp,
+    InputHistoryDown,
+}
+
+#[derive(Default)]
+pub(super) struct WindowsScrollFilter {
+    pending: Option<(KeyCode, Instant)>,
+    scrolling: Option<(KeyCode, Instant)>,
+}
+
+impl WindowsScrollFilter {
+    const START_WINDOW: Duration = Duration::from_millis(60);
+    const CONTINUE_WINDOW: Duration = Duration::from_millis(120);
+
+    pub(super) fn push(&mut self, code: KeyCode) -> Option<WindowsScrollAction> {
+        if !matches!(code, KeyCode::Up | KeyCode::Down) {
+            return None;
+        }
+        let now = Instant::now();
+        if let Some((direction, last)) = self.scrolling {
+            if direction == code && now.duration_since(last) <= Self::CONTINUE_WINDOW {
+                self.scrolling = Some((code, now));
+                return Some(Self::scroll_action(code, 3));
+            }
+            self.scrolling = None;
+        }
+        if let Some((direction, started)) = self.pending.take() {
+            if direction == code && now.duration_since(started) <= Self::START_WINDOW {
+                self.scrolling = Some((code, now));
+                return Some(Self::scroll_action(code, 6));
+            }
+            self.pending = Some((code, now));
+            return Some(Self::history_action(direction));
+        }
+        self.pending = Some((code, now));
+        None
+    }
+
+    pub(super) fn take_expired(&mut self) -> Option<WindowsScrollAction> {
+        if self
+            .scrolling
+            .is_some_and(|(_, last)| last.elapsed() > Self::CONTINUE_WINDOW)
+        {
+            self.scrolling = None;
+        }
+        let (direction, started) = self.pending?;
+        if started.elapsed() < Self::START_WINDOW {
+            return None;
+        }
+        self.pending = None;
+        Some(Self::history_action(direction))
+    }
+
+    fn scroll_action(code: KeyCode, rows: usize) -> WindowsScrollAction {
+        match code {
+            KeyCode::Up => WindowsScrollAction::ScrollUp(rows),
+            _ => WindowsScrollAction::ScrollDown(rows),
+        }
+    }
+
+    fn history_action(code: KeyCode) -> WindowsScrollAction {
+        match code {
+            KeyCode::Up => WindowsScrollAction::InputHistoryUp,
+            _ => WindowsScrollAction::InputHistoryDown,
+        }
+    }
+}
+
 #[derive(Default)]
 enum ArrowSequenceState {
     #[default]
@@ -129,5 +201,26 @@ mod tests {
             .is_none());
         assert!(filter.take_expired_escape(Duration::ZERO));
         assert!(!filter.take_expired_escape(Duration::ZERO));
+    }
+
+    #[test]
+    fn windows_scroll_filter_preserves_single_arrows_and_detects_wheel_bursts() {
+        let mut filter = WindowsScrollFilter::default();
+        assert_eq!(filter.push(KeyCode::Up), None);
+        std::thread::sleep(WindowsScrollFilter::START_WINDOW + Duration::from_millis(5));
+        assert_eq!(
+            filter.take_expired(),
+            Some(WindowsScrollAction::InputHistoryUp)
+        );
+
+        assert_eq!(filter.push(KeyCode::Down), None);
+        assert_eq!(
+            filter.push(KeyCode::Down),
+            Some(WindowsScrollAction::ScrollDown(6))
+        );
+        assert_eq!(
+            filter.push(KeyCode::Down),
+            Some(WindowsScrollAction::ScrollDown(3))
+        );
     }
 }

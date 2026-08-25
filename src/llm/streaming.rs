@@ -50,6 +50,7 @@ pub(super) async fn parse(
         handle_event(event, api_type, sink, &mut chat, &mut responses_final)?;
     }
     match api_type {
+        ApiType::Auto => bail!("automatic API negotiation was not resolved"),
         ApiType::ChatCompletions => chat.finish(),
         ApiType::Responses => responses_final.context("Responses stream ended before completion"),
     }
@@ -86,6 +87,7 @@ fn handle_event(
     }
     let value: Value = serde_json::from_str(&data).context("invalid LLM stream event")?;
     match api_type {
+        ApiType::Auto => bail!("automatic API negotiation was not resolved"),
         ApiType::ChatCompletions => chat.push(&value, sink),
         ApiType::Responses => {
             if value["type"] == "response.output_text.delta" {

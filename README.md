@@ -13,6 +13,11 @@ Natural Language to Shell 是面向 Android 原生 `adb shell` 的类 Hermes AI 
 - 默认使用多轮 Agent Tool Calling；也支持只生成单条命令的 Command 模式。
 - 核心程序是单文件 Android 可执行程序，可直接推送到设备运行。
 - 丰富 TUI 支持 LLM 文本流式渐变输出、实时状态与命令输出、内嵌确认、历史滚动、工具结果折叠、Markdown 渲染、中英文界面和热重配置。
+- 内置 `read_file`、`list_dir`、`search_text`、`apply_patch` 结构化文件工具；允许绝对路径、父目录和符号链接，资源大小仍受限，补丁先展示 diff 并确认。
+- 输入 `@` 可引用文件或目录并显示候选，支持相对/绝对路径及 `@~`、`@/`、`@.`；Up/Down 选择、Enter/Tab 补全，也可直接输入 `@test.txt写的是什么内容`。引用只解析路径，内容由有界结构化文件工具读取。
+- 可选接入腾讯 ima 知识库，Agent 可发现知识库、搜索资料并读取有界原文；连接器只读、始终无代理直连，不提供上传、追加、导入或删除操作。
+- 完整对话自动保存，可用 `/sessions` 列表、恢复、重命名或删除；凭据、余额和临时审批不保存。
+- 审批窗口根据命令或 diff 动态调整宽高；超高内容可用滚轮或 PageUp/PageDown 浏览，操作选项始终固定可见。
 - 支持 Chat Completions 与 Responses API、自定义 OpenAI 兼容 endpoint。
 - `balanced` 默认策略自动执行只读查询、确认修改操作、二次确认危险操作。
 - LLM 不能决定确认、风险等级、root 提升或超时；用户编辑后的命令必须重新分类。
@@ -83,7 +88,7 @@ android-run-windows.bat
 
 仓库内置 `.github/workflows/release.yml`。推送 `v*` tag（如 `git tag v0.2.0 && git push origin v0.2.0`）会触发 GitHub Actions：并行交叉编译 `aarch64-linux-android`（arm64-v8a）与 `armv7-linux-androideabi`（armeabi-v7a），再把两种程序分别放入 `bin/arm64-v8a/` 和 `bin/armeabi-v7a/`，连同 Linux/BAT 启动脚本、`config.toml.example` 和 `使用说明.md` 合并为一份 `nl2sh-android.tar.gz` 与 `nl2sh-android.zip`，并附带 `SHA256SUMS` 发布到对应 tag 的 GitHub Release。Actions 页的 `workflow_dispatch` 可手动触发并生成草稿 Release（tag 通过输入指定）。
 
-下载统一发布包并完整解压后，Linux 直接运行 `./android-run-linux.sh`，Windows 双击 `android-run-windows.bat`。没有设备时脚本提示输入网络 ADB 地址，单设备自动选择，多设备按编号选择；随后自动检测 ABI，并完成 root adbd/`su` 回退部署。
+下载统一发布包并完整解压后，Linux 直接运行 `./android-run-linux.sh`，Windows 双击 `android-run-windows.bat`。没有设备时脚本提示输入网络 ADB 地址，单设备自动选择，多设备按编号选择；随后自动检测 ABI，并完成 root adbd/`su` 回退部署。Windows 启动脚本还会启用 alternate-scroll 兼容模式：不请求远端鼠标捕获，由 Windows Terminal 将滚轮转换成 Up/Down 输入，再由 nl2sh 滚动历史；Linux 路径继续使用原生鼠标事件。
 
 需要在本地生成与 GitHub Release 相同目录结构的统一 ZIP 时，先配置 Android NDK，然后运行对应宿主脚本：
 
@@ -147,9 +152,13 @@ cp config.toml.example config.toml
 
 配置优先级为 CLI 参数、`NL2SH_API_KEY`、`config.toml`、字段默认值。CLI 可用 `--endpoint`、`--model`、`--api-type` 覆盖 provider 设置；覆盖后统一校验，因此可以修正文件中的对应无效值。空 API Key 适用于本地服务，此时不会发送空 Authorization header。不要提交真实 key。
 
-`api_type` 可选 `responses` 或 `chat_completions`。兼容服务对协议的支持并不一致，nl2sh 不会因一次业务错误擅自切换协议。
+`api_type` 默认是 `auto`，因此配置文件可省略该字段。首次请求优先使用 Responses；仅当端点不存在、明确不支持，或在尚未输出任何内容时返回不兼容结构，才回退 Chat Completions，并在当前进程缓存成功协议。鉴权、限流、5xx、超时和已经产生流式内容后的错误不会触发切换。遇到特殊兼容服务时仍可显式设置 `responses` 或 `chat_completions`，也可用 `--api-type` 临时强制覆盖。
+
+腾讯 ima 为独立的可选只读连接器，可在 `/config` 的“知识库”分类配置，或使用环境变量 `NL2SH_IMA_CLIENT_ID` 与 `NL2SH_IMA_API_KEY`。TOML 字段为 `ima_enabled`、`ima_client_id`、`ima_api_key`，可选 `ima_knowledge_base_id` 用于固定默认知识库；未指定时会有界发现可访问知识库。启用后 Agent 获得知识库列表、搜索和原文读取工具。ima 客户端始终无代理直连，不继承网络 Tab 的代理设置；API Key、Client ID、临时下载 header 和签名 URL不会进入模型、审计日志或会话文件。远程资料被视为不可信数据，不会作为系统指令执行。项目不实现任何 ima 写操作。
 
 `model_context_window` 和 `model_max_output_tokens` 是可选的 Token 限额覆盖；省略上下文窗口时，nl2sh 优先使用 Provider 元数据，再使用内置的保守模型注册表。OpenAI、DeepSeek、SiliconFlow 使用各自的 OpenAI 风格模型列表，Ollama 使用原生 `/api/tags` 与 `/api/show` 读取本地模型及上下文。状态栏的上下文百分比使用最后一次模型请求的输入 Token 除以已知窗口估算，未知时显示 `?`。实际输入 Token 达到上下文安全水位后，Agent 会按观测用量动态淘汰最旧的完整历史轮次；system instruction、当前轮次和完整 Tool Calling round 不会被拆分，`max_context_turns` 仍是硬上限。
+
+Agent 任务默认使用 Normal 预算：50 Step、100 次 Tool Call、30 分钟活跃运行时间；`agent_mode` 可选 `fast`（20/40/10 分钟）、`normal` 或 `deep`（100/200/60 分钟），并可用 `max_agent_steps`、`max_tool_calls`、`max_task_execution_time_secs` 逐项覆盖。`hard_max_agent_steps` 默认 200，始终限制有效 Step。等待命令确认不计入活跃时间；重复动作、连续无进展和接近预算都会促使 Agent 改变策略或收敛，但不会绕过风险分类、确认和 root 策略。
 
 `/balance` 使用当前 API Token 调用公开的只读账户接口；当前支持 DeepSeek `/user/balance` 和 SiliconFlow `/user/info`。支持时 TUI 进入会话即查询、每 60 秒静默刷新并将最近一次成功余额常驻顶栏；手工 `/balance` 会立即刷新，失败时保留已有显示值。Moonshot/Kimi、OpenAI、自定义服务及没有公开 Bearer Token 余额接口的 Provider 会明确显示不支持。余额只保留在当前进程内存，不进入 JSONL 日志、模型上下文或配置文件。
 
@@ -159,9 +168,9 @@ cp config.toml.example config.toml
 - `normal`：永不自动调用 `su`。
 - `root`：UID 非 0 时必须通过 `su`，失败时不静默降级。
 
-`history_log_file` 默认为 `nl2sh.log`，相对路径按 `config.toml` 所在目录解析。日志采用逐行 JSON，记录用户输入、命令、输出、结果和错误并在每条记录后刷新；新文件权限为 `0600`。日志可能包含命令输出中的设备信息，排查完成后应按实际保密要求保管或清理，但不会写入 API Key。\n\n输出资源默认受限：实时 TUI 为 256 KiB、单个捕获流为 1 MiB、单个发给模型的 Tool Result 为 128 KiB、单条日志事件为 256 KiB、单个日志文件为 10 MiB。对应配置项为 `ui_live_output_max_bytes`、`tool_output_max_bytes`、`model_tool_output_max_bytes`、`history_log_event_max_bytes` 和 `history_log_max_bytes`。所有内容截断都会插入 `NL2SH ... TRUNCATED` 标记；日志达到文件上限后停止追加，不会静默形成不完整记录。
+`history_log_file` 默认为 `nl2sh.log`，相对路径按 `config.toml` 所在目录解析。日志采用逐行 JSON，记录用户输入、命令、输出、结果和错误并在每条记录后刷新；新文件权限为 `0600`。日志可能包含命令输出中的设备信息，排查完成后应按实际保密要求保管或清理，但不会写入 API Key。设置面板“界面”分类中的“清除审计日志”可用 Enter 截断当前日志，清除后本次进程仍会继续记录新事件。\n\n输出资源默认受限：实时 TUI 为 256 KiB、单个捕获流为 1 MiB、单个发给模型的 Tool Result 为 128 KiB、单条日志事件为 256 KiB、单个日志文件为 10 MiB。对应配置项为 `ui_live_output_max_bytes`、`tool_output_max_bytes`、`model_tool_output_max_bytes`、`history_log_event_max_bytes` 和 `history_log_max_bytes`。所有内容截断都会插入 `NL2SH ... TRUNCATED` 标记；日志达到文件上限后停止追加，不会静默形成不完整记录。
 
-`ui_language` 控制终端界面语言，可选 `zh_cn` 或 `en`，默认 `zh_cn`。使用 `/config` 或其别名 `/setting` 打开统一设置面板；原 `/provider`、`/model`、`/models`、`/proxy` 命令已移除。Tab/Shift+Tab 切分类，Up/Down 选字段，Left/Right 调整当前值，Ctrl+S 保存；面板接管键盘焦点，当前文本字段具有输入边界、背景和闪烁光标。最大步骤和轮次显示推荐值 24/16。
+`ui_language` 控制终端界面语言，可选 `zh_cn` 或 `en`，默认 `zh_cn`。使用 `/config` 或其别名 `/setting` 打开统一设置面板；原 `/provider`、`/model`、`/models`、`/proxy` 命令已移除。“服务”分类可用 Left/Right 在 OpenAI、DeepSeek、Moonshot/Kimi、SiliconFlow、Ollama 和 Custom 间选择，内置项会回填 Endpoint 但保留 API Key、模型与协议。Tab/Shift+Tab 切分类，Up/Down 选字段，Left/Right 调整当前值，Ctrl+S 保存；面板接管键盘焦点，当前文本字段具有输入边界、背景和闪烁光标。最大步骤和轮次显示推荐值 24/16。`show_buddha_ascii_art` 与 `show_train_ascii_art` 分别控制佛像和启动小火车，默认均为 `true`，可在“界面”分类中独立关闭。
 
 设置面板的“网络”Tab 支持 HTTP/HTTPS CONNECT、SOCKS5 和推荐的 SOCKS5H（由代理解析 DNS），以及可选用户名、密码和绕过列表。总开关关闭时保留其他代理字段。代理设置统一用于模型请求、模型发现、余额和更新检查；密码掩码显示，不进入对话或审计日志。
 
@@ -170,6 +179,10 @@ cp config.toml.example config.toml
 ## 使用
 
 TUI 将所有去除前导空白后以 `/` 开头的输入保留为本地命令；未知斜杠命令只显示本地提示，不会发送给 LLM。
+
+输入 `@` 后会在光标附近显示当前路径候选，目录以 `/` 结尾并可继续补全。候选最多展示 10 行，使用 Up/Down 选择、Enter 或 Tab 写入；Right 保持普通光标右移。支持 `@file.txt`、`@dir/`、`@./relative`、`@../parent`、`@/absolute` 和 `@~/home`。提交时解析 `@` 后最长的已存在路径，因此路径后可直接连接中文问题，例如 `@test.txt写的是什么内容`。解析后的绝对路径仅作为 Agent 文件工具提示，不会直接执行文件内容或绕过命令确认。
+
+在一次设置面板会话中，Ollama 与 Custom 分别保留自己的 Endpoint 草稿；切换到其他 Provider 再切回来时，会恢复该选项此前填写的地址。
 
 设置面板的“模型与智能体”Tab 提供“在线模型列表”，选中后按 Enter 会在后台从当前 Provider 拉取模型；成功后使用 Up/Down 和 Enter 选择并回填模型元数据，失败时保留手工输入。
 
@@ -183,7 +196,11 @@ nl2sh --no-pty --ascii
 nl2sh update                  # 检查并安装最新 Android 构建
 ```
 
-Command 模式生成、分类后执行单条命令；`--dry-run` 只展示。修改或危险命令在无 TTY 时会拒绝，不能用管道伪造确认。需要多轮执行和结果回传时使用默认 Agent 模式。Agent TUI 在请求和捕获式执行期间保持同一 frame，并在界面内显示输出与确认弹窗；审批弹窗支持方向键与 Enter，也可直接使用 `1-6` 或 `y/n/a/e/i/t` 选择允许一次、当前任务允许完全相同命令、拒绝、编辑、交互执行或捕获执行。任务级允许不适用于 Root 或危险命令，不持久化且不做命令前缀匹配。命令运行时实时展示有界输出，完成后工具结果默认折叠，按 F2 可展开或收起；超出各层配置上限时，日志和模型上下文会携带明确截断标记。Agent 总结支持终端 Markdown 渲染。TUI 使用统一的现代深色语义主题，并按终端能力选择 TrueColor 或 ANSI 256 palette；普通正文保持灰白，青蓝表示交互与焦点，绿色、黄色和红色分别保留给成功、警告和错误。底部输入框使用低对比度深色背景和青蓝色闪烁光标，支持 Left/Right/Home/End/Delete 编辑及 Up/Down 调取当前会话输入历史；输入 `/` 时显示垂直命令候选，使用 Up/Down 选择、Enter 补全，当前提供 `/help`、`/clear`、`/config`、`/setting`、`/balance`、`/update` 和 `/exit`。每次 Agent 任务完成后，状态栏显示该任务跨全部 Tool Calling 步骤累计的输入、输出和总 Token；Provider 未返回用量时显示未知而不是零。TUI 启用鼠标追踪以稳定接收滚轮；复制屏幕文字时按住 Shift 拖选，由宿主终端高亮选区，再通过右键系统菜单复制。对话区只保留上下边框，避免选取内容混入左右边框。另支持 PageUp/PageDown 浏览历史、Enter 提交、Ctrl+C 取消当前任务（空闲时清空输入）、Ctrl+Q 安全退出。
+Command 模式生成、分类后执行单条命令；`--dry-run` 只展示。修改或危险命令在无 TTY 时会拒绝，不能用管道伪造确认。需要多轮执行和结果回传时使用默认 Agent 模式。Agent TUI 在请求和捕获式执行期间保持同一 frame，并在界面内显示输出与确认弹窗；审批弹窗支持方向键与 Enter，也可直接使用 `1-6` 或 `y/n/a/e/i/t` 选择允许一次、当前任务允许完全相同命令、拒绝、编辑、交互执行或捕获执行。任务级允许不适用于 Root 或危险命令，不持久化且不做命令前缀匹配。命令运行时实时展示有界输出，完成后工具结果默认折叠，按 F2 可展开或收起；超出各层配置上限时，日志和模型上下文会携带明确截断标记。Agent 总结支持终端 Markdown 渲染。TUI 使用统一的现代深色语义主题，并按终端能力选择 TrueColor 或 ANSI 256 palette；普通正文保持灰白，青蓝表示交互与焦点，绿色、黄色和红色分别保留给成功、警告和错误。底部输入框使用低对比度深色背景和青蓝色闪烁光标，支持 Left/Right/Home/End/Delete 编辑及 Up/Down 调取当前会话输入历史；输入 `/` 时显示垂直命令候选，使用 Up/Down 选择、Enter 补全，当前提供 `/help`、`/clear`、`/config`、`/setting`、`/balance`、`/sessions`、`/update` 和 `/exit`。每次 Agent 任务完成后，状态栏显示该任务跨全部 Tool Calling 步骤累计的输入、输出和总 Token；Provider 未返回用量时显示未知而不是零。TUI 启用鼠标追踪以稳定接收滚轮；复制屏幕文字时按住 Shift 拖选，由宿主终端高亮选区，再通过右键系统菜单复制。对话区只保留上下边框，避免选取内容混入左右边框。另支持 PageUp/PageDown 浏览历史、Enter 提交、Ctrl+C 取消当前任务（空闲时清空输入）、Ctrl+Q 安全退出。
+
+会话在每个完整 Agent turn 后自动保存到配置目录旁的私有 `sessions/` 目录。名称只接受字母、数字、`-` 和 `_`：`/sessions` 列表，`/sessions resume NAME` 恢复，`/sessions rename OLD NEW` 重命名，`/sessions delete NAME` 删除。会话只保存对话与有界工具结果，不保存 API Key、代理密码、余额或当前任务审批许可。
+
+本地命令 `/shell` 会暂停 TUI 并进入设备的普通交互 shell，可直接运行 adb shell 环境中的命令；输入 `exit` 或按 `Ctrl+D` 即恢复原 TUI。原会话不会丢失，shell 输入与输出也不会发送给模型或写入审计日志。该命令也会出现在 `/` 候选菜单中。
 
 风险等级为 `ReadOnly`、`Mutating`、`Dangerous`、`Critical`。内置检测覆盖危险删除、格式化、块设备写入、递归根权限修改、重启/关机、分区擦除和读写 remount；自定义规则使用 `[[security_rules]]` 添加，不能替换内置规则。
 
@@ -207,9 +224,9 @@ Android 真机建议依次验证：启动/退出后终端恢复；`id` 和 `getp
 
 ## 已知限制
 
-- 已通过 Android NDK r28c、API 26 的 AArch64/ARMv7 release 交叉编译，并在 API 34 ARMv7 设备完成 Agent、PTY 和 TUI 基础 smoke；root 提权及全屏程序仍待扩展验证。
+- 已通过 Android NDK r28c、API 26 的 AArch64/ARMv7 release 交叉编译，并完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
 - Agent TUI 在 LLM 和捕获式命令期间保持同一 frame；全屏交互程序需要临时挂起 TUI，结束后自动恢复。
-- 交互 PTY 已支持双向桥接和 resize，但尚未在 Android 真机的各类全屏应用上验证。
+- 交互 PTY 已支持双向桥接和 resize，并已完成 Android 真机全屏程序验证；未覆盖的终端或应用实现仍可能存在兼容差异。
 - Responses 对话适配覆盖常见 function call 结构，不保证所有兼容厂商的扩展字段。
 
 ## 支持项目

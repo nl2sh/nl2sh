@@ -1,9 +1,15 @@
 api_key = "sk-xxx"
+# Optional read-only Tencent ima knowledge-base connector. This client always
+# connects directly and never uses the proxy settings below.
+ima_enabled = false
+ima_client_id = ""
+ima_api_key = ""
+# ima_knowledge_base_id = "" # optional; empty discovers accessible bases
 model = "gpt-4o-mini"
 model_context_window = 128000
 # model_max_output_tokens = 16384
 endpoint = "https://api.openai.com/v1"
-api_type = "responses"
+# api_type = "auto" # optional: auto, responses, or chat_completions
 proxy_enabled = false
 proxy_type = "http"
 proxy_address = ""
@@ -12,7 +18,14 @@ proxy_password = ""
 proxy_bypass = "localhost,127.0.0.1,::1"
 
 max_context_turns = 16
-max_agent_steps = 24
+agent_mode = "normal" # fast, normal, or deep; explicit limits below remain authoritative
+max_agent_steps = 50
+max_tool_calls = 100
+max_task_execution_time_secs = 1800
+replan_after_stalled_steps = 6
+abort_after_stalled_steps = 12
+max_same_action_retries = 3
+hard_max_agent_steps = 200
 llm_retry_count = 3
 llm_retry_base_delay_ms = 500
 llm_request_timeout_secs = 60
@@ -24,6 +37,8 @@ security_level = "balanced"
 execute_user_mode = "auto"
 enable_pty = true
 ascii_symbols = false
+show_buddha_ascii_art = true
+show_train_ascii_art = true
 ui_language = "zh_cn" # zh_cn or en
 history_log_file = "nl2sh.log"
 ui_live_output_max_bytes = 262144

@@ -13,10 +13,11 @@ use crate::{
     agent::{can_remember_approval, AgentOutcome, AgentRunner, ConfirmationDecision, Confirmer},
     config::{Config, UiLanguage},
     history::HistoryLog,
-    llm::{ConversationItem, LlmClient, TextDeltaSink},
+    llm::{ConversationItem, LlmClient, Role, TextDeltaSink},
     provider_account::{build_account_client, AccountBalance},
     provider_metadata::{build_metadata_client, ModelMetadata},
     security::{RiskLevel, SecurityAssessment},
+    sessions::SessionStore,
     shell::{OutputSink, ShellExecutor},
 };
 use anyhow::{Context, Result};
@@ -102,6 +103,8 @@ async fn run_inner(
     let history = Arc::new(Mutex::new(i18n::startup_history(
         config.ui_language,
         config.ascii_symbols,
+        config.show_buddha_ascii_art,
+        config.show_train_ascii_art,
     )));
     let output: Arc<dyn OutputSink> = Arc::new(SessionOutput {
         history: history.clone(),
@@ -136,10 +139,13 @@ async fn run_inner(
         input_history_draft: String::new(),
         cursor_visible: true,
         command_selection: 0,
+        file_selection: 0,
+        file_suggestion_query: None,
+        file_suggestions: Vec::new(),
         history: snapshot(&history)?,
         conversation_scroll: 0,
         tool_results_expanded: false,
-        welcome_train_frame: Some(0),
+        welcome_train_frame: config.show_train_ascii_art.then_some(0),
         model: config.model.clone(),
         root,
         ascii: config.ascii_symbols,
@@ -161,6 +167,13 @@ async fn run_inner(
         popup: None,
     };
     let mut model_history: Vec<Vec<ConversationItem>> = Vec::new();
+    let session_store = SessionStore::open(
+        config
+            .source
+            .as_deref()
+            .unwrap_or_else(|| std::path::Path::new("config.toml")),
+    )?;
+    let mut session_name = SessionStore::default_name();
     let mut active: Option<Pin<Box<dyn Future<Output = Result<AgentOutcome>> + '_>>> = None;
     let mut balance_active: Option<BalanceFuture> = None;
     let balance_supported = provider_configured && build_account_client(config).is_ok();
@@ -182,6 +195,8 @@ async fn run_inner(
     let mut last_train_frame = Instant::now();
     let mut last_gradient_frame = Instant::now();
     let mut fragmented_arrow = super::events::FragmentedArrowFilter::default();
+    let windows_scroll = super::terminal::windows_scroll_fallback();
+    let mut windows_scroll_filter = super::events::WindowsScrollFilter::default();
 
     loop {
         if settings_editor.is_some()
@@ -244,7 +259,12 @@ async fn run_inner(
                         .as_ref()
                         .map(|editor| editor.view(app.cursor_visible))
                 });
-            terminal.terminal().draw(|frame| ui::draw(frame, &app))?;
+            if windows_scroll && active.is_none() {
+                apply_windows_scroll_action(&mut app, windows_scroll_filter.take_expired());
+            }
+            terminal
+                .terminal()
+                .draw(|frame| ui::draw(frame, &mut app))?;
         }
 
         let mut completed = None;
@@ -402,22 +422,54 @@ async fn run_inner(
                     while model_history.len() > config.max_context_turns {
                         model_history.remove(0);
                     }
+                    let store = session_store.clone();
+                    let name = session_name.clone();
+                    let turns = model_history.clone();
+                    let tool_limit = config.model_tool_output_max_bytes;
+                    let secrets = vec![
+                        config.api_key.clone(),
+                        config.proxy_password.clone(),
+                        config.ima_client_id.clone(),
+                        config.ima_api_key.clone(),
+                    ];
+                    let save = tokio::task::spawn_blocking(move || {
+                        store.save_redacted(&name, &turns, tool_limit, &secrets)
+                    })
+                    .await
+                    .context("session autosave worker failed")?;
+                    if let Err(error) = save {
+                        history
+                            .lock()
+                            .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
+                            .push(format!(
+                                "{} session autosave failed: {error:#}",
+                                if config.ascii_symbols {
+                                    "[WARN]"
+                                } else {
+                                    "⚠️"
+                                }
+                            ));
+                    }
                     let context = context_usage(
                         outcome.final_input_tokens,
                         config.effective_context_window(),
                     );
                     app.status = match config.ui_language {
                         UiLanguage::ZhCn => format!(
-                            "空闲；上次 {} 步，Token 输入 {} / 输出 {} / 总计 {}，上下文 {}",
+                            "空闲；上次 {} 步 / {} 次工具 / {} 秒，Token 输入 {} / 输出 {} / 总计 {}，上下文 {}",
                             outcome.steps,
+                            outcome.tool_calls,
+                            outcome.stats.active_time.as_secs(),
                             usage_value(outcome.usage.input_tokens),
                             usage_value(outcome.usage.output_tokens),
                             usage_value(outcome.usage.total_tokens()),
                             context
                         ),
                         UiLanguage::En => format!(
-                            "idle; last {} steps, tokens in {} / out {} / total {}, context {}",
+                            "idle; last {} steps / {} tools / {}s, tokens in {} / out {} / total {}, context {}",
                             outcome.steps,
+                            outcome.tool_calls,
+                            outcome.stats.active_time.as_secs(),
                             usage_value(outcome.usage.input_tokens),
                             usage_value(outcome.usage.output_tokens),
                             usage_value(outcome.usage.total_tokens()),
@@ -462,6 +514,14 @@ async fn run_inner(
         while event::poll(Duration::ZERO)? {
             let event = event::read()?;
             if let Event::Mouse(mouse) = event {
+                if let Some(pending) = confirmation.as_mut() {
+                    match mouse.kind {
+                        MouseEventKind::ScrollUp => pending.scroll_up(3),
+                        MouseEventKind::ScrollDown => pending.scroll_down(3),
+                        _ => {}
+                    }
+                    continue;
+                }
                 match mouse.kind {
                     MouseEventKind::ScrollUp => app.scroll_conversation_up(3),
                     MouseEventKind::ScrollDown => app.scroll_conversation_down(3),
@@ -566,6 +626,22 @@ async fn run_inner(
                             "fetching model list in background",
                         );
                     }
+                    SettingsAction::ClearLog => match log.clear() {
+                        Ok(()) => {
+                            app.status = localized_status(
+                                config.ui_language,
+                                "审计日志已清除",
+                                "audit log cleared",
+                            );
+                        }
+                        Err(_) => {
+                            app.status = localized_status(
+                                config.ui_language,
+                                "清除审计日志失败",
+                                "failed to clear audit log",
+                            );
+                        }
+                    },
                     SettingsAction::Cancel => {
                         settings_editor = None;
                         app.status = localized_status(
@@ -598,6 +674,11 @@ async fn run_inner(
                 }
                 continue;
             }
+            if active.is_some() && windows_scroll && matches!(key.code, KeyCode::Up | KeyCode::Down)
+            {
+                apply_windows_scroll_action(&mut app, windows_scroll_filter.push(key.code));
+                continue;
+            }
             if active.is_some() {
                 continue;
             }
@@ -612,6 +693,9 @@ async fn run_inner(
                 (KeyCode::Char('c'), KeyModifiers::CONTROL) => app.input.clear(),
                 (KeyCode::Esc, _) => {}
                 (KeyCode::Enter, _) => {
+                    if app.complete_selected_file_for_key(key.code) {
+                        continue;
+                    }
                     if app.complete_selected_command() {
                         continue;
                     }
@@ -668,6 +752,58 @@ async fn run_inner(
                             );
                             continue;
                         }
+                        "/shell" => {
+                            log.record("local_command", "/shell")?;
+                            app.status = localized_status(
+                                config.ui_language,
+                                "普通终端运行中；输入 exit 或按 Ctrl+D 返回",
+                                "terminal active; type exit or press Ctrl+D to return",
+                            );
+                            let result = executor
+                                .execute_user_shell(interactive_shell_command())
+                                .await;
+                            // This local shell is awaited inside the event loop, so the
+                            // regular suspended-state edge detector cannot observe its
+                            // true -> false transition. Invalidate ratatui's retained
+                            // buffer explicitly before the next full frame.
+                            terminal
+                                .terminal()
+                                .clear()
+                                .context("clear terminal after local shell")?;
+                            app.status = match result {
+                                Ok(result) if result.interrupted => localized_status(
+                                    config.ui_language,
+                                    "普通终端已中断，已返回 TUI",
+                                    "terminal interrupted; returned to TUI",
+                                ),
+                                Ok(_) => localized_status(
+                                    config.ui_language,
+                                    "已从普通终端返回 TUI",
+                                    "returned to TUI from terminal",
+                                ),
+                                Err(error) => {
+                                    history
+                                        .lock()
+                                        .map_err(|_| {
+                                            anyhow::anyhow!("TUI history lock is poisoned")
+                                        })?
+                                        .push(match config.ui_language {
+                                            UiLanguage::ZhCn => {
+                                                format!("⚠️ 无法启动普通终端：{error:#}")
+                                            }
+                                            UiLanguage::En => format!(
+                                                "[WARN] Could not start terminal: {error:#}"
+                                            ),
+                                        });
+                                    localized_status(
+                                        config.ui_language,
+                                        "普通终端启动失败",
+                                        "failed to start terminal",
+                                    )
+                                }
+                            };
+                            continue;
+                        }
                         "/help" => {
                             log.record("local_command", "/help")?;
                             history
@@ -676,6 +812,7 @@ async fn run_inner(
                                 .extend(i18n::help_history(
                                     config.ui_language,
                                     config.ascii_symbols,
+                                    config.show_buddha_ascii_art,
                                 ));
                             app.conversation_scroll = 0;
                             continue;
@@ -696,6 +833,135 @@ async fn run_inner(
                             continue;
                         }
                         _ => {}
+                    }
+                    if input.split_whitespace().next() == Some("/sessions") {
+                        log.record("local_command", "/sessions")?;
+                        let parts = input.split_whitespace().collect::<Vec<_>>();
+                        let action = parts.get(1).copied();
+                        let result: Result<String> = match action {
+                            None => {
+                                let store = session_store.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    let sessions = store.list()?;
+                                    if sessions.is_empty() {
+                                        return Ok("No saved sessions.".into());
+                                    }
+                                    Ok(sessions
+                                        .into_iter()
+                                        .map(|item| {
+                                            format!(
+                                                "{}  {} turns  {}",
+                                                item.name, item.turns, item.updated_unix_secs
+                                            )
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join("\n"))
+                                })
+                                .await
+                                .context("session list worker failed")?
+                            }
+                            Some("resume") if parts.len() == 3 => {
+                                let store = session_store.clone();
+                                let name = parts[2].to_string();
+                                let worker_name = name.clone();
+                                let max_turns = config.max_context_turns;
+                                let tool_limit = config.model_tool_output_max_bytes;
+                                let loaded = tokio::task::spawn_blocking(move || {
+                                    store.load(&worker_name, max_turns, tool_limit)
+                                })
+                                .await
+                                .context("session load worker failed")?;
+                                match loaded {
+                                    Ok(turns) => {
+                                        model_history = turns;
+                                        session_name = name;
+                                        append_restored_history(
+                                            &history,
+                                            &model_history,
+                                            config.ascii_symbols,
+                                        )?;
+                                        app.input_history.clear();
+                                        Ok(localized_status(
+                                            config.ui_language,
+                                            "会话已恢复",
+                                            "session restored",
+                                        ))
+                                    }
+                                    Err(error) => Err(error),
+                                }
+                            }
+                            Some("rename") if parts.len() == 4 => {
+                                let store = session_store.clone();
+                                let old = parts[2].to_string();
+                                let new = parts[3].to_string();
+                                let worker_old = old.clone();
+                                let worker_new = new.clone();
+                                tokio::task::spawn_blocking(move || {
+                                    store.rename(&worker_old, &worker_new)
+                                })
+                                .await
+                                .context("session rename worker failed")??;
+                                if session_name == old {
+                                    session_name = new;
+                                }
+                                Ok(localized_status(
+                                    config.ui_language,
+                                    "会话已重命名",
+                                    "session renamed",
+                                ))
+                            }
+                            Some("delete") if parts.len() == 3 => {
+                                let store = session_store.clone();
+                                let name = parts[2].to_string();
+                                let was_current = session_name == name;
+                                tokio::task::spawn_blocking(move || store.delete(&name))
+                                    .await
+                                    .context("session delete worker failed")??;
+                                if was_current {
+                                    session_name = SessionStore::default_name();
+                                }
+                                Ok(localized_status(
+                                    config.ui_language,
+                                    "会话已删除",
+                                    "session deleted",
+                                ))
+                            }
+                            _ => Err(anyhow::anyhow!(
+                                "usage: /sessions [resume NAME|rename OLD NEW|delete NAME]"
+                            )),
+                        };
+                        app.status = match result {
+                            Ok(message) => {
+                                history
+                                    .lock()
+                                    .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
+                                    .push(message);
+                                localized_status(
+                                    config.ui_language,
+                                    "会话操作完成",
+                                    "session operation completed",
+                                )
+                            }
+                            Err(error) => {
+                                history
+                                    .lock()
+                                    .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
+                                    .push(format!(
+                                        "{} {error:#}",
+                                        if config.ascii_symbols {
+                                            "[ERROR]"
+                                        } else {
+                                            "❌"
+                                        }
+                                    ));
+                                localized_status(
+                                    config.ui_language,
+                                    "会话操作失败",
+                                    "session operation failed",
+                                )
+                            }
+                        };
+                        continue;
                     }
                     if input.trim_start().starts_with('/') {
                         log.record("unknown_local_command", input.trim())?;
@@ -737,32 +1003,59 @@ async fn run_inner(
                             continue;
                         }
                         push_history(&history, format!("> {input}"), &log, "user")?;
+                        let agent_input = crate::file_references::augment_file_references(&input);
                         app.status = localized_status(
                             config.ui_language,
                             "正在请求模型 / 执行工具",
                             "requesting LLM / executing tools",
                         );
                         active = Some(Box::pin(runner.run_with_history_streaming_owned(
-                            input,
+                            agent_input,
                             model_history.clone(),
                             &stream_sink,
                         )));
                     }
                 }
+                (KeyCode::Up, _) if app.file_menu_visible() => app.select_previous_file(),
+                (KeyCode::Down, _) if app.file_menu_visible() => app.select_next_file(),
                 (KeyCode::Up, _) if app.command_menu_visible() => app.select_previous_command(),
                 (KeyCode::Down, _) if app.command_menu_visible() => app.select_next_command(),
+                (KeyCode::Up | KeyCode::Down, _) if windows_scroll => {
+                    apply_windows_scroll_action(&mut app, windows_scroll_filter.push(key.code))
+                }
                 (KeyCode::Up, _) => app.previous_input(),
                 (KeyCode::Down, _) => app.next_input(),
                 (KeyCode::Left, _) => app.input.move_left(),
                 (KeyCode::Right, _) => app.input.move_right(),
+                (KeyCode::Tab, _) if app.complete_selected_file_for_key(key.code) => {}
                 (KeyCode::Home, _) => app.input.move_home(),
                 (KeyCode::End, _) => app.input.move_end(),
                 (KeyCode::Backspace, _) => app.input.backspace(),
                 (KeyCode::Delete, _) => app.input.delete(),
-                (KeyCode::Char(character), _) => app.input.push(character),
+                (KeyCode::Char(character), _) => match app.input.push(character) {
+                    Some(super::input::SgrMouseReport::ScrollUp) => app.scroll_conversation_up(3),
+                    Some(super::input::SgrMouseReport::ScrollDown) => {
+                        app.scroll_conversation_down(3)
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
+    }
+}
+
+fn apply_windows_scroll_action(app: &mut App, action: Option<super::events::WindowsScrollAction>) {
+    match action {
+        Some(super::events::WindowsScrollAction::ScrollUp(rows)) => {
+            app.scroll_conversation_up(rows)
+        }
+        Some(super::events::WindowsScrollAction::ScrollDown(rows)) => {
+            app.scroll_conversation_down(rows)
+        }
+        Some(super::events::WindowsScrollAction::InputHistoryUp) => app.previous_input(),
+        Some(super::events::WindowsScrollAction::InputHistoryDown) => app.next_input(),
+        None => {}
     }
 }
 
@@ -787,13 +1080,21 @@ fn format_balances(balances: &[AccountBalance]) -> String {
         .join(" / ")
 }
 
-const SETTINGS_TABS_ZH: [&str; 5] = ["服务", "模型与智能体", "执行与安全", "界面", "网络"];
-const SETTINGS_TABS_EN: [&str; 5] = [
+const SETTINGS_TABS_ZH: [&str; 6] = [
+    "服务",
+    "模型与智能体",
+    "执行与安全",
+    "界面",
+    "网络",
+    "知识库",
+];
+const SETTINGS_TABS_EN: [&str; 6] = [
     "Provider",
     "Model & Agent",
     "Execution",
     "Interface",
     "Network",
+    "Knowledge",
 ];
 
 struct UpdatePrompt {
@@ -851,6 +1152,9 @@ impl UpdatePrompt {
             }
             .into(),
             lines,
+            footer: Vec::new(),
+            scroll: 0,
+            min_height: 11,
             dangerous: false,
             informational: true,
         }
@@ -880,6 +1184,9 @@ impl UpdatePrompt {
 
 struct SettingsEditor {
     config: Config,
+    provider: usize,
+    ollama_endpoint: String,
+    custom_endpoint: String,
     tab: usize,
     selected: usize,
     text_cursor: usize,
@@ -892,15 +1199,29 @@ struct SettingsEditor {
 enum SettingsAction {
     Continue,
     FetchModels,
+    ClearLog,
     Cancel,
     Save,
 }
 
 impl SettingsEditor {
     fn new(config: &Config, tab: usize) -> Self {
+        let provider = crate::config::provider_index(&config.endpoint);
+        let ollama_index = crate::config::PROVIDERS.len() - 2;
+        let ollama_endpoint = if provider == ollama_index {
+            config.endpoint.clone()
+        } else {
+            crate::config::PROVIDERS[ollama_index]
+                .endpoint()
+                .unwrap_or_default()
+                .into()
+        };
         let mut editor = Self {
             config: config.clone(),
-            tab: tab.min(4),
+            provider,
+            ollama_endpoint,
+            custom_endpoint: config.endpoint.clone(),
+            tab: tab.min(5),
             selected: 0,
             text_cursor: 0,
             models: Vec::new(),
@@ -913,7 +1234,7 @@ impl SettingsEditor {
     }
 
     fn field_count(&self) -> usize {
-        [3, 6, 6, 4, 6][self.tab]
+        [4, 6, 6, 7, 6, 4][self.tab]
     }
 
     fn view(&self, cursor_visible: bool) -> PopupView {
@@ -948,6 +1269,9 @@ impl SettingsEditor {
                 }
                 .into(),
                 lines,
+                footer: Vec::new(),
+                scroll: 0,
+                min_height: 11,
                 dangerous: false,
                 informational: true,
             };
@@ -993,6 +1317,9 @@ impl SettingsEditor {
             }
             .into(),
             lines,
+            footer: Vec::new(),
+            scroll: 0,
+            min_height: 11,
             dangerous: false,
             informational: true,
         }
@@ -1002,6 +1329,12 @@ impl SettingsEditor {
         let zh = self.config.ui_language == UiLanguage::ZhCn;
         match self.tab {
             0 => vec![
+                (
+                    if zh { "服务商" } else { "Provider" },
+                    crate::config::PROVIDERS[self.provider]
+                        .name(self.config.ui_language)
+                        .into(),
+                ),
                 (
                     if zh { "API 地址" } else { "API endpoint" },
                     self.config.endpoint.clone(),
@@ -1039,9 +1372,9 @@ impl SettingsEditor {
                 ),
                 (
                     if zh {
-                        "最大步骤（推荐 24）"
+                        "最大步骤（Normal 推荐 50）"
                     } else {
-                        "Max steps (recommended 24)"
+                        "Max steps (Normal recommends 50)"
                     },
                     self.config.max_agent_steps.to_string(),
                 ),
@@ -1115,6 +1448,30 @@ impl SettingsEditor {
                 ),
                 (
                     if zh {
+                        "佛像 ASCII Art"
+                    } else {
+                        "Buddha ASCII art"
+                    },
+                    self.config.show_buddha_ascii_art.to_string(),
+                ),
+                (
+                    if zh {
+                        "小火车 ASCII Art"
+                    } else {
+                        "Train ASCII art"
+                    },
+                    self.config.show_train_ascii_art.to_string(),
+                ),
+                (
+                    if zh {
+                        "清除审计日志"
+                    } else {
+                        "Clear audit log"
+                    },
+                    if zh { "Enter 清除" } else { "Enter to clear" }.into(),
+                ),
+                (
+                    if zh {
                         "实时输出上限 bytes"
                     } else {
                         "Live output bytes"
@@ -1130,7 +1487,7 @@ impl SettingsEditor {
                     self.config.tool_output_max_bytes.to_string(),
                 ),
             ],
-            _ => vec![
+            4 => vec![
                 (
                     if zh { "代理开关" } else { "Proxy enabled" },
                     self.config.proxy_enabled.to_string(),
@@ -1162,6 +1519,29 @@ impl SettingsEditor {
                 (
                     if zh { "绕过列表" } else { "Bypass list" },
                     self.config.proxy_bypass.clone(),
+                ),
+            ],
+            _ => vec![
+                (
+                    if zh {
+                        "ima 只读连接"
+                    } else {
+                        "ima read-only"
+                    },
+                    self.config.ima_enabled.to_string(),
+                ),
+                ("ima Client ID", mask_secret(&self.config.ima_client_id)),
+                ("ima API Key", mask_secret(&self.config.ima_api_key)),
+                (
+                    if zh {
+                        "默认知识库 ID"
+                    } else {
+                        "Default knowledge base ID"
+                    },
+                    self.config
+                        .ima_knowledge_base_id
+                        .clone()
+                        .unwrap_or_default(),
                 ),
             ],
         }
@@ -1197,16 +1577,16 @@ impl SettingsEditor {
             KeyCode::Esc => SettingsAction::Cancel,
             KeyCode::Tab => {
                 self.tab = if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.tab.checked_sub(1).unwrap_or(4)
+                    self.tab.checked_sub(1).unwrap_or(5)
                 } else {
-                    (self.tab + 1) % 5
+                    (self.tab + 1) % 6
                 };
                 self.selected = 0;
                 self.sync_text_cursor();
                 SettingsAction::Continue
             }
             KeyCode::BackTab => {
-                self.tab = self.tab.checked_sub(1).unwrap_or(4);
+                self.tab = self.tab.checked_sub(1).unwrap_or(5);
                 self.selected = 0;
                 self.sync_text_cursor();
                 SettingsAction::Continue
@@ -1246,6 +1626,7 @@ impl SettingsEditor {
             KeyCode::Enter if self.tab == 1 && self.selected == 5 && !self.loading_models => {
                 SettingsAction::FetchModels
             }
+            KeyCode::Enter if self.tab == 3 && self.selected == 4 => SettingsAction::ClearLog,
             KeyCode::Backspace if self.is_text_field() => {
                 if let Some((previous, _)) = self.selected_text()[..self.text_cursor]
                     .char_indices()
@@ -1254,6 +1635,7 @@ impl SettingsEditor {
                     let cursor = self.text_cursor;
                     self.text_mut().drain(previous..cursor);
                     self.text_cursor = previous;
+                    self.record_edited_endpoint();
                 }
                 SettingsAction::Continue
             }
@@ -1261,6 +1643,7 @@ impl SettingsEditor {
                 if let Some(character) = self.selected_text()[self.text_cursor..].chars().next() {
                     let cursor = self.text_cursor;
                     self.text_mut().drain(cursor..cursor + character.len_utf8());
+                    self.record_edited_endpoint();
                 }
                 SettingsAction::Continue
             }
@@ -1285,6 +1668,9 @@ impl SettingsEditor {
                 } else {
                     cursor + character.len_utf8()
                 };
+                if !stripped {
+                    self.record_edited_endpoint();
+                }
                 SettingsAction::Continue
             }
             _ => SettingsAction::Continue,
@@ -1292,28 +1678,44 @@ impl SettingsEditor {
     }
 
     fn is_text_field(&self) -> bool {
-        matches!((self.tab, self.selected), (0, 0 | 1) | (1, 0) | (4, 2..=5))
+        matches!(
+            (self.tab, self.selected),
+            (0, 1 | 2) | (1, 0) | (4, 2..=5) | (5, 1..=3)
+        )
     }
     fn text_mut(&mut self) -> &mut String {
         match (self.tab, self.selected) {
-            (0, 0) => &mut self.config.endpoint,
-            (0, 1) => &mut self.config.api_key,
+            (0, 1) => &mut self.config.endpoint,
+            (0, 2) => &mut self.config.api_key,
             (1, 0) => &mut self.config.model,
             (4, 2) => &mut self.config.proxy_address,
             (4, 3) => &mut self.config.proxy_username,
             (4, 4) => &mut self.config.proxy_password,
+            (5, 1) => &mut self.config.ima_client_id,
+            (5, 2) => &mut self.config.ima_api_key,
+            (5, 3) => self
+                .config
+                .ima_knowledge_base_id
+                .get_or_insert_with(String::new),
             _ => &mut self.config.proxy_bypass,
         }
     }
 
     fn selected_text(&self) -> &str {
         match (self.tab, self.selected) {
-            (0, 0) => &self.config.endpoint,
-            (0, 1) => &self.config.api_key,
+            (0, 1) => &self.config.endpoint,
+            (0, 2) => &self.config.api_key,
             (1, 0) => &self.config.model,
             (4, 2) => &self.config.proxy_address,
             (4, 3) => &self.config.proxy_username,
             (4, 4) => &self.config.proxy_password,
+            (5, 1) => &self.config.ima_client_id,
+            (5, 2) => &self.config.ima_api_key,
+            (5, 3) => self
+                .config
+                .ima_knowledge_base_id
+                .as_deref()
+                .unwrap_or_default(),
             _ => &self.config.proxy_bypass,
         }
     }
@@ -1341,6 +1743,37 @@ impl SettingsEditor {
         }
     }
 
+    fn record_edited_endpoint(&mut self) {
+        if self.tab == 0 && self.selected == 1 {
+            let ollama_index = crate::config::PROVIDERS.len() - 2;
+            if self.provider == ollama_index {
+                self.ollama_endpoint = self.config.endpoint.clone();
+            } else {
+                self.provider = crate::config::PROVIDERS.len() - 1;
+                self.custom_endpoint = self.config.endpoint.clone();
+            }
+        }
+    }
+
+    fn select_provider(&mut self, direction: i8) {
+        let ollama_index = crate::config::PROVIDERS.len() - 2;
+        let custom_index = crate::config::PROVIDERS.len() - 1;
+        match self.provider {
+            index if index == ollama_index => self.ollama_endpoint = self.config.endpoint.clone(),
+            index if index == custom_index => self.custom_endpoint = self.config.endpoint.clone(),
+            _ => {}
+        }
+        self.provider = cycle_index(self.provider, crate::config::PROVIDERS.len(), direction);
+        self.config.endpoint = match self.provider {
+            index if index == ollama_index => self.ollama_endpoint.clone(),
+            index if index == custom_index => self.custom_endpoint.clone(),
+            index => crate::config::PROVIDERS[index]
+                .endpoint()
+                .unwrap_or_default()
+                .into(),
+        };
+    }
+
     fn input_with_cursor(&self, displayed: &str, cursor_visible: bool) -> String {
         let selected = self.selected_text();
         let mut cursor = self.text_cursor.min(selected.len());
@@ -1359,12 +1792,15 @@ impl SettingsEditor {
     fn adjust(&mut self, direction: i8) {
         use crate::config::{ApiType, ConfirmPolicy, ExecuteUserMode, ProxyType, SecurityLevel};
         match (self.tab, self.selected) {
-            (0, 2) => {
-                self.config.api_type = if self.config.api_type == ApiType::Responses {
-                    ApiType::ChatCompletions
-                } else {
-                    ApiType::Responses
-                }
+            (0, 0) => {
+                self.select_provider(direction);
+            }
+            (0, 3) => {
+                self.config.api_type = cycle3(
+                    self.config.api_type,
+                    [ApiType::Auto, ApiType::Responses, ApiType::ChatCompletions],
+                    direction,
+                )
             }
             (1, 1) => adjust_optional(&mut self.config.model_context_window, direction, 1024),
             (1, 2) => adjust_optional(&mut self.config.model_max_output_tokens, direction, 1024),
@@ -1418,13 +1854,15 @@ impl SettingsEditor {
                 }
             }
             (3, 1) => self.config.ascii_symbols = !self.config.ascii_symbols,
-            (3, 2) => adjust_usize_step(
+            (3, 2) => self.config.show_buddha_ascii_art = !self.config.show_buddha_ascii_art,
+            (3, 3) => self.config.show_train_ascii_art = !self.config.show_train_ascii_art,
+            (3, 5) => adjust_usize_step(
                 &mut self.config.ui_live_output_max_bytes,
                 direction,
                 1024,
                 256,
             ),
-            (3, 3) => {
+            (3, 6) => {
                 adjust_usize_step(&mut self.config.tool_output_max_bytes, direction, 1024, 256)
             }
             (4, 0) => self.config.proxy_enabled = !self.config.proxy_enabled,
@@ -1435,6 +1873,7 @@ impl SettingsEditor {
                     direction,
                 )
             }
+            (5, 0) => self.config.ima_enabled = !self.config.ima_enabled,
             _ => {}
         }
     }
@@ -1442,6 +1881,14 @@ impl SettingsEditor {
 
 fn optional_number(value: Option<u64>) -> String {
     value.map_or_else(|| "auto".into(), |value| value.to_string())
+}
+
+fn mask_secret(value: &str) -> String {
+    if value.is_empty() {
+        String::new()
+    } else {
+        "*".repeat(value.chars().count())
+    }
 }
 fn adjust_optional(value: &mut Option<u64>, direction: i8, step: u64) {
     *value = if direction > 0 {
@@ -1487,6 +1934,55 @@ fn cycle3<T: Copy + PartialEq>(value: T, values: [T; 3], direction: i8) -> T {
     }]
 }
 
+fn cycle_index(value: usize, count: usize, direction: i8) -> usize {
+    if direction < 0 {
+        value.checked_sub(1).unwrap_or(count - 1)
+    } else {
+        (value + 1) % count
+    }
+}
+
+fn append_restored_history(
+    history: &Arc<Mutex<Vec<String>>>,
+    turns: &[Vec<ConversationItem>],
+    ascii: bool,
+) -> Result<()> {
+    let mut visible = history
+        .lock()
+        .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?;
+    visible.clear();
+    for turn in turns {
+        for item in turn {
+            match item {
+                ConversationItem::Message(message) => match message.role {
+                    Role::User => visible.push(format!("> {}", message.content)),
+                    Role::Assistant => visible.push(format!(
+                        "{} {}",
+                        if ascii { "[AGENT]" } else { "🤖" },
+                        message.content
+                    )),
+                    Role::System | Role::Tool => {}
+                },
+                ConversationItem::Tools(round) => {
+                    for (index, result) in round.results.iter().enumerate() {
+                        let name = round
+                            .calls
+                            .get(index)
+                            .map_or("tool", |call| call.name.as_str());
+                        visible.push(format!(
+                            "{} {}\n{}",
+                            if ascii { "[TOOL]" } else { "🔧" },
+                            name,
+                            result.output
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 struct SessionTextSink {
     history: Arc<Mutex<Vec<String>>>,
     max_bytes: usize,
@@ -1521,6 +2017,17 @@ fn localized_status(language: UiLanguage, zh_cn: &str, en: &str) -> String {
         UiLanguage::En => en,
     }
     .into()
+}
+
+fn interactive_shell_command() -> &'static str {
+    #[cfg(target_os = "android")]
+    {
+        "exec /system/bin/sh -i"
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        "exec /bin/sh -i"
+    }
 }
 
 struct ConfirmRequest {
@@ -1564,6 +2071,7 @@ struct ConfirmationUi {
     text: String,
     approval: ConfirmationDecision,
     selection: usize,
+    scroll: u16,
     language: UiLanguage,
 }
 
@@ -1594,6 +2102,7 @@ impl ConfirmationUi {
             text: String::new(),
             approval: ConfirmationDecision::Approve,
             selection: 0,
+            scroll: 0,
             language,
         }
     }
@@ -1604,18 +2113,24 @@ impl ConfirmationUi {
                 UiLanguage::ZhCn => PopupView {
                     title: "安全确认".into(),
                     lines: vec!["正在关闭…".into()],
+                    footer: Vec::new(),
+                    scroll: 0,
+                    min_height: 3,
                     dangerous: false,
                     informational: false,
                 },
                 UiLanguage::En => PopupView {
                     title: "Confirmation".into(),
                     lines: vec!["Closing…".into()],
+                    footer: Vec::new(),
+                    scroll: 0,
+                    min_height: 3,
                     dangerous: false,
                     informational: false,
                 },
             };
         };
-        let mut lines = match self.language {
+        let lines = match self.language {
             UiLanguage::ZhCn => vec![
                 format!("命令：{}", request.command),
                 format!(
@@ -1643,25 +2158,30 @@ impl ConfirmationUi {
                 request.assessment.explanation.clone(),
             ],
         };
+        let mut footer = Vec::new();
         match self.stage {
-            ConfirmationStage::Initial => lines.extend(self.initial_option_lines(request)),
+            ConfirmationStage::Initial => footer.extend(self.initial_option_lines(request)),
             ConfirmationStage::Double => {
-                lines.push(match self.language {
+                footer.push(match self.language {
                     UiLanguage::ZhCn => "高风险操作：输入 YES 后按 Enter：".into(),
                     UiLanguage::En => "High risk: type YES, then Enter:".into(),
                 });
-                lines.push(self.text.clone());
+                footer.push(self.text.clone());
             }
             ConfirmationStage::Edit => {
-                lines.push(match self.language {
+                footer.push(match self.language {
                     UiLanguage::ZhCn => "编辑命令后按 Enter（执行前会重新分类）：".into(),
                     UiLanguage::En => {
                         "Edit command, then Enter (reclassified before execution):".into()
                     }
                 });
-                lines.push(self.text.clone());
+                footer.push(self.text.clone());
             }
         }
+        footer.push(match self.language {
+            UiLanguage::ZhCn => "PgUp/PgDn 或滚轮查看长内容".into(),
+            UiLanguage::En => "PgUp/PgDn or wheel scrolls long content".into(),
+        });
         PopupView {
             title: match self.language {
                 UiLanguage::ZhCn => "安全确认",
@@ -1669,6 +2189,9 @@ impl ConfirmationUi {
             }
             .into(),
             lines,
+            footer,
+            scroll: self.scroll,
+            min_height: 11,
             dangerous: matches!(
                 request.assessment.risk_level,
                 RiskLevel::Dangerous | RiskLevel::Critical
@@ -1678,6 +2201,17 @@ impl ConfirmationUi {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::PageUp => {
+                self.scroll = self.scroll.saturating_sub(5);
+                return false;
+            }
+            KeyCode::PageDown => {
+                self.scroll = self.scroll.saturating_add(5);
+                return false;
+            }
+            _ => {}
+        }
         match self.stage {
             ConfirmationStage::Initial => match key.code {
                 KeyCode::Up => {
@@ -1738,6 +2272,14 @@ impl ConfirmationUi {
                 _ => false,
             },
         }
+    }
+
+    fn scroll_up(&mut self, rows: u16) {
+        self.scroll = self.scroll.saturating_sub(rows);
+    }
+
+    fn scroll_down(&mut self, rows: u16) {
+        self.scroll = self.scroll.saturating_add(rows);
     }
 
     fn initial_option_lines(&self, request: &ConfirmRequest) -> Vec<String> {
@@ -1884,6 +2426,30 @@ mod tests {
     }
 
     #[test]
+    fn settings_masks_and_edits_independent_ima_credentials() {
+        let config = Config {
+            ima_enabled: true,
+            ima_client_id: "client-secret".into(),
+            ima_api_key: "api-secret".into(),
+            ima_knowledge_base_id: Some("kb-id".into()),
+            ..Config::default()
+        };
+        let mut editor = SettingsEditor::new(&config, 5);
+        let view = editor.view(true);
+        assert!(!view.lines.iter().any(|line| line.contains("client-secret")));
+        assert!(!view.lines.iter().any(|line| line.contains("api-secret")));
+        editor.selected = 0;
+        editor.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert!(!editor.config.ima_enabled);
+        assert_eq!(editor.config.ima_client_id, "client-secret");
+        assert_eq!(editor.config.ima_api_key, "api-secret");
+        assert_eq!(
+            editor.config.ima_knowledge_base_id.as_deref(),
+            Some("kb-id")
+        );
+    }
+
+    #[test]
     fn settings_tabs_and_arrows_have_separate_navigation_roles() {
         let mut editor = SettingsEditor::new(&Config::default(), 1);
         editor.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
@@ -1895,10 +2461,35 @@ mod tests {
     }
 
     #[test]
+    fn settings_ascii_art_switches_are_independent_and_log_clear_is_an_action() {
+        let mut editor = SettingsEditor::new(&Config::default(), 3);
+        assert!(editor.config.show_buddha_ascii_art);
+        assert!(editor.config.show_train_ascii_art);
+
+        editor.selected = 2;
+        editor.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert!(!editor.config.show_buddha_ascii_art);
+        assert!(editor.config.show_train_ascii_art);
+
+        editor.selected = 3;
+        editor.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert!(!editor.config.show_buddha_ascii_art);
+        assert!(!editor.config.show_train_ascii_art);
+
+        editor.selected = 4;
+        assert!(matches!(
+            editor.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            SettingsAction::ClearLog
+        ));
+    }
+
+    #[test]
     fn settings_text_fields_strip_degraded_sgr_mouse_reports() {
         let config = Config::default();
         let original = config.endpoint.clone();
         let mut editor = SettingsEditor::new(&config, 0);
+        editor.selected = 1;
+        editor.sync_text_cursor();
         for character in "<35;46;8M".chars() {
             editor.handle_key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
         }
@@ -1932,6 +2523,8 @@ mod tests {
             ..Config::default()
         };
         let mut editor = SettingsEditor::new(&config, 0);
+        editor.selected = 1;
+        editor.sync_text_cursor();
         editor.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
         editor.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
         editor.handle_key(KeyEvent::new(KeyCode::Char('中'), KeyModifiers::NONE));
@@ -1940,6 +2533,63 @@ mod tests {
         assert_eq!(editor.config.endpoint, "你中好");
         editor.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert_eq!(editor.config.endpoint, "你好");
+    }
+
+    #[test]
+    fn settings_provider_presets_update_only_the_endpoint() {
+        let config = Config {
+            endpoint: "https://api.openai.com/v1".into(),
+            api_key: "keep-secret".into(),
+            model: "keep-model".into(),
+            api_type: crate::config::ApiType::Responses,
+            ..Config::default()
+        };
+        let mut editor = SettingsEditor::new(&config, 0);
+
+        assert_eq!(editor.provider, 0);
+        editor.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(editor.config.endpoint, "https://api.deepseek.com");
+        assert_eq!(editor.config.api_key, "keep-secret");
+        assert_eq!(editor.config.model, "keep-model");
+        assert_eq!(editor.config.api_type, crate::config::ApiType::Responses);
+
+        editor.provider = crate::config::PROVIDERS.len() - 2;
+        editor.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(editor.provider, crate::config::PROVIDERS.len() - 1);
+        assert_eq!(editor.config.endpoint, "https://api.openai.com/v1");
+
+        editor.selected = 1;
+        editor.sync_text_cursor();
+        editor.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert_eq!(editor.provider, crate::config::PROVIDERS.len() - 1);
+    }
+
+    #[test]
+    fn settings_restore_ollama_and_custom_endpoint_drafts() {
+        let config = Config {
+            endpoint: "https://custom.example/v1".into(),
+            ..Config::default()
+        };
+        let mut editor = SettingsEditor::new(&config, 0);
+        let ollama_index = crate::config::PROVIDERS.len() - 2;
+        let custom_index = crate::config::PROVIDERS.len() - 1;
+        assert_eq!(editor.provider, custom_index);
+
+        editor.select_provider(-1);
+        assert_eq!(editor.provider, ollama_index);
+        editor.selected = 1;
+        editor.config.endpoint = "http://192.168.1.20:11434/v1".into();
+        editor.record_edited_endpoint();
+
+        editor.selected = 0;
+        editor.select_provider(-1);
+        editor.select_provider(1);
+        assert_eq!(editor.provider, ollama_index);
+        assert_eq!(editor.config.endpoint, "http://192.168.1.20:11434/v1");
+
+        editor.select_provider(1);
+        assert_eq!(editor.provider, custom_index);
+        assert_eq!(editor.config.endpoint, "https://custom.example/v1");
     }
     use crate::{config::Config, security::assess};
 
@@ -1996,8 +2646,8 @@ mod tests {
     fn numbered_menu_supports_task_approval_and_reject_aliases() {
         let (mut ui, mut response) = request("touch /tmp/file");
         let view = ui.view();
-        assert!(view.lines.iter().any(|line| line.starts_with("> 1.")));
-        assert!(view.lines.iter().any(|line| line.contains("[a]")));
+        assert!(view.footer.iter().any(|line| line.starts_with("> 1.")));
+        assert!(view.footer.iter().any(|line| line.contains("[a]")));
         assert!(ui.handle_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE,)));
         assert_eq!(
             response.try_recv(),
@@ -2016,7 +2666,7 @@ mod tests {
     fn high_risk_menu_disables_always_allow() {
         let (mut ui, mut response) = request("rm -rf /");
         let view = ui.view();
-        assert!(view.lines.iter().any(|line| line.contains("不可用")));
+        assert!(view.footer.iter().any(|line| line.contains("不可用")));
         assert!(!ui.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE,)));
         assert!(matches!(
             response.try_recv(),
@@ -2025,6 +2675,20 @@ mod tests {
 
         assert!(!ui.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)));
         assert_eq!(ui.selection, 2);
+    }
+
+    #[test]
+    fn confirmation_content_scroll_does_not_change_selection() {
+        let (mut ui, _response) = request(&"long command line\n".repeat(40));
+        assert!(!ui.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE,)));
+        assert_eq!(ui.scroll, 5);
+        assert_eq!(ui.selection, 0);
+        ui.scroll_down(3);
+        ui.scroll_up(2);
+        assert_eq!(ui.scroll, 6);
+        let view = ui.view();
+        assert_eq!(view.scroll, 6);
+        assert!(view.footer.iter().any(|line| line.contains("PgUp/PgDn")));
     }
 
     #[test]

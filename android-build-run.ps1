@@ -109,7 +109,7 @@ if ($LASTEXITCODE -ne 0) { throw "failed to make nl2sh executable" }
 if ($AdbIsRoot) {
     Write-Host "Starting $RemoteBinary through root adbd."
     Write-Host "Press Ctrl+Q in nl2sh to exit."
-    & adb @AdbArgs shell -t $RemoteBinary
+    & adb @AdbArgs shell -t env NL2SH_WINDOWS_SCROLL=1 $RemoteBinary
     exit $LASTEXITCODE
 }
 
@@ -118,7 +118,7 @@ Write-Host "Trying Android su as a fallback..."
 if ($LASTEXITCODE -eq 0) {
     Write-Host "su access granted; starting $RemoteBinary as root."
     Write-Host "Press Ctrl+Q in nl2sh to exit."
-    & adb @AdbArgs shell -t su -c $RemoteBinary
+    & adb @AdbArgs shell -t su -c "NL2SH_WINDOWS_SCROLL=1 $RemoteBinary"
     exit $LASTEXITCODE
 }
 
@@ -131,5 +131,5 @@ if ($ConfigExists) {
 }
 Write-Warning "adb root and su are unavailable; starting as adb shell user."
 Write-Host "Press Ctrl+Q in nl2sh to exit."
-& adb @AdbArgs shell -t $RemoteBinary
+& adb @AdbArgs shell -t env NL2SH_WINDOWS_SCROLL=1 $RemoteBinary
 exit $LASTEXITCODE

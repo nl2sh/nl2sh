@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use nl2sh::{
-    agent::{AgentRunner, ConfirmationDecision, Confirmer},
+    agent::{AgentRunner, ConfirmationDecision, Confirmer, LimitType},
     config::Config,
     llm::{
         ConversationItem, ConversationMessage, FinishReason, LlmClient, LlmRequest, LlmResponse,
@@ -18,6 +18,110 @@ use std::sync::{
 struct MockLlm {
     calls: AtomicUsize,
     command: &'static str,
+}
+
+struct AlwaysToolLlm {
+    calls: AtomicUsize,
+    command: &'static str,
+}
+
+#[async_trait]
+impl LlmClient for AlwaysToolLlm {
+    async fn complete(&self, _: LlmRequest) -> Result<LlmResponse> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(LlmResponse {
+            text: None,
+            tool_calls: vec![ToolCall {
+                id: format!("always-{call}"),
+                name: "execute_shell_command".into(),
+                arguments: json!({"command": self.command}),
+            }],
+            usage: Usage::default(),
+            finish_reason: FinishReason::ToolCalls,
+        })
+    }
+}
+
+#[tokio::test]
+async fn tool_budget_blocks_the_next_tool_before_execution() {
+    let cfg = Config {
+        max_agent_steps: 10,
+        max_tool_calls: 1,
+        ..Config::default()
+    };
+    let llm = AlwaysToolLlm {
+        calls: AtomicUsize::new(0),
+        command: "id",
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let outcome = AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &Exec {
+            calls: calls.clone(),
+        },
+        confirmer: &Confirm(true),
+    }
+    .run("loop")
+    .await
+    .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(outcome.tool_calls, 1);
+    assert_eq!(outcome.stats.limit_reached, Some(LimitType::ToolCalls));
+}
+
+#[tokio::test]
+async fn hard_step_limit_caps_user_step_configuration() {
+    let cfg = Config {
+        max_agent_steps: 10,
+        hard_max_agent_steps: 2,
+        max_tool_calls: 10,
+        ..Config::default()
+    };
+    let llm = AlwaysToolLlm {
+        calls: AtomicUsize::new(0),
+        command: "id",
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let outcome = AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &Exec { calls },
+        confirmer: &Confirm(true),
+    }
+    .run("loop")
+    .await
+    .unwrap();
+    assert_eq!(outcome.steps, 2);
+    assert_eq!(outcome.stats.limit_reached, Some(LimitType::SystemHardStep));
+}
+
+#[tokio::test]
+async fn repeated_identical_action_is_blocked_before_fourth_execution() {
+    let cfg = Config {
+        max_agent_steps: 5,
+        max_tool_calls: 5,
+        max_same_action_retries: 3,
+        ..Config::default()
+    };
+    let llm = AlwaysToolLlm {
+        calls: AtomicUsize::new(0),
+        command: "id   -u",
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let outcome = AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &Exec {
+            calls: calls.clone(),
+        },
+        confirmer: &Confirm(true),
+    }
+    .run("repeat")
+    .await
+    .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    assert_eq!(outcome.tool_calls, 5);
 }
 #[async_trait]
 impl LlmClient for MockLlm {
