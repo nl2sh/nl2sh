@@ -1,3 +1,4 @@
+# Release Android binaries, Termux packages, and the signed APT repository.
 name: Release
 
 on:
