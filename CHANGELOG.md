@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Moved the canonical source, release, package, support, and self-update links to the `nl2sh` GitHub organization, and refreshed the project logo and Cargo package metadata.
+- Moved the canonical source, release history, package, support, and self-update links to the `nl2sh` GitHub organization, and refreshed the project logo and Cargo package metadata.
 
 ### Added
 
