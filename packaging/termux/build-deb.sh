@@ -37,7 +37,7 @@ Architecture: ${TERMUX_ARCH}
 Maintainer: Ernest-su
 Section: utils
 Priority: optional
-Homepage: https://github.com/Ernest-su/nl2sh
+Homepage: https://github.com/nl2sh/nl2sh
 Description: Android shell AI agent with local safety confirmation
  nl2sh provides a ratatui interface, tool calling, and a mandatory
  security and confirmation boundary before command execution.

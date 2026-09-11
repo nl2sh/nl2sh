@@ -4,6 +4,11 @@ version = "1.0.1"
 edition = "2021"
 description = "Natural Language to Shell for Android"
 license = "MIT"
+repository = "https://github.com/nl2sh/nl2sh"
+homepage = "https://github.com/nl2sh/nl2sh"
+readme = "README.md"
+keywords = ["android", "shell", "ai-agent", "tui", "termux"]
+categories = ["command-line-utilities"]
 
 [features]
 default = ["self-update"]

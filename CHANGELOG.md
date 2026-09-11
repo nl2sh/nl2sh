@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Moved the canonical source, release, package, support, and self-update links to the `nl2sh` GitHub organization, and refreshed the project logo and Cargo package metadata.
+
 ### Added
 
 - Added Codex-style `!command` execution in the Agent TUI. Commands bypass the Provider but retain local security classification, confirmation, root, PTY, timeout, and terminal-restoration boundaries; bounded output and exit status remain visible without entering model context.

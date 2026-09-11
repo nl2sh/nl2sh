@@ -1,9 +1,10 @@
 # Project Status
 
-Last Updated: 2026-09-02
+Last Updated: 2026-09-11
 
 ## Recent Changes
 
+- GitHub 主仓库迁移到 `nl2sh/nl2sh` 组织；自更新 API、TUR 源码、Debian 包主页、APT Pages、README/TUI 支持链接及 Cargo 包元数据已统一指向新地址，并更新项目 logo。
 - TUI 支持 Codex 风格的 `!command`：不请求 Provider，直接经过既有安全分类、确认、Root 与 PTY 执行链，并在当前界面显示有界实时输出和退出状态；命令及结果不进入模型上下文，未配置 Provider 时也可使用。
 - 发布 `v1.0.1`，并将 TUR 配方更新为该 tag 的固定 GitHub 源码归档及 SHA-256；GitHub Release 工作流状态由 Actions 最终结果确认。
 - 新增可提交到 Termux User Repository 的 `tur/nl2sh/build.sh`：固定 release 源码与 SHA-256，使用 TUR/Termux 构建系统的 Rust toolchain 和目标架构构建，并关闭包内自更新。

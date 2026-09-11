@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use std::{fs, io::Write, path::PathBuf};
 
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/Ernest-su/nl2sh/releases/latest";
+const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/nl2sh/nl2sh/releases/latest";
 
 /// Whether this build may replace its own executable.
 pub const fn self_update_enabled() -> bool {

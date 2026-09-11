@@ -122,9 +122,9 @@ pkg install nl2sh
 
 ```bash
 mkdir -p "$PREFIX/etc/apt/keyrings"
-curl -fsSL https://ernest-su.github.io/nl2sh/nl2sh-repo.gpg \
+curl -fsSL https://nl2sh.github.io/nl2sh/nl2sh-repo.gpg \
   -o "$PREFIX/etc/apt/keyrings/nl2sh.gpg"
-echo "deb [signed-by=$PREFIX/etc/apt/keyrings/nl2sh.gpg] https://ernest-su.github.io/nl2sh stable main" \
+echo "deb [signed-by=$PREFIX/etc/apt/keyrings/nl2sh.gpg] https://nl2sh.github.io/nl2sh stable main" \
   > "$PREFIX/etc/apt/sources.list.d/nl2sh.list"
 pkg update
 pkg install nl2sh
@@ -291,7 +291,7 @@ Android 真机建议依次验证：启动/退出后终端恢复；`id` 和 `getp
 
 ## 支持项目
 
-⭐ 这个项目完全开源、单二进制、本地执行。点个 Star 或提个 Issue 已经是莫大支持。[点击支持 →](https://github.com/Ernest-su/nl2sh)
+⭐ 这个项目完全开源、单二进制、本地执行。点个 Star 或提个 Issue 已经是莫大支持。[点击支持 →](https://github.com/nl2sh/nl2sh)
 
 ❤️ 如果 nl2sh 帮你少敲了几条 adb 命令、省下了调试 Android 设备的时间，欢迎请我喝杯咖啡 ☕
 
