@@ -1,0 +1,32 @@
+Architectures: aarch64 arm
+Codename: stable
+Components: main
+Date: Mon, 31 Aug 2026 03:59:38 +0000
+Description: Signed nl2sh packages for Termux
+Label: nl2sh Termux repository
+Origin: nl2sh
+Suite: stable
+MD5Sum:
+ afbc9b954b078494a168a3d3438528e2              204 Release
+ 2a90bd80d21ae5fb2384e64913550855              714 main/binary-aarch64/Packages
+ 00582e7891b18bfa8983eddb322b75ae              501 main/binary-aarch64/Packages.gz
+ 0df21369389eb93e4bd2dfe5dba5ce58              706 main/binary-arm/Packages
+ cab7b149a737250bb42d137ac3ae9f62              497 main/binary-arm/Packages.gz
+SHA1:
+ 6d81faa11a085456500cbd524ee0e43ba19ed40a              204 Release
+ b54a49d5063299f50b3db635c1e0de8847cf7cc4              714 main/binary-aarch64/Packages
+ 4993c17c9aaa76fd3af6beb64d14b07b405bbf18              501 main/binary-aarch64/Packages.gz
+ 61faae0f48e9b17fc2364bb741213b1b7568ec07              706 main/binary-arm/Packages
+ 95b40fe49042e8a0b9f41ea48133b79851041a60              497 main/binary-arm/Packages.gz
+SHA256:
+ 9bdace8f17073bf8c209b6c0226f40324851bae5e76a9ab46bcad95812392eeb              204 Release
+ 15aa1068baad01d6c6e864bda6471813d09917ee01867d45f4b87ac0cb739ac7              714 main/binary-aarch64/Packages
+ 520c2b9825b64b240e9f6d5e849b9b737c86e6deaa783c8f4a4e70c45d7ce95f              501 main/binary-aarch64/Packages.gz
+ ee26a2362a3b950a79e0ee5b8ee8a89f0fe8cb7993ea5f3a64795efb5ec690bc              706 main/binary-arm/Packages
+ bc14494f8d6b836ce1d450c5e1b125cab72d97705a7e48380a537ca9db012d9e              497 main/binary-arm/Packages.gz
+SHA512:
+ e4e969ac0dfcd56412574b510ac0b60aed076b8bdc0beb79f24ff8b371c3e180f7f46cd17ca15a43463e5172bf29152ad1cb2a0b68205d0acb527d4c20497476              204 Release
+ 2cfcb0bffc9dedc6d9fd9c5d418fb6ef9fd2594747340c6a9df71e97381a1a6adf5bd4678c92a08023f0d5455f0ec1c1da9fd51d2b784d4d22bed0df2419cb87              714 main/binary-aarch64/Packages
+ 2d905e3a24cb0cc53d8aaf019c49788635d08292a03b987f47921cb045b3e7e52327a1f21988570ea3892f228ceb256260615ed6af1c8e084c6f47f9aecbb2d0              501 main/binary-aarch64/Packages.gz
+ ebde289fd5449c0fe0b24d6d4d1eb0e4936f2983a857978af8dfc5b26dfd7a63ad907e21a90db263f10f43265cafe8e9eebe47a437010203b1190adf106d5497              706 main/binary-arm/Packages
+ fc84a3ae2df821b18ef051f51d70984efedf8ea4b3772f4ae59043660ea33682f0e682a6a6c2c61b4875105f3176c92a45ec50129747558519022f8003ef2880              497 main/binary-arm/Packages.gz

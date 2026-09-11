@@ -1,0 +1,17 @@
+Package: nl2sh
+Architecture: arm
+Version: 1.0.1
+Priority: optional
+Section: utils
+Maintainer: Ernest-su
+Filename: pool/main/n/nl2sh/nl2sh_1.0.1_arm.deb
+Size: 1398556
+MD5sum: 9cc8cf024cbae53c0a93dd1a9b61e2c9
+SHA1: a664914c8d8caafed19f151460cce460a7d5dd53
+SHA256: d43ace5ee5acd6795db36af78519a1e90fde84f0f399920f9876f740d6cc7f9e
+SHA512: 6309d3344b852158aa2238f78a438a58c291b6e3a679737af84d0b4988ea0b7aeb4f693532f9ec561971da468422b37c17046628e67d743634055d4dea9101d0
+Homepage: https://github.com/Ernest-su/nl2sh
+Description: Android shell AI agent with local safety confirmation
+ nl2sh provides a ratatui interface, tool calling, and a mandatory
+ security and confirmation boundary before command execution.
+
