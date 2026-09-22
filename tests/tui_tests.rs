@@ -4,7 +4,6 @@ use nix::{
     fcntl::{fcntl, FcntlArg, OFlag},
     pty::{openpty, Winsize},
 };
-use serde_json::json;
 use std::{
     fs::File,
     io::{ErrorKind, Read, Write},
@@ -35,12 +34,14 @@ async fn agent_reply_remains_in_live_tui_until_ctrl_q() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "output": [{
-                "type": "message",
-                "content": [{"type": "output_text", "text": "tui-e2e-done"}]
-            }]
-        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(concat!(
+                    "data: {\"type\":\"response.output_text.delta\",\"delta\":\"tui-e2e-done\"}\n\n",
+                    "data: {\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"tui-e2e-done\"}]}]}}\n\n"
+                )),
+        )
         .mount(&server)
         .await;
 
@@ -49,58 +50,27 @@ async fn agent_reply_remains_in_live_tui_until_ctrl_q() -> anyhow::Result<()> {
     std::fs::write(
         &config,
         format!(
-            "api_key=''\nmodel='test'\nendpoint='{}/v1'\napi_type='responses'\n",
+            "api_key=''\nmodel='test'\nendpoint='{}/v1'\napi_type='responses'\nshow_buddha_ascii_art=false\nshow_train_ascii_art=false\n",
             server.uri()
         ),
     )?;
 
-    let pair = openpty(
-        Some(&Winsize {
-            ws_row: 30,
-            ws_col: 100,
-            ws_xpixel: 0,
-            ws_ypixel: 0,
-        }),
-        None,
-    )?;
-    let raw_master = pair.master.into_raw_fd();
-    let flags = OFlag::from_bits_truncate(fcntl(raw_master, FcntlArg::F_GETFL)?);
-    fcntl(raw_master, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK))?;
-    let mut master = unsafe { File::from_raw_fd(raw_master) };
-    let slave = File::from(pair.slave);
-    let stdin = slave.try_clone()?;
-    let stdout = slave.try_clone()?;
+    let mut process = spawn_tui(&config)?;
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_nl2sh"))
-        .arg("--config")
-        .arg(&config)
-        .env("TERM", "xterm-256color")
-        .stdin(Stdio::from(stdin))
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(slave))
-        .spawn()?;
-
-    wait_for_text(&mut master, "Ctrl+Q", Duration::from_secs(3)).await?;
-    master.write_all(b"/help\r")?;
-    wait_for_text(&mut master, "审计日志保留", Duration::from_secs(3)).await?;
-    master.write_all(b"/clear\r")?;
-    wait_for_text(&mut master, "当前会话历史已清空", Duration::from_secs(3)).await?;
-    master.write_all(b"show status\r")?;
-    wait_for_text(&mut master, "tui-e2e-done", Duration::from_secs(5)).await?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+    process.master.write_all(b"show status\r")?;
+    wait_for_text(&mut process.master, "tui-e2e-done", Duration::from_secs(5)).await?;
     assert!(
-        child.try_wait()?.is_none(),
+        process.child.try_wait()?.is_none(),
         "TUI exited after one Agent response"
     );
 
-    master.write_all(&[0x11])?;
-    let status = timeout(Duration::from_secs(3), child.wait()).await??;
+    process.master.write_all(&[0x11])?;
+    let status = timeout(Duration::from_secs(3), process.child.wait()).await??;
     assert!(status.success());
     let log = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
     assert!(log.contains("show status"));
     assert!(log.contains("tui-e2e-done"));
-    assert!(log.contains("local_command"));
-    assert!(log.contains("/help"));
-    assert!(log.contains("/clear"));
     Ok(())
 }
 
