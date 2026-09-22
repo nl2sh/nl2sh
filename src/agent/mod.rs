@@ -8,6 +8,6 @@ pub use policy::{
     can_remember_approval, ConfirmationDecision, Confirmer, QuestionAnswers, QuestionOption,
     StdioConfirmer, UserQuestion,
 };
-pub use runner::{android_shell_constraints, AgentOutcome, AgentRunner};
+pub use runner::{android_shell_constraints, AgentOutcome, AgentRunFailure, AgentRunner};
 pub use runtime::{LimitType, TaskStats, SYSTEM_HARD_MAX_AGENT_STEPS};
 pub use tools::{builtin_tools, command_tool, ShellToolArgs};

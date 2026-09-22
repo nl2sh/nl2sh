@@ -4,6 +4,7 @@ Last Updated: 2026-09-22
 
 ## Recent Changes
 
+- 修复 Provider 在工具轮之后超时导致“继续”丢失上下文：Agent 错误携带已完成的部分 transcript，TUI 将包含工具证据的失败 turn 纳入当前模型历史并自动保存；初次请求即失败仍不产生空会话，安全确认、Root 与 PTY 边界不变。
 - 修复长期超时的 TUI 保活回归：用例不再从 ratatui 原始差分 ANSI 字节流匹配连续中文，也不再混测 `/help` 与 `/clear`；测试关闭启动装饰、复用统一 PTY 启动器，并以合法 Responses SSE 增量及完成事件验证 Agent 回答显示、TUI 保活、Ctrl+Q 退出和审计记录。
 - 权限确认新增“本次运行全部允许”选项，并新增 `/permission [status|allow|ask]` 本地命令；运行期许可只存在于当前进程内存，仅自动批准非 Root、无需强确认且最高为 `Mutating` 的操作，Dangerous、Critical、Root 与强确认仍必须逐次审批。
 - 修复 Android 视觉任务闭环：截图查看接受 PNG/JPEG/WebP，超出 2 MiB 时在进程内有界缩放；UI 检查默认仅返回可操作、有标签或聚焦节点，输入成功后直接附带最新界面状态。固定结构化探测改用静默执行，不再把内部 UI XML 或 dumpsys 原文重复写入实时输出与审计 sink。

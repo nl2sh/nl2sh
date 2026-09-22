@@ -11,8 +11,8 @@ use super::{
 };
 use crate::{
     agent::{
-        can_remember_approval, AgentOutcome, AgentRunner, ConfirmationDecision, Confirmer,
-        QuestionAnswers, UserQuestion,
+        can_remember_approval, AgentOutcome, AgentRunFailure, AgentRunner, ConfirmationDecision,
+        Confirmer, QuestionAnswers, UserQuestion,
     },
     config::{Config, UiLanguage},
     history::HistoryLog,
@@ -581,6 +581,47 @@ async fn run_inner(
                 Err(error) => {
                     discard_llm_stream(&history)?;
                     finalize_live_output(&history)?;
+                    if let Some(failure) = error.downcast_ref::<AgentRunFailure>() {
+                        let transcript = failure.transcript();
+                        if transcript
+                            .iter()
+                            .any(|item| matches!(item, ConversationItem::Tools(_)))
+                        {
+                            model_history.push(transcript.to_vec());
+                            while model_history.len() > config.max_context_turns {
+                                model_history.remove(0);
+                            }
+                            let store = session_store.clone();
+                            let name = session_name.clone();
+                            let turns = model_history.clone();
+                            let tool_limit = config.model_tool_output_max_bytes;
+                            let secrets = vec![
+                                config.api_key.clone(),
+                                config.proxy_password.clone(),
+                                config.ima_client_id.clone(),
+                                config.ima_api_key.clone(),
+                                config.jev_api_key.clone(),
+                            ];
+                            let save = tokio::task::spawn_blocking(move || {
+                                store.save_redacted(&name, &turns, tool_limit, &secrets)
+                            })
+                            .await
+                            .context("partial session autosave worker failed")?;
+                            if let Err(save_error) = save {
+                                history
+                                    .lock()
+                                    .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
+                                    .push(format!(
+                                        "{} partial session autosave failed: {save_error:#}",
+                                        if config.ascii_symbols {
+                                            "[WARN]"
+                                        } else {
+                                            "⚠️"
+                                        }
+                                    ));
+                            }
+                        }
+                    }
                     let diagnostic = provider_error_diagnostic(&error, config.ui_language);
                     push_history(
                         &history,

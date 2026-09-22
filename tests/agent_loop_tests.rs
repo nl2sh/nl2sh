@@ -591,6 +591,56 @@ async fn timeout_is_returned_to_model() {
     .await
     .unwrap();
 }
+
+struct ProviderFailsAfterTool {
+    calls: AtomicUsize,
+}
+
+#[async_trait]
+impl LlmClient for ProviderFailsAfterTool {
+    async fn complete(&self, _: LlmRequest) -> Result<LlmResponse> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            return Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "load-1".into(),
+                    name: "execute_shell_command".into(),
+                    arguments: serde_json::json!({"command": "uptime"}),
+                }],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            });
+        }
+        anyhow::bail!("provider stream timed out")
+    }
+}
+
+#[tokio::test]
+async fn provider_failure_retains_completed_tool_round() {
+    let cfg = Config::default();
+    let llm = ProviderFailsAfterTool {
+        calls: AtomicUsize::new(0),
+    };
+    let executor = Exec {
+        calls: Arc::new(AtomicUsize::new(0)),
+    };
+    let error = AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &executor,
+        confirmer: &Confirm(true),
+    }
+    .run("inspect load")
+    .await
+    .expect_err("the second provider request should fail");
+    let failure = error
+        .downcast_ref::<nl2sh::agent::AgentRunFailure>()
+        .expect("failure should carry the partial transcript");
+    assert!(matches!(
+        failure.transcript(),
+        [ConversationItem::Message(_), ConversationItem::Tools(_)]
+    ));
+}
 #[tokio::test]
 async fn interruption_stops_agent_loop() {
     let cfg = Config::default();

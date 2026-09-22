@@ -28,6 +28,32 @@ use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
+
+/// Provider failure that retains the current turn's completed tool evidence.
+#[derive(Debug)]
+pub struct AgentRunFailure {
+    source: anyhow::Error,
+    transcript: Vec<ConversationItem>,
+}
+
+impl AgentRunFailure {
+    /// Returns the incomplete turn accumulated before the provider failed.
+    pub fn transcript(&self) -> &[ConversationItem] {
+        &self.transcript
+    }
+}
+
+impl std::fmt::Display for AgentRunFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.source)
+    }
+}
+
+impl std::error::Error for AgentRunFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source.source()
+    }
+}
 use tokio::time::timeout;
 /// Dependencies for one bounded Agent tool loop.
 pub struct AgentRunner<'a> {
@@ -155,7 +181,10 @@ impl AgentRunner<'_> {
             })
             .await;
             let response = match response {
-                Ok(result) => result?,
+                Ok(Ok(response)) => response,
+                Ok(Err(source)) => {
+                    return Err(AgentRunFailure { source, transcript }.into());
+                }
                 Err(_) => {
                     stopped_by = Some(LimitType::ExecutionTime);
                     break;
