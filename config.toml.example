@@ -5,6 +5,12 @@ ima_enabled = false
 ima_client_id = ""
 ima_api_key = ""
 # ima_knowledge_base_id = "" # optional; empty discovers accessible bases
+# Optional audio-quality judge. When jev_api_key is empty,
+# judge_audio_quality falls back to the main configured LLM.
+# Environment overrides: NL2SH_JEV_API_KEY, NL2SH_JEV_ENDPOINT, NL2SH_JEV_MODEL.
+jev_api_key = ""
+jev_endpoint = "https://api.typesafe.ai/v1/systemone"
+jev_model = "jev-latest"
 model = "openrouter/free"
 # model_context_window = 128000
 # model_max_output_tokens = 16384

@@ -134,3 +134,19 @@ fn cli_layer_can_override_before_validation() -> anyhow::Result<()> {
     assert!(cfg.validate().is_ok());
     Ok(())
 }
+
+#[test]
+fn jev_is_optional_and_validated_only_when_configured() {
+    let mut cfg = Config::default();
+    assert!(!cfg.jev_is_configured());
+    assert!(cfg.validate_runtime().is_ok());
+
+    cfg.jev_api_key = "test-key".into();
+    cfg.jev_endpoint = "not-a-url".into();
+    assert!(cfg.validate_runtime().is_err());
+
+    cfg.jev_endpoint = "https://api.typesafe.ai/v1/systemone".into();
+    cfg.jev_model = "jev-latest".into();
+    assert!(cfg.jev_is_configured());
+    assert!(cfg.validate_runtime().is_ok());
+}

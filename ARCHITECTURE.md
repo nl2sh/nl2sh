@@ -49,6 +49,8 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 | `src/config` | `Config`、枚举、loader、wizard、分层校验 | 文件/缺省值/环境 → 可进入 TUI 的运行配置；完整 Provider 配置 → LLM 可用 | 不执行命令，不持有 UI 状态 |
 | `src/history` | `HistoryLog`、JSON Lines 事件与安全创建 | 交互事件 → 可刷新诊断日志 | 不记录 provider 凭据，不参与安全决策 |
 | `src/file_tools` | `FileToolExecutor`、结构化读取/搜索/补丁 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
+| `src/audio_tools` | `AudioToolExecutor`、WAV/Raw PCM 解析、DSP/FFT | 本地音频 → 客观 Feature JSON 或 `needs_input` | 纯 Rust、只读、不调用模型或 shell；Raw PCM 不可靠参数不得静默猜测 |
+| `src/audio_quality` | `judge_audio_quality`、Jev/通用 LLM 归一化 | 完整 Feature JSON → 0–5 多维质量评分 | Jev 配置存在时失败不回退；未配置才使用当前 LLM；不上传原始音频 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
 | `src/provider_metadata` | `ProviderMetadataClient`、Provider 识别、模型列表与上下文元数据归一化 | Provider 配置 → `ModelMetadata` 列表 | 只读网络访问，不记录凭据/原始账户响应，不参与模型推理与安全判断 |
@@ -72,6 +74,8 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 审批面板按命令或 diff 的 Unicode 显示宽度和实际换行高度动态调整，最大范围受终端与输入区约束。超高内容在独立正文区通过滚轮或 PageUp/PageDown 浏览，编号选择、强确认和编辑输入固定在底部；布局与滚动不改变风险等级或确认语义。
 
 Agent 文件操作优先使用 `read_file`、`list_dir`、`search_text` 和 `apply_patch`，不依赖设备端 `sed` 或 shell 重定向。路径不设工作区沙箱：允许绝对路径、父目录组件并跟随符号链接；读取、遍历、匹配和文件大小仍有硬上限，最终 Tool Result 继续使用配置的模型输出上限。`apply_patch` 在内存中验证唯一替换并生成 diff，确认前不打开目标进行写入，每次调用均单独确认，批准后才原子替换。
+
+只读工具返回结构化 `needs_input` 时，Runner 可通过独立于安全审批的用户问答接口请求缺失事实。TUI 在同一 frame 内显示支持候选选择和自定义输入的多字段窗口，非 TUI 模式使用终端文本回退；等待用户回答的时间不计入活跃任务时长。当前 Raw PCM 分析会用该接口收集采样率、声道数和采样格式，并将答案直接合并到原工具参数后本地重试，不经过模型改写或猜测。取消只保留 `needs_input` 结果，不批准命令、文件写入或 root 操作，也不改变既有 `Security → Confirmation → Execution` 边界。
 
 TUI 输入中的 `@路径` 提供本地文件/目录候选，支持相对路径、绝对路径、`~/`、`./` 与 `../`，Up/Down 选择并以 Enter 或 Tab 补全；Right 保持普通光标右移。提交时按“最长已存在路径前缀”解析，因此 `@test.txt写的是什么内容` 不要求路径后有空格；解析结果只向 Agent 附加绝对路径，实际内容仍由有界结构化文件工具读取。路径解析不会执行文件内容，也不会改变 shell 安全分类、确认或 root 策略。
 

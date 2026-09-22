@@ -1,3 +1,5 @@
+use crate::audio_quality::JudgeAudioQualityArgs;
+use crate::audio_tools::AnalyzeAudioArgs;
 use crate::file_tools::{ApplyPatchArgs, ListDirArgs, ReadFileArgs, SearchTextArgs};
 use crate::ima::{ImaReadArgs, ImaSearchArgs};
 use crate::llm::ToolDefinition;
@@ -31,6 +33,8 @@ pub fn builtin_tools(ima_enabled: bool) -> Vec<ToolDefinition> {
         ToolDefinition { name: "list_dir".into(), description: "List a bounded number of direct children without using shell commands. Absolute paths are supported.".into(), parameters: json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}) },
         ToolDefinition { name: "search_text".into(), description: "Search recursively for literal text in bounded UTF-8 files. Paths are not confined to the current workspace and symlinks are followed with cycle detection.".into(), parameters: json!({"type":"object","properties":{"query":{"type":"string"},"path":{"type":"string","default":"."}},"required":["query"],"additionalProperties":false}) },
         ToolDefinition { name: "apply_patch".into(), description: "Replace exactly one occurrence of old_text in any accessible file, or create a file when old_text is empty. A diff is always shown for local user confirmation before writing.".into(), parameters: json!({"type":"object","properties":{"path":{"type":"string"},"old_text":{"type":"string"},"new_text":{"type":"string"}},"required":["path","old_text","new_text"],"additionalProperties":false}) },
+        ToolDefinition { name: "analyze_audio".into(), description: "Analyze a local WAV or headerless raw PCM file using deterministic DSP only. WAV metadata is read from the file header regardless of extension. For raw PCM, never guess missing metadata as fact: return status=needs_input with the exact missing fields when sample_rate, channels, or sample_format cannot be known reliably.".into(), parameters: json!({"type":"object","properties":{"path":{"type":"string"},"sample_rate":{"type":"integer","minimum":1000,"maximum":384000},"channels":{"type":"integer","minimum":1,"maximum":8},"sample_format":{"type":"string","enum":["s16le","s24le","s32le","f32le"]}},"required":["path"],"additionalProperties":false}) },
+        ToolDefinition { name: "judge_audio_quality".into(), description: "Judge perceptual and practical audio quality from a completed analyze_audio feature object. Uses Jev when a Jev API key is configured; otherwise uses the current general LLM with no nested tools. Do not call this for factual metrics already returned by analyze_audio.".into(), parameters: json!({"type":"object","properties":{"features":{"type":"object"},"purpose":{"type":"string"}},"required":["features"],"additionalProperties":false}) },
     ];
     if ima_enabled {
         tools.extend([
@@ -62,6 +66,16 @@ pub(crate) fn parse_search_text(value: serde_json::Value) -> serde_json::Result<
 pub(crate) fn parse_apply_patch(value: serde_json::Value) -> serde_json::Result<ApplyPatchArgs> {
     serde_json::from_value(value)
 }
+pub(crate) fn parse_analyze_audio(
+    value: serde_json::Value,
+) -> serde_json::Result<AnalyzeAudioArgs> {
+    serde_json::from_value(value)
+}
+pub(crate) fn parse_judge_audio_quality(
+    value: serde_json::Value,
+) -> serde_json::Result<JudgeAudioQualityArgs> {
+    serde_json::from_value(value)
+}
 
 #[cfg(test)]
 mod tests {
@@ -80,7 +94,9 @@ mod tests {
                 "read_file",
                 "list_dir",
                 "search_text",
-                "apply_patch"
+                "apply_patch",
+                "analyze_audio",
+                "judge_audio_quality"
             ]
         );
         assert_eq!(builtin_tools(true).len(), names.len() + 3);

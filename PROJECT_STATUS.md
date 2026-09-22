@@ -1,9 +1,12 @@
 # Project Status
 
-Last Updated: 2026-09-11
+Last Updated: 2026-09-22
 
 ## Recent Changes
 
+- 新增与安全审批独立的结构化用户问答窗口：支持多字段候选选择和自定义输入；Raw PCM 缺少采样率、声道数或采样格式时在 TUI 内收集答案并直接本地重试，非 TUI 模式提供文本回退，取消不猜测也不改变安全、root 或 PTY 边界。
+- 修复音频工具集成测试文件末尾误写的字面量 `\\n`，恢复测试 target 编译；同时应用 rustfmt 标准格式，不改变音频分析、LLM 判断、安全确认、Android 或 PTY 行为。
+- TUR PR 已以 #2804 重新提交，并按 review 将 maintainer 改为 `Name <email>` 格式、移除不必要的显式 license file 与 API level；四架构 CI 曾在实际编译前受上游重复 `bazel` 配方影响，PR 分支已 rebase 到包含上游修复的最新 `master` 以重新触发构建。
 - GitHub 主仓库、开发分支、版本标签与 Release 历史迁移到 `nl2sh/nl2sh` 组织；自更新 API、TUR 源码、Debian 包主页、APT Pages、README/TUI 支持链接及 Cargo 包元数据已统一指向新地址，并更新项目 logo。
 - TUI 支持 Codex 风格的 `!command`：不请求 Provider，直接经过既有安全分类、确认、Root 与 PTY 执行链，并在当前界面显示有界实时输出和退出状态；命令及结果不进入模型上下文，未配置 Provider 时也可使用。
 - 发布 `v1.0.1`，并将 TUR 配方更新为该 tag 的固定 GitHub 源码归档及 SHA-256；GitHub Release 工作流状态由 Actions 最终结果确认。
@@ -137,7 +140,7 @@ Last Updated: 2026-09-11
 
 ## In Progress
 
-- TUR PR #2776 已提交；首次外部贡献的两条 Actions 等待 TUR maintainer 批准运行，批准后继续跟进 CI/Review。
+- TUR PR #2804 已提交并完成首轮 review 修改；分支已 rebase 到包含重复 `bazel` 配方修复的上游 `master`，新一轮 Actions 等待 TUR maintainer 批准运行，批准后继续跟进四架构 CI 与 review。
 
 ## Pending / Known Issues
 
@@ -156,6 +159,9 @@ Last Updated: 2026-09-11
 
 ## Verification Performed
 
+- 结构化用户问答窗口：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features` 与 `cargo clippy --all-targets -- -D warnings` 通过；95 项有效库测试、3 项主程序测试、15 项 Agent loop 测试及其余非 TUI 测试通过，1 项显式凭据 ima smoke 按设计忽略。新增回归覆盖候选答案、自定义输入、Esc 取消，以及 Raw PCM 三项缺失元数据收集后不经过模型直接重试。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
+- 测试 target 编译修复：`cargo fmt --all -- --check`、`cargo check --all-targets` 与 `cargo check --all-targets --no-default-features` 通过；`cargo test` 的 93 项有效库测试、3 项主程序测试、14 项 Agent loop 测试及其余非 TUI 测试通过，1 项显式凭据 ima smoke 按设计忽略。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
+- TUR PR #2804 build 修复：确认失败的四个架构均在 nl2sh 编译前因 TUR 构建环境报告 `Duplicated package: bazel` 停止；上游随后移除重复配方且其他 PR build 恢复通过。PR 分支 rebase 到修复后的 `master`，保持相对上游仅新增 `tur/nl2sh/build.sh`；新一轮 Actions 已创建，等待 maintainer 批准运行。
 - TUI `!` 本地命令：`cargo fmt --all -- --check`、`cargo check`、前缀解析单元测试及未配置 Provider 的伪终端直跑回归通过；回归确认实时输出、退出状态、TUI 保活和审计事件。全量 `cargo test` 的其余测试通过，既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 仍因启动动画 ANSI 差分文本匹配超时。
 - TUR 上游提交：PR #2776 仅包含提交 `addpkg(nl2sh): v1.0.1` 和 `tur/nl2sh/build.sh` 一个新增文件；GitHub 判定分支可合并。初始 `Packages-TUR` 与 `Package updates TUR` workflow 为 `action_required`，等待上游 maintainer 批准首次外部贡献运行。
 - v1.0.1 签名 APT 发布：补齐仓库签名 Secret 和 `github-pages` 的 `v*` tag deployment policy 后，release workflow 全部 job 通过，GPG 导入、仓库组装签名、Pages artifact 上传及部署成功。线上 `InRelease` 通过仓库公钥验签，指纹为 `5230 D3A7 CCBE ED46 16D3 9C51 FC6A D1BC 63F7 D4D8`；aarch64/arm Packages 中的 1.0.1 元数据和 SHA-256 与实际下载 `.deb` 一致。
@@ -212,4 +218,4 @@ Last Updated: 2026-09-11
 ## Next Steps
 
 1. 根据真机结果继续优化窄屏布局和全屏交互程序切换。
-2. 跟进 TUR PR #2776 的上游 Actions 批准、CI 与 Review。
+2. 跟进 TUR PR #2804 的四架构 CI 与 Review。

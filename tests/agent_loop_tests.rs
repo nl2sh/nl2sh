@@ -1,7 +1,9 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use nl2sh::{
-    agent::{AgentRunner, ConfirmationDecision, Confirmer, LimitType},
+    agent::{
+        AgentRunner, ConfirmationDecision, Confirmer, LimitType, QuestionAnswers, UserQuestion,
+    },
     config::Config,
     llm::{
         ConversationItem, ConversationMessage, FinishReason, LlmClient, LlmRequest, LlmResponse,
@@ -11,9 +13,12 @@ use nl2sh::{
     shell::{CommandExecutor, ExecutionResult},
 };
 use serde_json::json;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
+use std::{
+    collections::BTreeMap,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 struct MockLlm {
     calls: AtomicUsize,
@@ -603,4 +608,143 @@ async fn interruption_stops_agent_loop() {
     .await
     .is_err());
     assert_eq!(llm.calls.load(Ordering::SeqCst), 1)
+}
+
+struct AnalyzeAudioToolLlm {
+    calls: AtomicUsize,
+    path: String,
+    omit_metadata: bool,
+}
+
+#[async_trait]
+impl LlmClient for AnalyzeAudioToolLlm {
+    async fn complete(&self, req: LlmRequest) -> Result<LlmResponse> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        if call == 0 {
+            assert!(req.tools.iter().any(|tool| tool.name == "analyze_audio"));
+            return Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "audio-1".into(),
+                    name: "analyze_audio".into(),
+                    arguments: if self.omit_metadata {
+                        json!({"path": self.path.clone()})
+                    } else {
+                        json!({
+                            "path": self.path.clone(),
+                            "sample_rate": 16000,
+                            "channels": 1,
+                            "sample_format": "s16le"
+                        })
+                    },
+                }],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            });
+        }
+        let result = req
+            .items
+            .iter()
+            .find_map(|item| match item {
+                ConversationItem::Tools(round) => round.results.first(),
+                _ => None,
+            })
+            .expect("audio tool result should be present");
+        assert!(result.success, "{}", result.output);
+        assert!(
+            result.output.contains("\"status\": \"ok\""),
+            "{}",
+            result.output
+        );
+        Ok(LlmResponse {
+            text: Some("audio-ok".into()),
+            tool_calls: vec![],
+            usage: Usage::default(),
+            finish_reason: FinishReason::Stop,
+        })
+    }
+}
+
+#[tokio::test]
+async fn analyze_audio_is_dispatched_as_a_builtin_non_shell_tool() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("raw.pcm");
+    std::fs::write(&path, vec![0u8; 3200])?;
+    let llm = AnalyzeAudioToolLlm {
+        calls: AtomicUsize::new(0),
+        path: path.display().to_string(),
+        omit_metadata: false,
+    };
+    let exec_calls = Arc::new(AtomicUsize::new(0));
+    let cfg = Config::default();
+    let outcome = AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &Exec {
+            calls: exec_calls.clone(),
+        },
+        confirmer: &Confirm(false),
+    }
+    .run("analyze audio")
+    .await?;
+    assert_eq!(outcome.final_text, "audio-ok");
+    assert_eq!(exec_calls.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+struct AudioQuestionConfirmer {
+    calls: AtomicUsize,
+}
+
+#[async_trait]
+impl Confirmer for AudioQuestionConfirmer {
+    async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+        Ok(ConfirmationDecision::Reject)
+    }
+
+    async fn ask_questions(&self, questions: &[UserQuestion]) -> Result<Option<QuestionAnswers>> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(
+            questions
+                .iter()
+                .map(|question| question.id.as_str())
+                .collect::<Vec<_>>(),
+            ["sample_rate", "channels", "sample_format"]
+        );
+        Ok(Some(BTreeMap::from([
+            ("sample_rate".into(), "16000".into()),
+            ("channels".into(), "1".into()),
+            ("sample_format".into(), "s16le".into()),
+        ])))
+    }
+}
+
+#[tokio::test]
+async fn raw_audio_missing_metadata_is_collected_and_retried_without_the_model() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("raw.pcm");
+    std::fs::write(&path, vec![0u8; 3200])?;
+    let llm = AnalyzeAudioToolLlm {
+        calls: AtomicUsize::new(0),
+        path: path.display().to_string(),
+        omit_metadata: true,
+    };
+    let questions = AudioQuestionConfirmer {
+        calls: AtomicUsize::new(0),
+    };
+    let cfg = Config::default();
+    let outcome = AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &Exec {
+            calls: Arc::new(AtomicUsize::new(0)),
+        },
+        confirmer: &questions,
+    }
+    .run("analyze raw audio")
+    .await?;
+    assert_eq!(outcome.final_text, "audio-ok");
+    assert_eq!(questions.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(llm.calls.load(Ordering::SeqCst), 2);
+    Ok(())
 }

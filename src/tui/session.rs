@@ -10,7 +10,10 @@ use super::{
     ui,
 };
 use crate::{
-    agent::{can_remember_approval, AgentOutcome, AgentRunner, ConfirmationDecision, Confirmer},
+    agent::{
+        can_remember_approval, AgentOutcome, AgentRunner, ConfirmationDecision, Confirmer,
+        QuestionAnswers, UserQuestion,
+    },
     config::{Config, UiLanguage},
     history::HistoryLog,
     llm::{ConversationItem, LlmClient, Role, TextDeltaSink},
@@ -32,6 +35,7 @@ use nix::{
 #[cfg(unix)]
 use std::mem::MaybeUninit;
 use std::{
+    collections::BTreeMap,
     future::Future,
     pin::Pin,
     sync::{
@@ -132,7 +136,11 @@ async fn run_inner(
         .with_tui_active(true)
         .with_tui_suspend_flag(suspended.clone());
     let (confirm_tx, mut confirm_rx) = mpsc::unbounded_channel();
-    let confirmer = SessionConfirmer { tx: confirm_tx };
+    let (question_tx, mut question_rx) = mpsc::unbounded_channel();
+    let confirmer = SessionConfirmer {
+        confirm_tx,
+        question_tx,
+    };
     let runner = AgentRunner {
         config,
         llm,
@@ -194,6 +202,7 @@ async fn run_inner(
     let mut balance_manual = false;
     let mut last_balance_refresh: Option<Instant> = None;
     let mut confirmation: Option<ConfirmationUi> = None;
+    let mut question_prompt: Option<QuestionUi> = None;
     let mut session_picker: Option<SessionPicker> = None;
     let mut settings_editor: Option<SettingsEditor> = None;
     let update_config = config.clone();
@@ -268,6 +277,7 @@ async fn run_inner(
             app.popup = confirmation
                 .as_ref()
                 .map(ConfirmationUi::view)
+                .or_else(|| question_prompt.as_ref().map(QuestionUi::view))
                 .or_else(|| session_picker.as_ref().map(SessionPicker::view))
                 .or_else(|| update_prompt.as_ref().map(UpdatePrompt::view))
                 .or_else(|| {
@@ -301,6 +311,16 @@ async fn run_inner(
                         confirmation = Some(ConfirmationUi::new(request, config.ui_language));
                     }
                 }
+                request = question_rx.recv(), if question_prompt.is_none() => {
+                    if let Some(request) = request {
+                        app.status = localized_status(
+                            config.ui_language,
+                            "等待补充信息",
+                            "waiting for additional input",
+                        );
+                        question_prompt = Some(QuestionUi::new(request, config.ui_language));
+                    }
+                }
                 _ = tokio::time::sleep(Duration::from_millis(11)) => {}
             }
         } else if let Some(future) = balance_active.as_mut() {
@@ -319,6 +339,16 @@ async fn run_inner(
                             "waiting for confirmation",
                         );
                         confirmation = Some(ConfirmationUi::new(request, config.ui_language));
+                    }
+                }
+                request = question_rx.recv(), if question_prompt.is_none() => {
+                    if let Some(request) = request {
+                        app.status = localized_status(
+                            config.ui_language,
+                            "等待补充信息",
+                            "waiting for additional input",
+                        );
+                        question_prompt = Some(QuestionUi::new(request, config.ui_language));
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(11)) => {}
@@ -447,6 +477,7 @@ async fn run_inner(
                         config.proxy_password.clone(),
                         config.ima_client_id.clone(),
                         config.ima_api_key.clone(),
+                        config.jev_api_key.clone(),
                     ];
                     let save = tokio::task::spawn_blocking(move || {
                         store.save_redacted(&name, &turns, tool_limit, &secrets)
@@ -570,7 +601,11 @@ async fn run_inner(
             }
         }
 
-        if cancel_signal_pending && active.is_some() && confirmation.is_none() {
+        if cancel_signal_pending
+            && active.is_some()
+            && confirmation.is_none()
+            && question_prompt.is_none()
+        {
             signal_cancel()?;
             cancel_signal_pending = false;
             app.status = localized_status(config.ui_language, "正在取消", "cancelling");
@@ -583,6 +618,14 @@ async fn run_inner(
             let event = event::read()?;
             if let Event::Mouse(mouse) = event {
                 if let Some(pending) = confirmation.as_mut() {
+                    match mouse.kind {
+                        MouseEventKind::ScrollUp => pending.scroll_up(3),
+                        MouseEventKind::ScrollDown => pending.scroll_down(3),
+                        _ => {}
+                    }
+                    continue;
+                }
+                if let Some(pending) = question_prompt.as_mut() {
                     match mouse.kind {
                         MouseEventKind::ScrollUp => pending.scroll_up(3),
                         MouseEventKind::ScrollDown => pending.scroll_down(3),
@@ -609,6 +652,10 @@ async fn run_inner(
                         pending.finish(ConfirmationDecision::Reject);
                         confirmation = None;
                         cancel_signal_pending = true;
+                    } else if let Some(pending) = question_prompt.as_mut() {
+                        pending.finish(None);
+                        question_prompt = None;
+                        cancel_signal_pending = true;
                     } else {
                         signal_cancel()?;
                     }
@@ -631,6 +678,10 @@ async fn run_inner(
                     pending.finish(ConfirmationDecision::Reject);
                     confirmation = None;
                     cancel_signal_pending = true;
+                } else if let Some(pending) = question_prompt.as_mut() {
+                    pending.finish(None);
+                    question_prompt = None;
+                    cancel_signal_pending = true;
                 } else {
                     signal_cancel()?;
                 }
@@ -640,6 +691,14 @@ async fn run_inner(
             if let Some(pending) = confirmation.as_mut() {
                 if pending.handle_key(key) {
                     confirmation = None;
+                    app.status =
+                        localized_status(config.ui_language, "智能体运行中", "agent running");
+                }
+                continue;
+            }
+            if let Some(pending) = question_prompt.as_mut() {
+                if pending.handle_key(key) {
+                    question_prompt = None;
                     app.status =
                         localized_status(config.ui_language, "智能体运行中", "agent running");
                 }
@@ -1636,7 +1695,7 @@ impl SettingsEditor {
     }
 
     fn field_count(&self) -> usize {
-        [4, 6, 6, 7, 6, 4][self.tab]
+        [4, 6, 6, 7, 6, 7][self.tab]
     }
 
     fn view(&self, cursor_visible: bool) -> PopupView {
@@ -1945,6 +2004,9 @@ impl SettingsEditor {
                         .clone()
                         .unwrap_or_default(),
                 ),
+                ("Jev API Key", mask_secret(&self.config.jev_api_key)),
+                ("Jev Endpoint", self.config.jev_endpoint.clone()),
+                ("Jev Model", self.config.jev_model.clone()),
             ],
         }
     }
@@ -2082,7 +2144,7 @@ impl SettingsEditor {
     fn is_text_field(&self) -> bool {
         matches!(
             (self.tab, self.selected),
-            (0, 1 | 2) | (1, 0) | (4, 2..=5) | (5, 1..=3)
+            (0, 1 | 2) | (1, 0) | (4, 2..=5) | (5, 1..=6)
         )
     }
     fn text_mut(&mut self) -> &mut String {
@@ -2099,6 +2161,9 @@ impl SettingsEditor {
                 .config
                 .ima_knowledge_base_id
                 .get_or_insert_with(String::new),
+            (5, 4) => &mut self.config.jev_api_key,
+            (5, 5) => &mut self.config.jev_endpoint,
+            (5, 6) => &mut self.config.jev_model,
             _ => &mut self.config.proxy_bypass,
         }
     }
@@ -2118,6 +2183,9 @@ impl SettingsEditor {
                 .ima_knowledge_base_id
                 .as_deref()
                 .unwrap_or_default(),
+            (5, 4) => &self.config.jev_api_key,
+            (5, 5) => &self.config.jev_endpoint,
+            (5, 6) => &self.config.jev_model,
             _ => &self.config.proxy_bypass,
         }
     }
@@ -2442,8 +2510,14 @@ struct ConfirmRequest {
     reply: oneshot::Sender<ConfirmationDecision>,
 }
 
+struct QuestionRequest {
+    questions: Vec<UserQuestion>,
+    reply: oneshot::Sender<Option<QuestionAnswers>>,
+}
+
 struct SessionConfirmer {
-    tx: mpsc::UnboundedSender<ConfirmRequest>,
+    confirm_tx: mpsc::UnboundedSender<ConfirmRequest>,
+    question_tx: mpsc::UnboundedSender<QuestionRequest>,
 }
 
 #[async_trait]
@@ -2454,7 +2528,7 @@ impl Confirmer for SessionConfirmer {
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
         let (reply, response) = oneshot::channel();
-        self.tx
+        self.confirm_tx
             .send(ConfirmRequest {
                 command: command.into(),
                 assessment: assessment.clone(),
@@ -2462,6 +2536,213 @@ impl Confirmer for SessionConfirmer {
             })
             .map_err(|_| anyhow::anyhow!("TUI confirmation channel closed"))?;
         response.await.context("TUI confirmation was cancelled")
+    }
+
+    async fn ask_questions(&self, questions: &[UserQuestion]) -> Result<Option<QuestionAnswers>> {
+        let (reply, response) = oneshot::channel();
+        self.question_tx
+            .send(QuestionRequest {
+                questions: questions.to_vec(),
+                reply,
+            })
+            .map_err(|_| anyhow::anyhow!("TUI question channel closed"))?;
+        response.await.context("TUI question was cancelled")
+    }
+}
+
+struct QuestionAnswerState {
+    selection: usize,
+    custom: String,
+}
+
+struct QuestionUi {
+    request: Option<QuestionRequest>,
+    answers: Vec<QuestionAnswerState>,
+    active: usize,
+    scroll: u16,
+    language: UiLanguage,
+}
+
+impl QuestionUi {
+    fn new(request: QuestionRequest, language: UiLanguage) -> Self {
+        let answers = request
+            .questions
+            .iter()
+            .map(|_| QuestionAnswerState {
+                selection: 0,
+                custom: String::new(),
+            })
+            .collect();
+        Self {
+            request: Some(request),
+            answers,
+            active: 0,
+            scroll: 0,
+            language,
+        }
+    }
+
+    fn handle_key(&mut self, key: KeyEvent) -> bool {
+        let Some(request) = self.request.as_ref() else {
+            return true;
+        };
+        if request.questions.is_empty() {
+            return self.finish(Some(BTreeMap::new()));
+        }
+        let option_count = request.questions[self.active].options.len();
+        match key.code {
+            KeyCode::Esc => self.finish(None),
+            KeyCode::Tab => {
+                self.active = (self.active + 1) % request.questions.len();
+                false
+            }
+            KeyCode::BackTab => {
+                self.active = self
+                    .active
+                    .checked_sub(1)
+                    .unwrap_or(request.questions.len() - 1);
+                false
+            }
+            KeyCode::Up | KeyCode::Left => {
+                let choices = option_count + 1;
+                self.answers[self.active].selection = self.answers[self.active]
+                    .selection
+                    .checked_sub(1)
+                    .unwrap_or(choices - 1);
+                false
+            }
+            KeyCode::Down | KeyCode::Right => {
+                self.answers[self.active].selection =
+                    (self.answers[self.active].selection + 1) % (option_count + 1);
+                false
+            }
+            KeyCode::Backspace => {
+                let state = &mut self.answers[self.active];
+                state.selection = option_count;
+                state.custom.pop();
+                false
+            }
+            KeyCode::Char(character) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                let state = &mut self.answers[self.active];
+                state.selection = option_count;
+                state.custom.push(character);
+                false
+            }
+            KeyCode::Enter => {
+                if self.selected_value(self.active).is_none() {
+                    return false;
+                }
+                if self.active + 1 < request.questions.len() {
+                    self.active += 1;
+                    false
+                } else {
+                    let answers = request
+                        .questions
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, question)| {
+                            self.selected_value(index)
+                                .map(|value| (question.id.clone(), value))
+                        })
+                        .collect::<BTreeMap<_, _>>();
+                    if answers.len() == request.questions.len() {
+                        self.finish(Some(answers))
+                    } else {
+                        false
+                    }
+                }
+            }
+            KeyCode::PageUp => {
+                self.scroll_up(5);
+                false
+            }
+            KeyCode::PageDown => {
+                self.scroll_down(5);
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn selected_value(&self, index: usize) -> Option<String> {
+        let request = self.request.as_ref()?;
+        let question = request.questions.get(index)?;
+        let state = self.answers.get(index)?;
+        if let Some(option) = question.options.get(state.selection) {
+            Some(option.value.clone())
+        } else {
+            let custom = state.custom.trim();
+            (!custom.is_empty()).then(|| custom.to_owned())
+        }
+    }
+
+    fn view(&self) -> PopupView {
+        let mut lines = Vec::new();
+        if let Some(request) = &self.request {
+            for (question_index, question) in request.questions.iter().enumerate() {
+                let active = if question_index == self.active {
+                    ">"
+                } else {
+                    " "
+                };
+                lines.push(format!(
+                    "{active} {} — {}",
+                    question.header, question.prompt
+                ));
+                let state = &self.answers[question_index];
+                for (option_index, option) in question.options.iter().enumerate() {
+                    let selected = if state.selection == option_index {
+                        "(*)"
+                    } else {
+                        "( )"
+                    };
+                    lines.push(format!(
+                        "    {selected} {} — {}",
+                        option.label, option.description
+                    ));
+                }
+                let custom_selected = state.selection == question.options.len();
+                let selected = if custom_selected { "(*)" } else { "( )" };
+                let custom = if state.custom.is_empty() {
+                    match self.language {
+                        UiLanguage::ZhCn => "输入自定义值…",
+                        UiLanguage::En => "Enter a custom value…",
+                    }
+                } else {
+                    state.custom.as_str()
+                };
+                lines.push(format!("    {selected} {custom}"));
+                lines.push(String::new());
+            }
+        }
+        PopupView {
+            title: localized_status(self.language, "需要补充信息", "Additional input required"),
+            lines,
+            footer: vec![localized_status(
+                self.language,
+                "↑/↓ 选择  Tab 切换字段  输入=自定义  Enter 下一项/提交  Esc 取消",
+                "↑/↓ select  Tab field  type=custom  Enter next/submit  Esc cancel",
+            )],
+            scroll: self.scroll,
+            min_height: 10,
+            dangerous: false,
+            informational: true,
+        }
+    }
+
+    fn scroll_up(&mut self, rows: u16) {
+        self.scroll = self.scroll.saturating_sub(rows);
+    }
+
+    fn scroll_down(&mut self, rows: u16) {
+        self.scroll = self.scroll.saturating_add(rows);
+    }
+
+    fn finish(&mut self, answers: Option<QuestionAnswers>) -> bool {
+        if let Some(request) = self.request.take() {
+            let _ = request.reply.send(answers);
+        }
+        true
     }
 }
 
@@ -3024,6 +3305,69 @@ mod tests {
             ),
             response,
         )
+    }
+
+    fn question_request() -> (QuestionUi, oneshot::Receiver<Option<QuestionAnswers>>) {
+        let (reply, response) = oneshot::channel();
+        (
+            QuestionUi::new(
+                QuestionRequest {
+                    questions: vec![
+                        UserQuestion {
+                            id: "sample_rate".into(),
+                            header: "采样率".into(),
+                            prompt: "请选择采样率".into(),
+                            options: vec![crate::agent::QuestionOption {
+                                label: "48000 Hz".into(),
+                                value: "48000".into(),
+                                description: "常用".into(),
+                            }],
+                        },
+                        UserQuestion {
+                            id: "channels".into(),
+                            header: "声道数".into(),
+                            prompt: "请选择声道数".into(),
+                            options: vec![crate::agent::QuestionOption {
+                                label: "单声道".into(),
+                                value: "1".into(),
+                                description: "1 channel".into(),
+                            }],
+                        },
+                    ],
+                    reply,
+                },
+                UiLanguage::ZhCn,
+            ),
+            response,
+        )
+    }
+
+    #[test]
+    fn question_window_accepts_suggested_and_custom_answers() {
+        let (mut ui, mut response) = question_request();
+        let view = ui.view();
+        assert!(view.lines.iter().any(|line| line.contains("48000 Hz")));
+        assert!(view.lines.iter().any(|line| line.contains("输入自定义值")));
+
+        assert!(!ui.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
+        assert!(!ui.handle_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE,)));
+        assert!(ui.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
+        let answers = response
+            .try_recv()
+            .expect("question answers should be returned")
+            .expect("question should not be cancelled");
+        assert_eq!(
+            answers.get("sample_rate").map(String::as_str),
+            Some("48000")
+        );
+        assert_eq!(answers.get("channels").map(String::as_str), Some("2"));
+    }
+
+    #[test]
+    fn question_window_escape_cancels_without_answers() {
+        let (mut ui, mut response) = question_request();
+        assert!(ui.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)));
+        assert_eq!(response.try_recv(), Ok(None));
     }
 
     #[test]

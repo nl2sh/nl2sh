@@ -98,6 +98,7 @@ pub fn load_or_default_unvalidated(path: &Path) -> Result<Config> {
         config.api_key = key;
     }
     apply_ima_environment(&mut config);
+    apply_jev_environment(&mut config);
     Ok(config)
 }
 
@@ -135,6 +136,7 @@ fn load_from_unvalidated(path: &Path) -> Result<Config> {
         config.api_key = key;
     }
     apply_ima_environment(&mut config);
+    apply_jev_environment(&mut config);
     config.source = Some(path.to_path_buf());
     Ok(config)
 }
@@ -151,5 +153,17 @@ fn apply_ima_environment(config: &mut Config) {
     }
     if overridden && config.ima_is_configured() {
         config.ima_enabled = true;
+    }
+}
+
+fn apply_jev_environment(config: &mut Config) {
+    if let Ok(api_key) = env::var("NL2SH_JEV_API_KEY") {
+        config.jev_api_key = api_key;
+    }
+    if let Ok(endpoint) = env::var("NL2SH_JEV_ENDPOINT") {
+        config.jev_endpoint = endpoint;
+    }
+    if let Ok(model) = env::var("NL2SH_JEV_MODEL") {
+        config.jev_model = model;
     }
 }

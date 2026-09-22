@@ -1,6 +1,10 @@
 //! Reusable nl2sh core. UI and CLI are deliberately thin adapters.
 /// Agent loop, conversation policy, confirmation, and built-in tools.
 pub mod agent;
+/// Audio-quality judgment using Jev or the configured general LLM.
+pub mod audio_quality;
+/// Deterministic WAV/raw-PCM parsing and DSP feature extraction.
+pub mod audio_tools;
 /// Validated TOML configuration and initialization wizard.
 pub mod config;
 pub mod file_references;

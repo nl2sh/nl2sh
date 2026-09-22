@@ -1,7 +1,12 @@
 use super::runtime::{action_fingerprint, normalize_command, LimitType, TaskRuntime};
-use super::{builtin_tools, ConfirmationDecision, Confirmer, ConversationContext, ShellToolArgs};
+use super::{
+    builtin_tools, ConfirmationDecision, Confirmer, ConversationContext, QuestionOption,
+    ShellToolArgs, UserQuestion,
+};
 use crate::{
-    config::Config,
+    audio_quality::judge_audio_quality,
+    audio_tools::{AnalyzeAudioArgs, AudioAnalysisResult, AudioToolExecutor, RawSampleFormat},
+    config::{Config, UiLanguage},
     file_tools::FileToolExecutor,
     ima::ImaClient,
     limits::truncate_text,
@@ -99,9 +104,9 @@ impl AgentRunner<'_> {
         let mut history_turns_evicted = 0;
         let mut runtime = TaskRuntime::new();
         let mut action_history: HashMap<String, (u64, usize)> = HashMap::new();
-        let file_tools = FileToolExecutor::new(
-            &std::env::current_dir().context("cannot determine file-tool base directory")?,
-        )?;
+        let tool_base = std::env::current_dir().context("cannot determine tool base directory")?;
+        let file_tools = FileToolExecutor::new(&tool_base)?;
+        let audio_tools = AudioToolExecutor::new(&tool_base)?;
         let ima = ImaClient::from_config(self.config)?;
         let effective_steps = self
             .config
@@ -195,7 +200,13 @@ impl AgentRunner<'_> {
                 round_calls.push(call.clone());
                 if call.name != "execute_shell_command" {
                     let result = self
-                        .run_non_shell_tool(&file_tools, ima.as_ref(), call.clone(), &mut runtime)
+                        .run_non_shell_tool(
+                            &file_tools,
+                            &audio_tools,
+                            ima.as_ref(),
+                            call.clone(),
+                            &mut runtime,
+                        )
                         .await;
                     step_made_progress |= result.success;
                     results.push(result);
@@ -411,6 +422,7 @@ impl AgentRunner<'_> {
     async fn run_non_shell_tool(
         &self,
         tools: &FileToolExecutor,
+        audio_tools: &AudioToolExecutor,
         ima: Option<&ImaClient>,
         call: crate::llm::ToolCall,
         runtime: &mut TaskRuntime,
@@ -468,6 +480,37 @@ impl AgentRunner<'_> {
                         ConfirmationDecision::Edit(_) => Ok("Patch not applied: edit is unavailable for structured diffs; request a new patch.".into()),
                         ConfirmationDecision::Reject => Ok("Patch not applied: user rejected the displayed diff.".into()),
                     }
+                }
+                "analyze_audio" => {
+                    let mut args = super::tools::parse_analyze_audio(call.arguments)
+                        .context("invalid analyze_audio arguments")?;
+                    let worker = audio_tools.clone();
+                    let worker_args = args.clone();
+                    let mut result = tokio::task::spawn_blocking(move || worker.analyze(&worker_args))
+                        .await
+                        .context("analyze_audio worker failed")??;
+                    if let AudioAnalysisResult::NeedsInput { missing, .. } = &result {
+                        let questions = audio_metadata_questions(missing, self.config.ui_language);
+                        let question_started = Instant::now();
+                        let answers = self.confirmer.ask_questions(&questions).await?;
+                        runtime.add_confirmation_time(question_started.elapsed());
+                        if let Some(answers) = answers {
+                            apply_audio_answers(&mut args, &answers)?;
+                            let worker = audio_tools.clone();
+                            result = tokio::task::spawn_blocking(move || worker.analyze(&args))
+                                .await
+                                .context("analyze_audio retry worker failed")??;
+                        }
+                    }
+                    serde_json::to_string_pretty(&result)
+                        .context("cannot serialize analyze_audio result")
+                }
+                "judge_audio_quality" => {
+                    let args = super::tools::parse_judge_audio_quality(call.arguments)
+                        .context("invalid judge_audio_quality arguments")?;
+                    let judgment = judge_audio_quality(self.config, self.llm, &args).await?;
+                    serde_json::to_string_pretty(&judgment)
+                        .context("cannot serialize judge_audio_quality result")
                 }
                 "ima_list_knowledge_bases" => ima
                     .context("ima connector is not configured")?
@@ -527,9 +570,115 @@ impl AgentRunner<'_> {
     }
 }
 
+fn audio_metadata_questions(missing: &[String], language: UiLanguage) -> Vec<UserQuestion> {
+    missing
+        .iter()
+        .filter_map(|field| match field.as_str() {
+            "sample_rate" => Some(UserQuestion {
+                id: field.clone(),
+                header: localized_question(language, "采样率", "Sample rate"),
+                prompt: localized_question(
+                    language,
+                    "请选择采样率（Hz），或输入自定义数值。",
+                    "Select the sample rate in Hz, or enter a custom value.",
+                ),
+                options: [48_000, 16_000, 44_100]
+                    .into_iter()
+                    .map(|value| QuestionOption {
+                        label: format!("{value} Hz"),
+                        value: value.to_string(),
+                        description: localized_question(
+                            language,
+                            "常见原始 PCM 采样率",
+                            "Common raw PCM sample rate",
+                        ),
+                    })
+                    .collect(),
+            }),
+            "channels" => Some(UserQuestion {
+                id: field.clone(),
+                header: localized_question(language, "声道数", "Channels"),
+                prompt: localized_question(
+                    language,
+                    "请选择声道数，或输入自定义数值。",
+                    "Select the channel count, or enter a custom value.",
+                ),
+                options: [("1", "单声道", "Mono"), ("2", "立体声", "Stereo")]
+                    .into_iter()
+                    .map(|(value, zh, en)| QuestionOption {
+                        label: localized_question(language, zh, en),
+                        value: value.into(),
+                        description: format!("{value} channel(s)"),
+                    })
+                    .collect(),
+            }),
+            "sample_format" => Some(UserQuestion {
+                id: field.clone(),
+                header: localized_question(language, "采样格式", "Sample format"),
+                prompt: localized_question(
+                    language,
+                    "请选择小端 PCM 采样格式。",
+                    "Select the little-endian PCM sample format.",
+                ),
+                options: ["s16le", "s24le", "s32le", "f32le"]
+                    .into_iter()
+                    .map(|value| QuestionOption {
+                        label: value.into(),
+                        value: value.into(),
+                        description: localized_question(
+                            language,
+                            "原始 PCM 样本编码",
+                            "Raw PCM sample encoding",
+                        ),
+                    })
+                    .collect(),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+fn localized_question(language: UiLanguage, zh_cn: &str, en: &str) -> String {
+    match language {
+        UiLanguage::ZhCn => zh_cn,
+        UiLanguage::En => en,
+    }
+    .into()
+}
+
+fn apply_audio_answers(
+    args: &mut AnalyzeAudioArgs,
+    answers: &std::collections::BTreeMap<String, String>,
+) -> Result<()> {
+    if let Some(value) = answers.get("sample_rate") {
+        args.sample_rate = Some(
+            value
+                .parse::<u32>()
+                .context("sample_rate answer must be a positive integer")?,
+        );
+    }
+    if let Some(value) = answers.get("channels") {
+        args.channels = Some(
+            value
+                .parse::<u16>()
+                .context("channels answer must be a positive integer")?,
+        );
+    }
+    if let Some(value) = answers.get("sample_format") {
+        args.sample_format = Some(match value.as_str() {
+            "s16le" => RawSampleFormat::S16Le,
+            "s24le" => RawSampleFormat::S24Le,
+            "s32le" => RawSampleFormat::S32Le,
+            "f32le" => RawSampleFormat::F32Le,
+            _ => bail!("sample_format answer must be s16le, s24le, s32le, or f32le"),
+        });
+    }
+    Ok(())
+}
+
 fn system_prompt(runtime: Option<&str>) -> String {
     let mut system = format!(
-        "You are an Android device shell agent. Prefer read_file, list_dir, search_text, and apply_patch for file work; do not use sed, shell redirection, or echo to edit files. Use execute_shell_command for other evidence. Never claim unexecuted results. {} Write the final answer in the user's language for a human reader. Summarize conclusions instead of dumping raw tool protocol output. Use a concise Markdown table when comparing multiple items or presenting repeated structured fields; otherwise use clear concise text.",
+        "You are an Android device shell agent. Prefer read_file, list_dir, search_text, and apply_patch for text file work; do not use sed, shell redirection, or echo to edit files. For local WAV or raw PCM audio, use analyze_audio instead of read_file or shell commands. Use analyze_audio alone for objective metrics such as clipping, SNR estimate, levels, silence, or spectrum. Use judge_audio_quality only when the user asks for qualitative, perceptual, suitability, or overall audio-quality judgment. If analyze_audio returns status=needs_input, do not guess the missing raw PCM metadata and do not probe it with shell commands; ask the user only for the fields listed in missing, then call analyze_audio again with those fields. Use execute_shell_command for other evidence. Never claim unexecuted results. {} Write the final answer in the user's language for a human reader. Summarize conclusions instead of dumping raw tool protocol output. Use a concise Markdown table when comparing multiple items or presenting repeated structured fields; otherwise use clear concise text.",
         android_shell_constraints()
     );
     if let Some(runtime) = runtime {

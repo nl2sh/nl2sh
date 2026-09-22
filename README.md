@@ -14,6 +14,8 @@ Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环�
 - 核心程序是单文件 Android 可执行程序，可直接推送到设备运行。
 - 丰富 TUI 支持 LLM 文本流式渐变输出、实时状态与命令输出、内嵌确认、历史滚动、工具结果折叠、Markdown 渲染、中英文界面和热重配置。
 - 内置 `read_file`、`list_dir`、`search_text`、`apply_patch` 结构化文件工具；允许绝对路径、父目录和符号链接，资源大小仍受限，补丁先展示 diff 并确认。
+- 内置 `analyze_audio` 对 WAV/Raw PCM 做纯 Rust 确定性 DSP 分析；WAV 以真实 header 为准，无头 PCM 缺少可靠元数据时弹出结构化问答窗口，可直接选择常用值或输入自定义采样率、声道数和采样格式，不会把猜测当事实。
+- 内置 `judge_audio_quality` 对 Feature JSON 做多维音质判断；配置 Jev Key 时使用 Jev，否则使用当前通用 LLM，原始 WAV 不上传给判断模型。
 - 输入 `@` 可引用文件或目录并显示候选，支持相对/绝对路径及 `@~`、`@/`、`@.`；Up/Down 选择、Enter/Tab 补全，也可直接输入 `@test.txt写的是什么内容`。引用只解析路径，内容由有界结构化文件工具读取。
 - 可选接入腾讯 ima 知识库，Agent 可发现知识库、搜索资料并读取有界原文；连接器只读、始终无代理直连，不提供上传、追加、导入或删除操作。
 - 完整对话自动保存，可用 `/sessions` 列表、恢复、重命名或删除；凭据、余额和临时审批不保存。

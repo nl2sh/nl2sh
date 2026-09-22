@@ -1,7 +1,37 @@
 use crate::security::{RiskLevel, SecurityAssessment};
 use anyhow::Result;
 use async_trait::async_trait;
-use std::io::{self, IsTerminal, Write};
+use std::{
+    collections::BTreeMap,
+    io::{self, IsTerminal, Write},
+};
+
+/// One selectable answer shown for a structured user question.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuestionOption {
+    /// Short label displayed in interactive interfaces.
+    pub label: String,
+    /// Machine-readable value returned to the Agent.
+    pub value: String,
+    /// Optional explanation of the choice.
+    pub description: String,
+}
+
+/// One structured question that accepts a listed option or custom text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserQuestion {
+    /// Stable identifier used to associate the answer with a tool argument.
+    pub id: String,
+    /// Compact field heading.
+    pub header: String,
+    /// User-facing prompt.
+    pub prompt: String,
+    /// Suggested answers; interactive interfaces must also permit custom text.
+    pub options: Vec<QuestionOption>,
+}
+
+/// Answers returned from a structured user-question interface.
+pub type QuestionAnswers = BTreeMap<String, String>;
 #[async_trait]
 /// UI-independent approval interface invoked after every assessment.
 pub trait Confirmer: Send + Sync {
@@ -11,6 +41,11 @@ pub trait Confirmer: Send + Sync {
         command: &str,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision>;
+
+    /// Requests missing factual input without granting execution approval.
+    async fn ask_questions(&self, _questions: &[UserQuestion]) -> Result<Option<QuestionAnswers>> {
+        Ok(None)
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// User decision returned by a confirmation interface.
@@ -98,6 +133,35 @@ impl Confirmer for StdioConfirmer {
         } else {
             Ok(approval)
         }
+    }
+
+    async fn ask_questions(&self, questions: &[UserQuestion]) -> Result<Option<QuestionAnswers>> {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+            return Ok(None);
+        }
+        let mut answers = BTreeMap::new();
+        for question in questions {
+            println!("{}: {}", question.header, question.prompt);
+            for (index, option) in question.options.iter().enumerate() {
+                println!("  {}. {} — {}", index + 1, option.label, option.description);
+            }
+            print!("Select a number or enter a custom value (empty cancels): ");
+            io::stdout().flush()?;
+            let mut answer = String::new();
+            io::stdin().read_line(&mut answer)?;
+            let answer = answer.trim();
+            if answer.is_empty() {
+                return Ok(None);
+            }
+            let value = answer
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| question.options.get(index.saturating_sub(1)))
+                .map(|option| option.value.clone())
+                .unwrap_or_else(|| answer.to_owned());
+            answers.insert(question.id.clone(), value);
+        }
+        Ok(Some(answers))
     }
 }
 fn ask_exact_yes(prompt: &str) -> Result<bool> {

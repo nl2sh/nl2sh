@@ -112,6 +112,12 @@ pub struct Config {
     pub ima_api_key: String,
     /// Optional default knowledge-base ID used instead of account discovery.
     pub ima_knowledge_base_id: Option<String>,
+    /// Optional TypeSafe Jev API key used only by judge_audio_quality.
+    pub jev_api_key: String,
+    /// Jev System One endpoint.
+    pub jev_endpoint: String,
+    /// Jev model alias or version.
+    pub jev_model: String,
     /// Provider model identifier.
     pub model: String,
     /// Optional user/provider context-window override in tokens.
@@ -222,6 +228,9 @@ impl Default for Config {
             ima_client_id: String::new(),
             ima_api_key: String::new(),
             ima_knowledge_base_id: None,
+            jev_api_key: String::new(),
+            jev_endpoint: "https://api.typesafe.ai/v1/systemone".into(),
+            jev_model: "jev-latest".into(),
             model: "openrouter/free".into(),
             model_context_window: None,
             model_max_output_tokens: None,
@@ -312,6 +321,16 @@ impl Config {
         if self.ima_enabled && !self.ima_is_configured() {
             bail!("enabled ima integration requires ima_client_id and ima_api_key")
         }
+        if self.jev_is_configured() {
+            let jev_url =
+                Url::parse(&self.jev_endpoint).context("jev_endpoint is not a valid URL")?;
+            if !matches!(jev_url.scheme(), "http" | "https") {
+                bail!("jev_endpoint must use http or https")
+            }
+            if self.jev_model.trim().is_empty() {
+                bail!("jev_model must not be empty when Jev is configured")
+            }
+        }
         if self.max_context_turns == 0
             || self.max_agent_steps == 0
             || self.max_tool_calls == 0
@@ -401,5 +420,10 @@ impl Config {
     /// Reports whether both ima OpenAPI credentials are present.
     pub fn ima_is_configured(&self) -> bool {
         !self.ima_client_id.trim().is_empty() && !self.ima_api_key.trim().is_empty()
+    }
+
+    /// Reports whether the optional Jev judgment backend is enabled.
+    pub fn jev_is_configured(&self) -> bool {
+        !self.jev_api_key.trim().is_empty()
     }
 }
