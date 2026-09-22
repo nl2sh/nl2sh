@@ -61,7 +61,7 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 | `src/runtime` | `AndroidRuntime`、Termux 标记与 prefix 探测 | 进程环境 → Android shell/Termux | 只提供兼容性信息和 shell/path 选择，不参与安全分类、确认或 root 授权 |
 | `src/network` | 统一 rustls HTTP Client、HTTP/SOCKS 代理、认证和绕过策略 | `Config` → `reqwest::Client` | 代理凭据不得进入日志、错误详情或模型上下文；关闭总开关不清理配置 |
 | `src/web_tools` | 公网 HTTP(S) 有界读取、确认后 JSON POST 与原子下载 | GET/HEAD/JSON POST URL 或 URL+目标路径 → 有界正文/文件 | 禁止重定向、URL 凭据、本机/私网目标和任意 header；POST、下载均须确认 |
-| `src/ui_tools` | UIAutomator 控件树、焦点窗口、显示信息、截图及 PNG 模型附件 | 当前界面/本地 PNG → 有界结构化节点、PNG 或临时多模态内容 | 截图写入必须确认；图片限 2 MiB，只进入下一模型请求，不持久化到会话 |
+| `src/ui_tools` | UIAutomator 控件树、焦点窗口、显示信息、截图及模型图片附件 | 当前界面/本地 PNG、JPEG、WebP → 紧凑或完整的有界节点、截图或临时多模态内容 | 固定内部探测静默执行；超限图片在进程内有界缩放；截图写入必须确认；附件只进入下一模型请求，不持久化到会话 |
 | `src/tls_tools` | 公网 TLS 握手、SNI/信任链校验和 X.509 元数据 | 主机/端口 → 证书主题、颁发者、有效期与 SHA-256 | 只读直连，不发送 HTTP；拒绝本机/私网目标，使用 ring 与 Mozilla 根证书集合 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、工具 schema、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |

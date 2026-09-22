@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Made Android visual workflows bounded and evidence-driven: compact UI inspection, post-input UI state, PNG/JPEG/WebP viewing with in-process downscaling, provider-error detection, and corrected MediaStore projections and ordering.
 - Moved the canonical source, release history, package, support, and self-update links to the `nl2sh` GitHub organization, and refreshed the project logo and Cargo package metadata.
 
 ### Added
