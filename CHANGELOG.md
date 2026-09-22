@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Stabilized the live-TUI Agent-response regression by using a valid Responses SSE fixture, disabling startup decoration in that test, and avoiding assertions against fragmented raw ratatui ANSI output.
 - Added a process-lifetime approval option and `/permission` controls for eligible mutations; root, strong-confirmation, Dangerous, and Critical operations remain individually confirmed.
 - Made Android visual workflows bounded and evidence-driven: compact UI inspection, post-input UI state, PNG/JPEG/WebP viewing with in-process downscaling, provider-error detection, and corrected MediaStore projections and ordering.
 - Moved the canonical source, release history, package, support, and self-update links to the `nl2sh` GitHub organization, and refreshed the project logo and Cargo package metadata.

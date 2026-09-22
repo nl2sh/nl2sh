@@ -4,6 +4,7 @@ Last Updated: 2026-09-22
 
 ## Recent Changes
 
+- 修复长期超时的 TUI 保活回归：用例不再从 ratatui 原始差分 ANSI 字节流匹配连续中文，也不再混测 `/help` 与 `/clear`；测试关闭启动装饰、复用统一 PTY 启动器，并以合法 Responses SSE 增量及完成事件验证 Agent 回答显示、TUI 保活、Ctrl+Q 退出和审计记录。
 - 权限确认新增“本次运行全部允许”选项，并新增 `/permission [status|allow|ask]` 本地命令；运行期许可只存在于当前进程内存，仅自动批准非 Root、无需强确认且最高为 `Mutating` 的操作，Dangerous、Critical、Root 与强确认仍必须逐次审批。
 - 修复 Android 视觉任务闭环：截图查看接受 PNG/JPEG/WebP，超出 2 MiB 时在进程内有界缩放；UI 检查默认仅返回可操作、有标签或聚焦节点，输入成功后直接附带最新界面状态。固定结构化探测改用静默执行，不再把内部 UI XML 或 dumpsys 原文重复写入实时输出与审计 sink。
 - 修复 ContentProvider/MediaStore 假成功：投影支持结构化列数组并规范化为 Android `content` 语法，识别退出码为零但正文含 provider 异常的结果；媒体列改为 `datetaken`、`date_added` 与 `_size`，支持按创建时间过滤、倒序和兼容投影回退。最终回答约束禁止从拍摄元数据推断画面内容，视觉检查失败时必须明确报告部分完成。
@@ -88,7 +89,7 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 - Product positioning: 以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent；核心程序以单个可执行文件交付，提供多轮 Tool Calling 和丰富 TUI，不声称与 Hermes API 或插件兼容。
 - Build status: 1.0.1 的 stable Rust 检查、Clippy 与 AArch64 API 26 包管理版 release 交叉编译通过。
-- Test status: 1.0.1 新增 runtime/Termux prompt 测试通过；全量测试仍只有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画的 ratatui 差分 ANSI 输出无法形成连续原始文本而超时。
+- Test status: 全量 `cargo test --all-targets` 通过；显式凭据 ima live smoke 按设计忽略。
 - Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
 - CI release workflow: 已添加 `.github/workflows/release.yml`，在推送 `v*` tag 时用 GitHub Actions 并行交叉编译 `aarch64-linux-android` 与 `armv7-linux-androideabi`，将两个程序放入统一包的 ABI 子目录，并与自动选择设备/ABI 的 Linux/Windows BAT 启动脚本、`config.toml.example`、`使用说明.md` 打包为单一 `.tar.gz`/`.zip`，附带 SHA256 校验和发布到 GitHub Release；`workflow_dispatch` 可手动触发草稿发布。
@@ -172,6 +173,7 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
+- TUI 保活回归稳定化：目标用例连续运行 5 次通过；`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 和全量 `cargo test --all-targets` 通过，其中 114 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及全部 7 项 TUI 伪终端测试通过，1 项显式凭据 ima live smoke 按设计忽略。
 - 运行期权限许可：`cargo fmt --all -- --check`、`cargo check --all-targets` 与 `cargo clippy --all-targets -- -D warnings` 通过；114 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及其余非 TUI 测试通过，AArch64 Android API 26 release 交叉编译通过。新增回归覆盖确认框运行期许可及高风险禁用；全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - Android 视觉闭环可靠性修复：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 通过；113 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及其余非 TUI 测试通过，AArch64 Android API 26 release 交叉编译通过。MediaStore 首选投影在真机以 `_size`、`datetaken`、`date_added` 验证不再返回 provider 列异常。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - Android 交互闭环与结构化运维：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings`、111 项有效库测试及其余非 TUI 测试通过；AArch64 Android API 26 release 交叉编译通过。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
