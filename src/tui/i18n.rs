@@ -86,6 +86,7 @@ pub(crate) fn help_history(
         UiLanguage::ZhCn => vec![
             format!("{hint} /help 显示此帮助"),
             format!("{hint} /clear 清空当前会话的对话、模型上下文和输入历史；审计日志保留"),
+            format!("{hint} /new 开始新的空白会话；已保存会话和审计日志保留"),
             format!("{hint} /sessions 打开最近会话列表；输入序号或用 ↑/↓ 选择并恢复"),
             format!("{hint} /exit 安全退出"),
             format!("{hint} /shell 进入普通命令终端；输入 exit 或按 Ctrl+D 返回 TUI"),
@@ -101,6 +102,7 @@ pub(crate) fn help_history(
         UiLanguage::En => vec![
             format!("{hint} /help show this help"),
             format!("{hint} /clear clear this session's conversation, model context, and input history; keep the audit log"),
+            format!("{hint} /new start a blank session; keep saved sessions and the audit log"),
             format!("{hint} /sessions opens recent sessions; type a number or use Up/Down to restore"),
             format!("{hint} /exit quit safely"),
             format!("{hint} /shell open a regular command terminal; type exit or press Ctrl+D to return to the TUI"),

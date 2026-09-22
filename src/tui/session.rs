@@ -579,15 +579,20 @@ async fn run_inner(
                 Err(error) => {
                     discard_llm_stream(&history)?;
                     finalize_live_output(&history)?;
+                    let diagnostic = provider_error_diagnostic(&error, config.ui_language);
                     push_history(
                         &history,
                         format!(
-                            "{} {error:#}",
+                            "{} {error:#}{}",
                             if config.ascii_symbols {
                                 "[ERROR]"
                             } else {
                                 "❌"
-                            }
+                            },
+                            diagnostic
+                                .as_deref()
+                                .map(|value| format!("\n{value}"))
+                                .unwrap_or_default()
                         ),
                         &log,
                         "error",
@@ -1035,6 +1040,22 @@ async fn run_inner(
                             );
                             continue;
                         }
+                        "/new" => {
+                            log.record("local_command", "/new")?;
+                            history
+                                .lock()
+                                .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
+                                .clear();
+                            model_history.clear();
+                            app.clear_session_state();
+                            session_name = SessionStore::default_name();
+                            app.status = localized_status(
+                                config.ui_language,
+                                "已开始新的空白会话",
+                                "started a new blank session",
+                            );
+                            continue;
+                        }
                         _ => {}
                     }
                     if input.split_whitespace().next() == Some("/sessions") {
@@ -1169,18 +1190,31 @@ async fn run_inner(
                     }
                     if input.trim_start().starts_with('/') {
                         log.record("unknown_local_command", input.trim())?;
+                        let suggestion = super::app::closest_local_command(input.trim());
                         history
                             .lock()
                             .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
                             .push(match config.ui_language {
-                                UiLanguage::ZhCn => format!(
-                                    "⚠️ 未知本地命令：{}。输入 /help 查看可用命令。",
-                                    input.trim()
-                                ),
-                                UiLanguage::En => format!(
-                                    "[WARN] Unknown local command: {}. Use /help to list commands.",
-                                    input.trim()
-                                ),
+                                UiLanguage::ZhCn => match suggestion {
+                                    Some(command) => format!(
+                                        "⚠️ 未知本地命令：{}。你是否想输入 {command}？未执行任何操作。",
+                                        input.trim()
+                                    ),
+                                    None => format!(
+                                        "⚠️ 未知本地命令：{}。输入 /help 查看可用命令。",
+                                        input.trim()
+                                    ),
+                                },
+                                UiLanguage::En => match suggestion {
+                                    Some(command) => format!(
+                                        "[WARN] Unknown local command: {}. Did you mean {command}? Nothing was executed.",
+                                        input.trim()
+                                    ),
+                                    None => format!(
+                                        "[WARN] Unknown local command: {}. Use /help to list commands.",
+                                        input.trim()
+                                    ),
+                                },
                             });
                         app.status = localized_status(
                             config.ui_language,
@@ -1291,6 +1325,44 @@ async fn run_inner(
             }
         }
     }
+}
+
+fn provider_error_diagnostic(error: &anyhow::Error, language: UiLanguage) -> Option<String> {
+    let message = format!("{error:#}").to_ascii_lowercase();
+    let (zh, en) = if message.contains("401") || message.contains("unauthorized") {
+        (
+            "诊断：Provider 或代理凭据无效/已过期。请打开 /config 检查 API Key、Endpoint 与代理认证；此错误不会自动重试。",
+            "Diagnostic: provider or proxy credentials are invalid or expired. Open /config and check the API key, endpoint, and proxy authentication; this error is not retried automatically.",
+        )
+    } else if message.contains("429") || message.contains("too many requests") {
+        (
+            "诊断：Provider 正在限流。可稍后重试，或在 /config 切换模型/服务；程序只执行有上限退避。",
+            "Diagnostic: the provider is rate limiting requests. Retry later or change the model/provider in /config; retries use bounded backoff.",
+        )
+    } else if message.contains("responses stream ended before completion")
+        || message.contains("stream ended before completion")
+    {
+        (
+            "诊断：流式响应在完成标记前结束，未把部分文本当作完整回答。请重试；若持续发生，可在 /config 切换 API 协议。",
+            "Diagnostic: the stream ended before its completion marker, so partial text was not accepted as a complete answer. Retry, or change the API protocol in /config if it persists.",
+        )
+    } else if message.contains("timed out") || message.contains("timeout") {
+        (
+            "诊断：网络请求超时。请检查设备网络、代理与 Endpoint；已产生的工具证据仍保留。",
+            "Diagnostic: the network request timed out. Check device networking, proxy settings, and the endpoint; completed tool evidence was retained.",
+        )
+    } else if message.contains("ima") {
+        (
+            "诊断：ima 只读连接器失败。请在 /config 检查 ima 开关、Client ID/API Key 与直连网络；它不会回退为模型常识回答。",
+            "Diagnostic: the read-only ima connector failed. Check its enable switch, Client ID/API key, and direct network access in /config; it does not fall back to an unsupported model-only answer.",
+        )
+    } else {
+        return None;
+    };
+    Some(match language {
+        UiLanguage::ZhCn => zh.to_owned(),
+        UiLanguage::En => en.to_owned(),
+    })
 }
 
 fn apply_windows_scroll_action(app: &mut App, action: Option<super::events::WindowsScrollAction>) {
@@ -3512,5 +3584,22 @@ mod tests {
             Err(oneshot::error::TryRecvError::Empty)
         ));
         assert!(ui.request.is_some());
+    }
+
+    #[test]
+    fn provider_errors_receive_actionable_local_diagnostics() {
+        let unauthorized = anyhow::anyhow!("LLM HTTP 401 Unauthorized: redacted");
+        let hint = provider_error_diagnostic(&unauthorized, UiLanguage::ZhCn).unwrap_or_default();
+        assert!(hint.contains("/config"));
+        assert!(hint.contains("不会自动重试"));
+
+        let stream = anyhow::anyhow!("Responses stream ended before completion");
+        let hint = provider_error_diagnostic(&stream, UiLanguage::En).unwrap_or_default();
+        assert!(hint.contains("partial text"));
+        assert!(provider_error_diagnostic(
+            &anyhow::anyhow!("unrelated local failure"),
+            UiLanguage::En
+        )
+        .is_none());
     }
 }

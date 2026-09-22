@@ -262,6 +262,35 @@ async fn slash_config_reconfigures_and_returns_to_tui() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn new_session_and_local_command_typo_stay_local() -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "show_buddha_ascii_art=false\nshow_train_ascii_art=false\n",
+    )?;
+    let mut process = spawn_tui(&config)?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+
+    process.master.write_all(b"/new\r")?;
+    sleep(Duration::from_millis(200)).await;
+    process.master.write_all(b"/confiig\r")?;
+    sleep(Duration::from_millis(200)).await;
+
+    let log = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
+    assert!(log.contains("/new"));
+    assert!(log.contains("unknown_local_command"));
+    assert!(!log
+        .lines()
+        .any(|line| line.contains("\"kind\":\"user\"") && line.contains("/confiig")));
+    process.master.write_all(&[0x11])?;
+    assert!(timeout(Duration::from_secs(3), process.child.wait())
+        .await??
+        .success());
+    Ok(())
+}
+
 fn spawn_tui(config: &std::path::Path) -> anyhow::Result<PtyChild> {
     let pair = openpty(
         Some(&Winsize {

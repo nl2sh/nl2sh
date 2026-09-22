@@ -11,6 +11,49 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 const MAX_FILE_SUGGESTIONS: usize = 100;
 const MAX_FILE_ENTRIES_SCANNED: usize = 1_000;
+const LOCAL_COMMANDS: &[&str] = &[
+    "/balance",
+    "/clear",
+    "/config",
+    "/exit",
+    "/help",
+    "/new",
+    "/setting",
+    "/shell",
+    "/update",
+    "/sessions",
+];
+
+pub(crate) fn closest_local_command(input: &str) -> Option<&'static str> {
+    let input = input.trim();
+    if !input.starts_with('/') || input.contains(char::is_whitespace) {
+        return None;
+    }
+    LOCAL_COMMANDS
+        .iter()
+        .copied()
+        .map(|candidate| (edit_distance(input, candidate), candidate))
+        .filter(|(distance, _)| *distance <= 2)
+        .min_by_key(|(distance, _)| *distance)
+        .map(|(_, candidate)| candidate)
+}
+
+fn edit_distance(left: &str, right: &str) -> usize {
+    let right = right.chars().collect::<Vec<_>>();
+    let mut previous = (0..=right.len()).collect::<Vec<_>>();
+    for (row, left_char) in left.chars().enumerate() {
+        let mut current = vec![row + 1];
+        for (column, right_char) in right.iter().enumerate() {
+            current.push(
+                (current[column] + 1)
+                    .min(previous[column + 1] + 1)
+                    .min(previous[column] + usize::from(left_char != *right_char)),
+            );
+        }
+        previous = current;
+    }
+    previous[right.len()]
+}
 pub(crate) const WELCOME_TRAIN_WIDTH: usize = 44;
 pub(crate) const WELCOME_TRAIN_SPEED: usize = 1;
 pub(crate) const WELCOME_TRAIN_FRAME_INTERVAL: Duration = Duration::from_millis(33);
@@ -321,22 +364,11 @@ impl App {
     }
 
     pub(crate) fn command_suggestions(&self) -> Vec<&'static str> {
-        const COMMANDS: &[&str] = &[
-            "/balance",
-            "/clear",
-            "/config",
-            "/exit",
-            "/help",
-            "/setting",
-            "/shell",
-            "/update",
-            "/sessions",
-        ];
         let query = self.input.text.trim();
         if !query.starts_with('/') || query.contains(char::is_whitespace) {
             return Vec::new();
         }
-        COMMANDS
+        LOCAL_COMMANDS
             .iter()
             .copied()
             .filter(|command| command.starts_with(query))
@@ -695,5 +727,13 @@ mod tests {
         }
         assert_eq!(suggestions, vec!["~/documents/"]);
         Ok(())
+    }
+
+    #[test]
+    fn suggests_close_local_commands_without_matching_natural_language() {
+        assert_eq!(closest_local_command("/confiig"), Some("/config"));
+        assert_eq!(closest_local_command("/new"), Some("/new"));
+        assert_eq!(closest_local_command("/something-unrelated"), None);
+        assert_eq!(closest_local_command("/config extra"), None);
     }
 }
