@@ -58,6 +58,11 @@ pub enum ConfirmationDecision {
     ApproveCaptured,
     /// Execute and remember this exact command for the current Agent task.
     ApproveForTask,
+    /// Execute and allow eligible mutations for the remainder of this process run.
+    ///
+    /// Callers must still reject this decision for root, strong-confirmation,
+    /// Dangerous, or Critical assessments.
+    ApproveForRun,
     /// Do not execute it.
     Reject,
     /// Replace it and run security assessment again.
@@ -97,15 +102,20 @@ impl Confirmer for StdioConfirmer {
         } else {
             println!("  2. Always allow is unavailable for root or high-risk commands");
         }
-        println!("  3. Reject [n]");
-        println!("  4. Edit and reassess [e]");
-        println!("  5. Run in interactive terminal [i]");
-        println!("  6. Run with captured output [t]");
-        print!("Select an option [1-6/y/n/a/e/i/t]: ");
+        if can_remember_approval(a) {
+            println!("  3. Allow all eligible mutations for this run [r]");
+        } else {
+            println!("  3. Run-wide allow is unavailable for root or high-risk commands");
+        }
+        println!("  4. Reject [n]");
+        println!("  5. Edit and reassess [e]");
+        println!("  6. Run in interactive terminal [i]");
+        println!("  7. Run with captured output [t]");
+        print!("Select an option [1-7/y/n/a/r/e/i/t]: ");
         io::stdout().flush()?;
         let mut choice = String::new();
         io::stdin().read_line(&mut choice)?;
-        if matches!(choice.trim(), "4" | "e" | "E") {
+        if matches!(choice.trim(), "5" | "e" | "E") {
             print!("Edited command [{command}]: ");
             io::stdout().flush()?;
             let mut edited = String::new();
@@ -120,8 +130,9 @@ impl Confirmer for StdioConfirmer {
         let approval = match choice.trim() {
             "1" | "y" | "Y" => ConfirmationDecision::Approve,
             "2" | "a" | "A" if can_remember_approval(a) => ConfirmationDecision::ApproveForTask,
-            "5" | "i" | "I" => ConfirmationDecision::ApproveInteractive,
-            "6" | "t" | "T" => ConfirmationDecision::ApproveCaptured,
+            "3" | "r" | "R" if can_remember_approval(a) => ConfirmationDecision::ApproveForRun,
+            "6" | "i" | "I" => ConfirmationDecision::ApproveInteractive,
+            "7" | "t" | "T" => ConfirmationDecision::ApproveCaptured,
             _ => return Ok(ConfirmationDecision::Reject),
         };
         if a.requires_double_confirmation {

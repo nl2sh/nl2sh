@@ -244,6 +244,11 @@ impl AgentRunner<'_> {
                             }
                             break assessment;
                         }
+                        ConfirmationDecision::ApproveForRun => {
+                            if super::can_remember_approval(&assessment) {
+                                break assessment;
+                            }
+                        }
                         ConfirmationDecision::ApproveInteractive => {
                             interactive_override = Some(true);
                             break assessment;
@@ -501,6 +506,7 @@ impl AgentRunner<'_> {
                     match decision {
                         ConfirmationDecision::Approve
                         | ConfirmationDecision::ApproveForTask
+                        | ConfirmationDecision::ApproveForRun
                         | ConfirmationDecision::ApproveCaptured
                         | ConfirmationDecision::ApproveInteractive => {
                             tokio::task::spawn_blocking(move || patch.apply())
@@ -631,6 +637,7 @@ impl AgentRunner<'_> {
                     match decision {
                         ConfirmationDecision::Approve
                         | ConfirmationDecision::ApproveForTask
+                        | ConfirmationDecision::ApproveForRun
                         | ConfirmationDecision::ApproveCaptured
                         | ConfirmationDecision::ApproveInteractive => {
                             tokio::task::spawn_blocking(move || prepared.apply())
@@ -680,6 +687,7 @@ impl AgentRunner<'_> {
                     match decision {
                         ConfirmationDecision::Approve
                         | ConfirmationDecision::ApproveForTask
+                        | ConfirmationDecision::ApproveForRun
                         | ConfirmationDecision::ApproveCaptured
                         | ConfirmationDecision::ApproveInteractive => {
                             let result = self.executor.execute(&command, false, false).await?;
@@ -814,6 +822,7 @@ impl AgentRunner<'_> {
             decision,
             ConfirmationDecision::Approve
                 | ConfirmationDecision::ApproveForTask
+                | ConfirmationDecision::ApproveForRun
                 | ConfirmationDecision::ApproveCaptured
                 | ConfirmationDecision::ApproveInteractive
         ))

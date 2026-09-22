@@ -137,9 +137,11 @@ async fn run_inner(
         .with_tui_suspend_flag(suspended.clone());
     let (confirm_tx, mut confirm_rx) = mpsc::unbounded_channel();
     let (question_tx, mut question_rx) = mpsc::unbounded_channel();
+    let run_wide_approval = Arc::new(AtomicBool::new(false));
     let confirmer = SessionConfirmer {
         confirm_tx,
         question_tx,
+        run_wide_approval: run_wide_approval.clone(),
     };
     let runner = AgentRunner {
         config,
@@ -911,6 +913,56 @@ async fn run_inner(
                             );
                             continue;
                         }
+                        command
+                            if command == "/permission" || command.starts_with("/permission ") =>
+                        {
+                            log.record("local_command", command)?;
+                            let argument = command
+                                .strip_prefix("/permission")
+                                .unwrap_or_default()
+                                .trim();
+                            match argument {
+                                "allow" => {
+                                    run_wide_approval.store(true, Ordering::Release);
+                                    app.status = localized_status(
+                                        config.ui_language,
+                                        "本次运行已允许普通修改；Root 与高风险仍需确认",
+                                        "eligible mutations allowed for this run; root and high risk still require confirmation",
+                                    );
+                                }
+                                "ask" | "reset" => {
+                                    run_wide_approval.store(false, Ordering::Release);
+                                    app.status = localized_status(
+                                        config.ui_language,
+                                        "本次运行已恢复逐次确认",
+                                        "per-operation confirmation restored for this run",
+                                    );
+                                }
+                                "" | "status" => {
+                                    app.status = if run_wide_approval.load(Ordering::Acquire) {
+                                        localized_status(
+                                            config.ui_language,
+                                            "权限：本次运行允许普通修改；用 /permission ask 关闭",
+                                            "permission: eligible mutations allowed; use /permission ask to disable",
+                                        )
+                                    } else {
+                                        localized_status(
+                                            config.ui_language,
+                                            "权限：逐次确认；用 /permission allow 开启本次运行允许",
+                                            "permission: ask each time; use /permission allow to enable run-wide approval",
+                                        )
+                                    };
+                                }
+                                _ => {
+                                    app.status = localized_status(
+                                        config.ui_language,
+                                        "用法：/permission [status|allow|ask]",
+                                        "usage: /permission [status|allow|ask]",
+                                    );
+                                }
+                            }
+                            continue;
+                        }
                         "/balance" => {
                             if !balance_supported {
                                 app.status = localized_status(
@@ -1416,7 +1468,9 @@ async fn execute_direct_command(
     let mut interactive_override = None;
     while assessment.requires_confirmation {
         match confirmer.confirm(&command, &assessment).await? {
-            ConfirmationDecision::Approve | ConfirmationDecision::ApproveForTask => break,
+            ConfirmationDecision::Approve
+            | ConfirmationDecision::ApproveForTask
+            | ConfirmationDecision::ApproveForRun => break,
             ConfirmationDecision::ApproveInteractive => {
                 interactive_override = Some(true);
                 break;
@@ -2590,6 +2644,7 @@ struct QuestionRequest {
 struct SessionConfirmer {
     confirm_tx: mpsc::UnboundedSender<ConfirmRequest>,
     question_tx: mpsc::UnboundedSender<QuestionRequest>,
+    run_wide_approval: Arc<AtomicBool>,
 }
 
 #[async_trait]
@@ -2599,6 +2654,9 @@ impl Confirmer for SessionConfirmer {
         command: &str,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        if self.run_wide_approval.load(Ordering::Acquire) && can_remember_approval(assessment) {
+            return Ok(ConfirmationDecision::Approve);
+        }
         let (reply, response) = oneshot::channel();
         self.confirm_tx
             .send(ConfirmRequest {
@@ -2607,7 +2665,11 @@ impl Confirmer for SessionConfirmer {
                 reply,
             })
             .map_err(|_| anyhow::anyhow!("TUI confirmation channel closed"))?;
-        response.await.context("TUI confirmation was cancelled")
+        let decision = response.await.context("TUI confirmation was cancelled")?;
+        if decision == ConfirmationDecision::ApproveForRun && can_remember_approval(assessment) {
+            self.run_wide_approval.store(true, Ordering::Release);
+        }
+        Ok(decision)
     }
 
     async fn ask_questions(&self, questions: &[UserQuestion]) -> Result<Option<QuestionAnswers>> {
@@ -2838,15 +2900,17 @@ struct ConfirmationUi {
 enum InitialAction {
     AllowOnce,
     AllowForTask,
+    AllowForRun,
     Reject,
     Edit,
     Interactive,
     Captured,
 }
 
-const INITIAL_ACTIONS: [InitialAction; 6] = [
+const INITIAL_ACTIONS: [InitialAction; 7] = [
     InitialAction::AllowOnce,
     InitialAction::AllowForTask,
+    InitialAction::AllowForRun,
     InitialAction::Reject,
     InitialAction::Edit,
     InitialAction::Interactive,
@@ -2984,10 +3048,11 @@ impl ConfirmationUi {
                 KeyCode::Enter => self.choose_initial(INITIAL_ACTIONS[self.selection]),
                 KeyCode::Char('1' | 'y') => self.choose_initial(InitialAction::AllowOnce),
                 KeyCode::Char('2' | 'a') => self.choose_initial(InitialAction::AllowForTask),
-                KeyCode::Char('3' | 'n') => self.choose_initial(InitialAction::Reject),
-                KeyCode::Char('4' | 'e') => self.choose_initial(InitialAction::Edit),
-                KeyCode::Char('5' | 'i') => self.choose_initial(InitialAction::Interactive),
-                KeyCode::Char('6' | 't') => self.choose_initial(InitialAction::Captured),
+                KeyCode::Char('3' | 'r') => self.choose_initial(InitialAction::AllowForRun),
+                KeyCode::Char('4' | 'n') => self.choose_initial(InitialAction::Reject),
+                KeyCode::Char('5' | 'e') => self.choose_initial(InitialAction::Edit),
+                KeyCode::Char('6' | 'i') => self.choose_initial(InitialAction::Interactive),
+                KeyCode::Char('7' | 't') => self.choose_initial(InitialAction::Captured),
                 _ => false,
             },
             ConfirmationStage::Double => match key.code {
@@ -3047,8 +3112,10 @@ impl ConfirmationUi {
             .enumerate()
             .map(|(index, action)| {
                 let selected = if index == self.selection { ">" } else { " " };
-                let disabled = matches!(action, InitialAction::AllowForTask)
-                    && !can_remember_approval(&request.assessment);
+                let disabled = matches!(
+                    action,
+                    InitialAction::AllowForTask | InitialAction::AllowForRun
+                ) && !can_remember_approval(&request.assessment);
                 let label = match (self.language, action, disabled) {
                     (UiLanguage::ZhCn, InitialAction::AllowOnce, _) => "仅允许本次 [y]",
                     (UiLanguage::ZhCn, InitialAction::AllowForTask, false) => {
@@ -3056,6 +3123,12 @@ impl ConfirmationUi {
                     }
                     (UiLanguage::ZhCn, InitialAction::AllowForTask, true) => {
                         "总是允许（Root 或高风险命令不可用）"
+                    }
+                    (UiLanguage::ZhCn, InitialAction::AllowForRun, false) => {
+                        "本次运行全部允许普通修改 [r]"
+                    }
+                    (UiLanguage::ZhCn, InitialAction::AllowForRun, true) => {
+                        "本次运行全部允许（Root 或高风险命令不可用）"
                     }
                     (UiLanguage::ZhCn, InitialAction::Reject, _) => "拒绝 [n]",
                     (UiLanguage::ZhCn, InitialAction::Edit, _) => "编辑并重新分类 [e]",
@@ -3067,6 +3140,12 @@ impl ConfirmationUi {
                     }
                     (UiLanguage::En, InitialAction::AllowForTask, true) => {
                         "Always allow (unavailable for root or high risk)"
+                    }
+                    (UiLanguage::En, InitialAction::AllowForRun, false) => {
+                        "Allow all eligible mutations for this run [r]"
+                    }
+                    (UiLanguage::En, InitialAction::AllowForRun, true) => {
+                        "Run-wide allow (unavailable for root or high risk)"
                     }
                     (UiLanguage::En, InitialAction::Reject, _) => "Reject [n]",
                     (UiLanguage::En, InitialAction::Edit, _) => "Edit and reassess [e]",
@@ -3089,7 +3168,11 @@ impl ConfirmationUi {
             } else {
                 (self.selection + 1) % INITIAL_ACTIONS.len()
             };
-            if self.selection != 1 || self.can_remember_current() {
+            if !matches!(
+                INITIAL_ACTIONS[self.selection],
+                InitialAction::AllowForTask | InitialAction::AllowForRun
+            ) || self.can_remember_current()
+            {
                 break;
             }
         }
@@ -3113,14 +3196,20 @@ impl ConfirmationUi {
                 self.stage = ConfirmationStage::Edit;
                 false
             }
-            InitialAction::AllowForTask if !self.can_remember_current() => false,
+            InitialAction::AllowForTask | InitialAction::AllowForRun
+                if !self.can_remember_current() =>
+            {
+                false
+            }
             InitialAction::AllowOnce
             | InitialAction::AllowForTask
+            | InitialAction::AllowForRun
             | InitialAction::Interactive
             | InitialAction::Captured => {
                 self.approval = match action {
                     InitialAction::AllowOnce => ConfirmationDecision::Approve,
                     InitialAction::AllowForTask => ConfirmationDecision::ApproveForTask,
+                    InitialAction::AllowForRun => ConfirmationDecision::ApproveForRun,
                     InitialAction::Interactive => ConfirmationDecision::ApproveInteractive,
                     InitialAction::Captured => ConfirmationDecision::ApproveCaptured,
                     InitialAction::Reject | InitialAction::Edit => ConfirmationDecision::Reject,
@@ -3542,18 +3631,28 @@ mod tests {
     }
 
     #[test]
+    fn confirmation_menu_supports_run_wide_approval() {
+        let (mut ui, mut response) = request("touch /tmp/file");
+        let view = ui.view();
+        assert!(view.footer.iter().any(|line| line.contains("[r]")));
+        assert!(ui.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE,)));
+        assert_eq!(response.try_recv(), Ok(ConfirmationDecision::ApproveForRun));
+    }
+
+    #[test]
     fn high_risk_menu_disables_always_allow() {
         let (mut ui, mut response) = request("rm -rf /");
         let view = ui.view();
         assert!(view.footer.iter().any(|line| line.contains("不可用")));
         assert!(!ui.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE,)));
+        assert!(!ui.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE,)));
         assert!(matches!(
             response.try_recv(),
             Err(oneshot::error::TryRecvError::Empty)
         ));
 
         assert!(!ui.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE)));
-        assert_eq!(ui.selection, 2);
+        assert_eq!(ui.selection, 3);
     }
 
     #[test]

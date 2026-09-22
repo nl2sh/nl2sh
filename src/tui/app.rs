@@ -18,6 +18,7 @@ const LOCAL_COMMANDS: &[&str] = &[
     "/exit",
     "/help",
     "/new",
+    "/permission",
     "/setting",
     "/shell",
     "/update",
@@ -634,7 +635,7 @@ mod tests {
         assert!(!app.complete_selected_command());
 
         app.input.set("/p".into());
-        assert!(app.command_suggestions().is_empty());
+        assert_eq!(app.command_suggestions(), vec!["/permission"]);
         app.input.set("/m".into());
         assert!(app.command_suggestions().is_empty());
         app.input.set("/e".into());
