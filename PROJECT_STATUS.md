@@ -4,6 +4,7 @@ Last Updated: 2026-09-22
 
 ## Recent Changes
 
+- 修复 Agent 流式输出期间主输入框无法编辑：运行中的普通按键继续进入输入框，Enter 在任务结束前保留草稿；审批与用户问答弹窗仍优先接收按键，安全与 PTY 路径不变。
 - 修复 Provider 在工具轮之后超时导致“继续”丢失上下文：Agent 错误携带已完成的部分 transcript，TUI 将包含工具证据的失败 turn 纳入当前模型历史并自动保存；初次请求即失败仍不产生空会话，安全确认、Root 与 PTY 边界不变。
 - 修复长期超时的 TUI 保活回归：用例不再从 ratatui 原始差分 ANSI 字节流匹配连续中文，也不再混测 `/help` 与 `/clear`；测试关闭启动装饰、复用统一 PTY 启动器，并以合法 Responses SSE 增量及完成事件验证 Agent 回答显示、TUI 保活、Ctrl+Q 退出和审计记录。
 - 权限确认新增“本次运行全部允许”选项，并新增 `/permission [status|allow|ask]` 本地命令；运行期许可只存在于当前进程内存，仅自动批准非 Root、无需强确认且最高为 `Mutating` 的操作，Dangerous、Critical、Root 与强确认仍必须逐次审批。

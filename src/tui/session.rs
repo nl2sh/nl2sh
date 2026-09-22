@@ -918,7 +918,7 @@ async fn run_inner(
                 apply_windows_scroll_action(&mut app, windows_scroll_filter.push(key.code));
                 continue;
             }
-            if active.is_some() {
+            if active.is_some() && key.code == KeyCode::Enter {
                 continue;
             }
             let Some(key) = fragmented_arrow.normalize(key) else {
