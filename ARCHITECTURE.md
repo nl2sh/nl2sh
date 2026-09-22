@@ -51,12 +51,16 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 | `src/file_tools` | `FileToolExecutor`、结构化读取/搜索/补丁 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
 | `src/audio_tools` | `AudioToolExecutor`、WAV/Raw PCM 解析、DSP/FFT | 本地音频 → 客观 Feature JSON 或 `needs_input` | 纯 Rust、只读、不调用模型或 shell；Raw PCM 不可靠参数不得静默猜测 |
 | `src/audio_quality` | `judge_audio_quality`、Jev/通用 LLM 归一化 | 完整 Feature JSON → 0–5 多维质量评分 | Jev 配置存在时失败不回退；未配置才使用当前 LLM；不上传原始音频 |
+| `src/android_diagnostics` | 固定参数的应用、dumpsys、logcat、settings 与 ContentProvider 只读诊断 | 经严格校验的结构化参数 → 分项状态和有界原始证据 | 不暴露写设置、service call 或 ContentProvider 写操作；不接受 shell 元字符 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
 | `src/provider_metadata` | `ProviderMetadataClient`、Provider 识别、模型列表与上下文元数据归一化 | Provider 配置 → `ModelMetadata` 列表 | 只读网络访问，不记录凭据/原始账户响应，不参与模型推理与安全判断 |
 | `src/provider_account` | `ProviderAccountClient`、余额结果归一化 | Provider 凭据 → 可显示余额 | 仅调用公开只读接口；不记录凭据、余额或原始响应，不参与推理、安全或执行 |
 | `src/runtime` | `AndroidRuntime`、Termux 标记与 prefix 探测 | 进程环境 → Android shell/Termux | 只提供兼容性信息和 shell/path 选择，不参与安全分类、确认或 root 授权 |
 | `src/network` | 统一 rustls HTTP Client、HTTP/SOCKS 代理、认证和绕过策略 | `Config` → `reqwest::Client` | 代理凭据不得进入日志、错误详情或模型上下文；关闭总开关不清理配置 |
+| `src/web_tools` | 公网 HTTP(S) 有界读取与确认后原子下载 | GET/HEAD URL 或 URL+目标路径 → 有界正文/文件 | 禁止重定向、URL 凭据、本机/私网目标、任意 header/body；下载确认前不创建目标文件 |
+| `src/ui_tools` | UIAutomator 控件树、焦点窗口、显示信息与截图命令 | 当前界面 → 有界结构化节点或 PNG | 控件树使用自动清理的内部临时文件；截图属于写操作并必须确认；不提供输入事件 |
+| `src/tls_tools` | 公网 TLS 握手、SNI/信任链校验和 X.509 元数据 | 主机/端口 → 证书主题、颁发者、有效期与 SHA-256 | 只读直连，不发送 HTTP；拒绝本机/私网目标，使用 ring 与 Mozilla 根证书集合 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、工具 schema、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
 | `src/security` | normalize、side-effect 分类、内置/自定义规则、`SecurityAssessment` | 原始命令 → 风险和确认要求 | 不依赖 TUI、LLM 或执行器 |
@@ -76,6 +80,8 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 Agent 文件操作优先使用 `read_file`、`list_dir`、`search_text` 和 `apply_patch`，不依赖设备端 `sed` 或 shell 重定向。路径不设工作区沙箱：允许绝对路径、父目录组件并跟随符号链接；读取、遍历、匹配和文件大小仍有硬上限，最终 Tool Result 继续使用配置的模型输出上限。`apply_patch` 在内存中验证唯一替换并生成 diff，确认前不打开目标进行写入，每次调用均单独确认，批准后才原子替换。
 
 只读工具返回结构化 `needs_input` 时，Runner 可通过独立于安全审批的用户问答接口请求缺失事实。TUI 在同一 frame 内显示支持候选选择和自定义输入的多字段窗口，非 TUI 模式使用终端文本回退；等待用户回答的时间不计入活跃任务时长。当前 Raw PCM 分析会用该接口收集采样率、声道数和采样格式，并将答案直接合并到原工具参数后本地重试，不经过模型改写或猜测。取消只保留 `needs_input` 结果，不批准命令、文件写入或 root 操作，也不改变既有 `Security → Confirmation → Execution` 边界。
+
+同一 Agent 任务内完成的音频分析按原始路径保存结构化结果；质量判断优先按路径引用该结果，避免模型复制、删减或改写 DSP 字段。只有完整的 `status=ok` 分析能够进入缓存，缓存不跨任务持久化。
 
 TUI 输入中的 `@路径` 提供本地文件/目录候选，支持相对路径、绝对路径、`~/`、`./` 与 `../`，Up/Down 选择并以 Enter 或 Tab 补全；Right 保持普通光标右移。提交时按“最长已存在路径前缀”解析，因此 `@test.txt写的是什么内容` 不要求路径后有空格；解析结果只向 Agent 附加绝对路径，实际内容仍由有界结构化文件工具读取。路径解析不会执行文件内容，也不会改变 shell 安全分类、确认或 root 策略。
 
@@ -154,6 +160,8 @@ Termux TUR/APT 构建不启用 `self-update` Cargo feature：不执行启动更�
 `/config` 与别名 `/setting` 使用单一 TUI 设置面板承载服务、模型与 Agent、执行与安全、界面和网络分类；其他分散配置命令不再暴露。两者属于严格本地命令，打开面板后不得进入模型上下文。服务分类与旧向导共享内置 Provider 预设，选择预设只联动 Endpoint，保留 API Key、模型和协议，自定义 Endpoint 显示为 Custom。Tab/Shift+Tab 只切分类，Up/Down 只移动字段，Left/Right 只调整当前值；保存后主循环重新加载配置和客户端。界面分类独立控制佛像与小火车 ASCII Art，并提供显式的日志清除操作；日志清除仅截断当前 JSONL 文件并恢复后续记录能力，不清理当前会话或改变安全链。
 
 Agent TUI 在输入分发边界保留 `/` 前缀命名空间：所有去除前导空白后以 `/` 开头的输入均为本地命令，已知命令执行本地动作，未知命令只产生本地提示。任何斜杠命令都不得写入模型用户历史或调用 LLM。
+
+`/new` 清空当前内存对话、模型上下文和输入历史并分配新的默认会话名，但不删除已保存快照或审计日志。未知单词型斜杠命令可提示编辑距离接近的已知命令，提示不得自动执行候选。
 
 每个已完成 Agent turn 自动保存到状态目录的 `sessions/` 私有目录，文件以 `0600` 原子替换。`/sessions` 打开按更新时间倒序排列的最近会话列表，可输入序号或用 Up/Down 与 Enter 选择恢复；兼容的命名恢复、重命名和删除子命令仍保留。恢复只装载完整 turn，并重新应用上下文轮数和 Tool Result 上限。会话文档仅包含 provider-neutral 对话项，不包含 `Config`，因此 API Key、代理密码、余额和仅当前任务有效的审批许可不会落盘。
 

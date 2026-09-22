@@ -4,6 +4,15 @@ Last Updated: 2026-09-22
 
 ## Recent Changes
 
+- 新增 `inspect_tls` 公网 TLS 诊断：直连握手并验证 SNI 主机名、证书有效期和 Mozilla 信任链，返回各级证书主题、颁发者、起止时间与 SHA-256；拒绝本机/私网目标，不发送 HTTP 请求。
+- TUI 为 Provider 401、429、流提前结束、网络超时及 ima 连接失败附加本地诊断和 `/config` 操作建议；原始错误仍保留，401 继续立即失败且不重试，流式残片不冒充完整回答。
+- 新增 `inspect_android_ui`，通过自动清理的内部临时 XML 返回有界 UIAutomator 控件节点、焦点窗口及显示尺寸/密度；新增 `capture_android_screen`，仅在用户确认后把当前画面写为指定 PNG，不提供自动点击或输入。
+- 新增受控 `http_request` 与 `download_url`：只允许公网 HTTP(S) GET/HEAD，禁用重定向、URL 凭据和私网目标并限制响应大小；下载先获取有界内容并展示 URL、字节数和目标，确认后才同目录原子写入。
+- 新增 `inspect_android_app`、`android_dumpsys`、`android_logcat`、`android_settings` 和 `android_content_query` 结构化只读工具；参数拒绝 shell 元字符，写设置、service call 与 ContentProvider 写操作不在工具接口中，结果逐项标记完整、部分、失败或超时。
+- Agent 音频质量判断现在优先引用当前任务内按路径缓存的完整 `analyze_audio` 结果，避免模型复制特征时遗漏 `status` 或改写数值；缓存不跨任务持久化。
+- Shell Tool Result 新增 `complete`、`partial`、`failed`、`timed_out` 状态，非零退出但已有 stdout 的复合只读查询会保留为部分证据。
+- TUI 新增 `/new` 空白会话命令；未知单词型斜杠命令会提示最接近的本地命令但绝不自动执行，也不会提交给模型。
+
 - 新增与安全审批独立的结构化用户问答窗口：支持多字段候选选择和自定义输入；Raw PCM 缺少采样率、声道数或采样格式时在 TUI 内收集答案并直接本地重试，非 TUI 模式提供文本回退，取消不猜测也不改变安全、root 或 PTY 边界。
 - 修复音频工具集成测试文件末尾误写的字面量 `\\n`，恢复测试 target 编译；同时应用 rustfmt 标准格式，不改变音频分析、LLM 判断、安全确认、Android 或 PTY 行为。
 - TUR PR 已以 #2804 重新提交，并按 review 将 maintainer 改为 `Name <email>` 格式、移除不必要的显式 license file 与 API level；四架构 CI 曾在实际编译前受上游重复 `bazel` 配方影响，PR 分支已 rebase 到包含上游修复的最新 `master` 以重新触发构建。
@@ -159,6 +168,7 @@ Last Updated: 2026-09-22
 
 ## Verification Performed
 
+- 设备诊断与工具可靠性：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features`、`cargo clippy --all-targets -- -D warnings`、106 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及其余非 TUI 测试通过；新增 `/new`/斜杠纠错伪终端回归单独通过。API 26 AArch64 release 交叉编译通过，产物为使用 `/system/bin/linker64` 的 PIE。真机只读探测验证 toybox Top 字段、包列表和 UIAutomator 临时控件树命令；全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - 结构化用户问答窗口：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features` 与 `cargo clippy --all-targets -- -D warnings` 通过；95 项有效库测试、3 项主程序测试、15 项 Agent loop 测试及其余非 TUI 测试通过，1 项显式凭据 ima smoke 按设计忽略。新增回归覆盖候选答案、自定义输入、Esc 取消，以及 Raw PCM 三项缺失元数据收集后不经过模型直接重试。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - 测试 target 编译修复：`cargo fmt --all -- --check`、`cargo check --all-targets` 与 `cargo check --all-targets --no-default-features` 通过；`cargo test` 的 93 项有效库测试、3 项主程序测试、14 项 Agent loop 测试及其余非 TUI 测试通过，1 项显式凭据 ima smoke 按设计忽略。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - TUR PR #2804 build 修复：确认失败的四个架构均在 nl2sh 编译前因 TUR 构建环境报告 `Duplicated package: bazel` 停止；上游随后移除重复配方且其他 PR build 恢复通过。PR 分支 rebase 到修复后的 `master`，保持相对上游仅新增 `tur/nl2sh/build.sh`；新一轮 Actions 已创建，等待 maintainer 批准运行。

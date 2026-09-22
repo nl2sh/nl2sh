@@ -262,6 +262,16 @@ Command 模式生成、分类后执行单条命令；`--dry-run` 只展示。TUI
 
 会话在每个完整 Agent turn 后自动保存到配置目录旁的私有 `sessions/` 目录。名称只接受字母、数字、`-` 和 `_`：`/sessions` 列表，`/sessions resume NAME` 恢复，`/sessions rename OLD NEW` 重命名，`/sessions delete NAME` 删除。会话只保存对话与有界工具结果，不保存 API Key、代理密码、余额或当前任务审批许可。
 
+`/new` 开始新的空白会话并保留已保存快照与审计日志；`/clear` 只清空当前会话内容。未知斜杠命令不会提交给模型，接近已知命令时只显示纠错建议而不自动执行。
+
+Agent 内置只读 Android 诊断工具，可结构化查询前台或指定应用的 Activity、进程、内存、版本、安装位置和存储证据，也可执行参数受限的 `dumpsys`、`logcat`、`settings` 读取及 `content query`。这些接口不提供写设置、service call 或 ContentProvider 写操作。
+
+网络工具只允许对公网 HTTP(S) 地址执行有界 GET/HEAD，禁用重定向、URL 凭据和私网目标。下载操作会在展示 URL、实际字节数与目标路径后请求确认，批准前不会创建或替换目标文件。
+
+`inspect_android_ui` 可读取当前 UIAutomator 控件树、焦点窗口和显示信息，不会点击控件；`capture_android_screen` 在确认后将屏幕保存为指定 PNG。识别出的界面内容不会授权后续输入操作，任何有副作用动作仍须独立进入安全与确认链。
+
+`inspect_tls` 对公网主机执行只读 TLS 握手，校验主机名、有效期和受信链，并返回各级证书的主题、颁发者、起止时间和 SHA-256 指纹；该工具不发送 HTTP 请求，也不接受本机或私网目标。
+
 本地命令 `/shell` 会暂停 TUI 并进入设备的普通交互 shell，可直接运行 adb shell 环境中的命令；输入 `exit` 或按 `Ctrl+D` 即恢复原 TUI。原会话不会丢失，shell 输入与输出也不会发送给模型或写入审计日志。该命令也会出现在 `/` 候选菜单中。
 
 风险等级为 `ReadOnly`、`Mutating`、`Dangerous`、`Critical`。内置检测覆盖危险删除、格式化、块设备写入、递归根权限修改、重启/关机、分区擦除和读写 remount；自定义规则使用 `[[security_rules]]` 添加，不能替换内置规则。

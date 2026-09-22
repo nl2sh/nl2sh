@@ -210,3 +210,14 @@
 - [x] TUI 使用同一 ratatui frame 显示问答窗口，支持方向键、Tab、直接输入、提交和取消；非 TUI 模式提供文本回退。
 - [x] Raw PCM 缺少元数据时收集采样率、声道数和采样格式，并直接合并参数后本地重试，不让模型猜测。
 - [x] 问答等待不计入活跃任务时长，不改变 shell 安全分类、确认、root 或 PTY 路径。
+
+## Phase 27 设备诊断与工具可靠性 — 完成
+
+- [x] 任务内按路径缓存完整音频分析，质量判断优先引用缓存而非模型复制的特征对象。
+- [x] Shell Tool Result 区分 `complete`、`partial`、`failed` 与 `timed_out`，保留非零退出时已有的 stdout 证据。
+- [x] 增加 `/new` 空白会话和未知斜杠命令的仅提示纠错。
+- [x] 增加结构化 Android 应用诊断，以及 dumpsys、logcat、settings、ContentProvider 有界只读取证工具。
+- [x] 增加受控 HTTP GET/HEAD 与确认后原子下载工具。
+- [x] 增加 UIAutomator 结构化状态读取和确认后截图工具。
+- [x] 增加公网 TLS 证书、主机名、有效期、信任链与 SHA-256 指纹诊断工具。
+- [x] 改进 Provider/连接器错误诊断，为鉴权、限流、流提前结束、超时与 ima 失败提供本地可行动提示。
