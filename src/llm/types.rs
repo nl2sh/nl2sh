@@ -68,6 +68,18 @@ pub struct ToolResult {
     pub output: String,
     /// Whether execution succeeded.
     pub success: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Bounded non-text content returned by a structured tool.
+    pub attachments: Vec<ToolAttachment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Provider-neutral binary content associated with a tool result.
+pub struct ToolAttachment {
+    /// MIME type, currently restricted by producers to image/png.
+    pub media_type: String,
+    /// Base64 payload without a data-URL prefix.
+    pub base64_data: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

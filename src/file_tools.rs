@@ -67,6 +67,10 @@ impl FileToolExecutor {
         Ok(Self { base })
     }
 
+    pub(crate) fn base(&self) -> &Path {
+        &self.base
+    }
+
     /// Reads one UTF-8 text file after enforcing path and size limits.
     pub fn read_file(&self, args: &ReadFileArgs) -> Result<String> {
         let path = self.resolve_existing(&args.path)?;

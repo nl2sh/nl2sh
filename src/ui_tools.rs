@@ -1,5 +1,6 @@
 use crate::shell::CommandExecutor;
 use anyhow::{Context, Result};
+use base64::Engine;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +9,35 @@ const MAX_UI_NODES: usize = 300;
 #[derive(Debug, Clone, Deserialize)]
 pub struct CaptureAndroidScreenArgs {
     pub path: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ViewScreenshotArgs {
+    pub path: String,
+}
+
+pub fn view_screenshot(args: &ViewScreenshotArgs) -> Result<crate::llm::ToolAttachment> {
+    let path = std::path::Path::new(&args.path);
+    if !path.is_absolute()
+        || path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_none_or(|value| !value.eq_ignore_ascii_case("png"))
+    {
+        anyhow::bail!("view_screenshot requires an absolute PNG path")
+    }
+    let bytes = std::fs::read(path)
+        .with_context(|| format!("cannot read screenshot {}", path.display()))?;
+    if bytes.len() > 2 * 1024 * 1024 {
+        anyhow::bail!("screenshot exceeds the 2 MiB image limit")
+    }
+    if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        anyhow::bail!("screenshot is not a PNG file")
+    }
+    Ok(crate::llm::ToolAttachment {
+        media_type: "image/png".into(),
+        base64_data: base64::engine::general_purpose::STANDARD.encode(bytes),
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]

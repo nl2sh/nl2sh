@@ -6,7 +6,8 @@ use super::{
     ShellToolArgs, UserQuestion,
 };
 use crate::{
-    android_diagnostics,
+    agent_memory::AgentMemory,
+    android_diagnostics, android_tools,
     audio_quality::judge_audio_quality,
     audio_tools::{AnalyzeAudioArgs, AudioAnalysisResult, AudioToolExecutor, RawSampleFormat},
     config::{Config, UiLanguage},
@@ -262,6 +263,7 @@ impl AgentRunner<'_> {
                                     assessment.risk_level, assessment.requires_root
                                 ),
                                 success: false,
+                                attachments: Vec::new(),
                             });
                             continue 'tool_calls;
                         }
@@ -278,6 +280,7 @@ impl AgentRunner<'_> {
                             "executed_command={command}\nREPEATED_ACTION_BLOCKED: identical command and result reached the retry limit; change strategy."
                         ),
                         success: false,
+                        attachments: Vec::new(),
                     });
                     continue;
                 }
@@ -289,6 +292,7 @@ impl AgentRunner<'_> {
                         call_id: call.id,
                         output: "Not executed: active task time limit was reached.".into(),
                         success: false,
+                        attachments: Vec::new(),
                     });
                     break 'tool_calls;
                 }
@@ -330,6 +334,7 @@ impl AgentRunner<'_> {
                             status.as_str(), x.exit_code, x.timed_out, x.interrupted, x.stdout, x.stderr
                         ),
                         success: status.has_evidence(),
+                        attachments: Vec::new(),
                     }
                     },
                     Err(e) => ToolResult {
@@ -339,6 +344,7 @@ impl AgentRunner<'_> {
                             assessment.risk_level, assessment.requires_root
                         ),
                         success: false,
+                        attachments: Vec::new(),
                     },
                 };
                 result.output = truncate_text(&result.output, self.config.tool_output_max_bytes);
@@ -353,9 +359,22 @@ impl AgentRunner<'_> {
             if round_calls.is_empty() {
                 break;
             }
+            let transcript_results = results
+                .iter()
+                .cloned()
+                .map(|mut result| {
+                    if !result.attachments.is_empty() {
+                        result
+                            .output
+                            .push_str("\n[image attachment omitted from persistent session]");
+                        result.attachments.clear();
+                    }
+                    result
+                })
+                .collect();
             transcript.push(ConversationItem::Tools(ToolRound {
                 calls: round_calls.clone(),
-                results: results.clone(),
+                results: transcript_results,
             }));
             let model_results = results
                 .into_iter()
@@ -438,6 +457,7 @@ impl AgentRunner<'_> {
         audio_analysis_cache: &mut HashMap<String, serde_json::Value>,
     ) -> ToolResult {
         let call_id = call.id.clone();
+        let mut attachment = None;
         let outcome: Result<String> = async {
             match call.name.as_str() {
                 "read_file" => {
@@ -584,6 +604,11 @@ impl AgentRunner<'_> {
                         .context("invalid http_request arguments")?;
                     web_tools::http_request(self.config, &args).await
                 }
+                "http_post" => {
+                    let args=super::tools::parse_http_post(call.arguments).context("invalid http_post arguments")?;
+                    let summary=web_tools::post_summary(&args)?;
+                    if self.confirm_structured(&summary,"structured-http-post","HTTP POST sends data to a remote service",runtime).await? { web_tools::http_post(self.config,&args).await } else { Ok("HTTP POST not sent: user rejected the operation.".into()) }
+                }
                 "download_url" => {
                     let args = super::tools::parse_download_url(call.arguments)
                         .context("invalid download_url arguments")?;
@@ -623,6 +648,12 @@ impl AgentRunner<'_> {
                     }
                 }
                 "inspect_android_ui" => ui_tools::inspect_android_ui(self.executor).await,
+                "view_screenshot" => {
+                    let args = super::tools::parse_view_screenshot(call.arguments)
+                        .context("invalid view_screenshot arguments")?;
+                    attachment = Some(tokio::task::spawn_blocking(move || ui_tools::view_screenshot(&args)).await.context("view_screenshot worker failed")??);
+                    Ok("Screenshot attached as image/png for multimodal inspection.".into())
+                }
                 "capture_android_screen" => {
                     let args = super::tools::parse_capture_android_screen(call.arguments)
                         .context("invalid capture_android_screen arguments")?;
@@ -662,6 +693,41 @@ impl AgentRunner<'_> {
                         }
                     }
                 }
+                "inject_android_input" => {
+                    let args=super::tools::parse_android_input(call.arguments).context("invalid inject_android_input arguments")?;
+                    let initial=android_tools::prepare_input(self.executor,&args).await?;
+                    if self.confirm_structured(&format!("Validated UI input\n{initial}"),"structured-android-input","Android input changes device UI state",runtime).await? {
+                        let command=android_tools::prepare_input(self.executor,&args).await?;
+                        let result=self.executor.execute(&command,false,false).await?;
+                        if result.exit_code==Some(0) && !result.timed_out && !result.interrupted { Ok("Android input injected after current-bounds revalidation and confirmation.".into()) } else { bail!("Android input failed: {}",result.stderr) }
+                    } else { Ok("Android input not injected: user rejected the operation.".into()) }
+                }
+                "android_notification" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::notification(self.executor,&a).await }
+                "android_crash_report" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::crash_report(self.executor,&a).await }
+                "android_thermal_power" => android_tools::thermal_power(self.executor).await,
+                "android_netstats" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::netstats(self.executor,&a).await }
+                "android_storage" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::storage(self.executor,&a).await }
+                "android_wifi_eth" => android_tools::wifi_eth(self.executor).await,
+                "android_doze" => android_tools::doze(self.executor).await,
+                "android_permission_audit" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::permission_audit(self.executor,&a).await }
+                "android_clipboard" => {
+                    let a=super::tools::parse_clipboard(call.arguments)?;
+                    if a.text.is_none() { android_tools::clipboard_read(self.executor).await } else {
+                        let command=android_tools::clipboard_write_command(&a)?;
+                        if self.confirm_structured(&command,"structured-clipboard-write","Clipboard write changes device state",runtime).await? { let r=self.executor.execute(&command,false,false).await?; if r.exit_code==Some(0) { Ok("Clipboard updated after confirmation.".into()) } else { bail!("clipboard write failed: {}",r.stderr) } } else { Ok("Clipboard not changed: user rejected the operation.".into()) }
+                    }
+                }
+                "android_media_control" => {
+                    let a=super::tools::parse_media_control(call.arguments)?;
+                    if a.action=="status" { android_tools::media_status(self.executor).await } else { let command=android_tools::media_control_command(&a)?; if self.confirm_structured(&command,"structured-media-control","Media control changes playback or volume state",runtime).await? { let r=self.executor.execute(&command,false,false).await?; if r.exit_code==Some(0) { Ok("Media action completed after confirmation.".into()) } else { bail!("media action failed: {}",r.stderr) } } else { Ok("Media action not performed: user rejected the operation.".into()) } }
+                }
+                "android_media_query" => { let a=super::tools::parse_media_query(call.arguments)?; android_tools::media_query(self.executor,&a).await }
+                "android_connectivity" => { let a=super::tools::parse_connectivity(call.arguments)?; android_tools::connectivity(self.executor,&a).await }
+                "agent_memory" => {
+                    let agent_memory = AgentMemory::new(tools.base());
+                    let a=super::tools::parse_memory(call.arguments)?;
+                    if matches!(a.action.as_str(),"get"|"list") { agent_memory.read(&a) } else { let summary=agent_memory.mutation_summary(&a)?; if self.confirm_structured(&summary,"structured-agent-memory","Persistent Agent memory modification",runtime).await? { let memory=agent_memory.clone(); tokio::task::spawn_blocking(move || memory.apply(&a)).await.context("agent_memory worker failed")? } else { Ok("Agent memory not changed: user rejected the operation.".into()) } }
+                }
                 "inspect_tls" => {
                     let args = super::tools::parse_inspect_tls(call.arguments)
                         .context("invalid inspect_tls arguments")?;
@@ -693,8 +759,14 @@ impl AgentRunner<'_> {
                 call_id,
                 success: !output.starts_with("Patch not applied")
                     && !output.starts_with("Download not written")
-                    && !output.starts_with("Screenshot not written"),
+                    && !output.starts_with("Screenshot not written")
+                    && !output.starts_with("HTTP POST not sent")
+                    && !output.starts_with("Android input not injected")
+                    && !output.starts_with("Clipboard not changed")
+                    && !output.starts_with("Media action not performed")
+                    && !output.starts_with("Agent memory not changed"),
                 output: truncate_text(&output, self.config.tool_output_max_bytes),
+                attachments: attachment.into_iter().collect(),
             },
             Err(error) => ToolResult {
                 call_id,
@@ -703,8 +775,39 @@ impl AgentRunner<'_> {
                     self.config.tool_output_max_bytes,
                 ),
                 success: false,
+                attachments: Vec::new(),
             },
         }
+    }
+
+    async fn confirm_structured(
+        &self,
+        summary: &str,
+        id: &str,
+        message: &str,
+        runtime: &mut TaskRuntime,
+    ) -> Result<bool> {
+        let assessment = SecurityAssessment {
+            risk_level: RiskLevel::Mutating,
+            matched_rules: vec![MatchedRule {
+                id: id.into(),
+                message: message.into(),
+            }],
+            requires_confirmation: true,
+            requires_double_confirmation: false,
+            requires_root: false,
+            explanation: format!("{message}; explicit confirmation is required."),
+        };
+        let started = Instant::now();
+        let decision = self.confirmer.confirm(summary, &assessment).await?;
+        runtime.add_confirmation_time(started.elapsed());
+        Ok(matches!(
+            decision,
+            ConfirmationDecision::Approve
+                | ConfirmationDecision::ApproveForTask
+                | ConfirmationDecision::ApproveCaptured
+                | ConfirmationDecision::ApproveInteractive
+        ))
     }
 
     /// Owned-history variant suitable for a UI-managed background future.
@@ -885,6 +988,7 @@ mod tests {
                 call_id: "call".into(),
                 output: "x".repeat(1000),
                 success: true,
+                attachments: Vec::new(),
             }],
         })];
         let bounded = truncate_tool_results(&items, 200);

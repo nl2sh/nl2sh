@@ -1,8 +1,12 @@
 //! Reusable nl2sh core. UI and CLI are deliberately thin adapters.
 /// Agent loop, conversation policy, confirmation, and built-in tools.
 pub mod agent;
+/// Private persistent key/value notes for Agent continuity.
+pub mod agent_memory;
 /// Bounded, read-only Android framework diagnostics used by structured tools.
 pub mod android_diagnostics;
+/// Structured Android automation, device, media, and clipboard tools.
+pub mod android_tools;
 /// Audio-quality judgment using Jev or the configured general LLM.
 pub mod audio_quality;
 /// Deterministic WAV/raw-PCM parsing and DSP feature extraction.

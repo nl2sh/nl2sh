@@ -12,9 +12,16 @@ pub fn request(req: &LlmRequest) -> Value {
                 input.extend(round.calls.iter().map(|call| {
                     json!({"type":"function_call","call_id":call.id,"name":call.name,"arguments":call.arguments.to_string()})
                 }));
-                input.extend(round.results.iter().map(
-                    |r| json!({"type":"function_call_output","call_id":r.call_id,"output":r.output}),
-                ));
+                for result in &round.results {
+                    input.push(json!({"type":"function_call_output","call_id":result.call_id,"output":result.output}));
+                    if !result.attachments.is_empty() {
+                        let mut content = vec![
+                            json!({"type":"input_text","text":format!("Image attachment produced by tool call {}.",result.call_id)}),
+                        ];
+                        content.extend(result.attachments.iter().map(|a| json!({"type":"input_image","image_url":format!("data:{};base64,{}",a.media_type,a.base64_data)})));
+                        input.push(json!({"type":"message","role":"user","content":content}));
+                    }
+                }
             }
         }
     }
@@ -93,4 +100,40 @@ pub fn response(v: Value) -> Result<LlmResponse> {
         },
         finish_reason: finish,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::request;
+    use crate::llm::{
+        ConversationItem, LlmRequest, ToolAttachment, ToolCall, ToolResult, ToolRound,
+    };
+    use serde_json::json;
+
+    #[test]
+    fn image_tool_results_become_followup_input_image_content() {
+        let body = request(&LlmRequest {
+            model: "vision".into(),
+            items: vec![ConversationItem::Tools(ToolRound {
+                calls: vec![ToolCall {
+                    id: "c".into(),
+                    name: "view_screenshot".into(),
+                    arguments: json!({}),
+                }],
+                results: vec![ToolResult {
+                    call_id: "c".into(),
+                    output: "attached".into(),
+                    success: true,
+                    attachments: vec![ToolAttachment {
+                        media_type: "image/png".into(),
+                        base64_data: "AA==".into(),
+                    }],
+                }],
+            })],
+            tools: Vec::new(),
+        });
+        assert_eq!(body["input"][1]["type"], "function_call_output");
+        assert_eq!(body["input"][2]["type"], "message");
+        assert_eq!(body["input"][2]["content"][1]["type"], "input_image");
+    }
 }

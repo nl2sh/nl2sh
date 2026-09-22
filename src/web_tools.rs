@@ -13,6 +13,7 @@ use url::{Host, Url};
 
 const DEFAULT_MAX_BYTES: usize = 256 * 1024;
 const HARD_MAX_BYTES: usize = 2 * 1024 * 1024;
+const POST_MAX_BODY_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HttpRequestArgs {
@@ -29,6 +30,77 @@ pub struct DownloadUrlArgs {
     pub path: String,
     #[serde(default)]
     pub max_bytes: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct HttpPostArgs {
+    pub url: String,
+    pub body: serde_json::Value,
+    #[serde(default)]
+    pub max_bytes: Option<usize>,
+}
+
+pub fn post_summary(args: &HttpPostArgs) -> Result<String> {
+    let bytes = serde_json::to_vec(&args.body).context("cannot encode JSON request body")?;
+    if bytes.len() > POST_MAX_BODY_BYTES {
+        bail!("JSON request body exceeds the hard byte limit")
+    }
+    Ok(format!(
+        "POST JSON to: {}\nRequest bytes: {}\nResponse limit: {} bytes\nExact JSON body:\n{}",
+        args.url,
+        bytes.len(),
+        args.max_bytes
+            .unwrap_or(DEFAULT_MAX_BYTES)
+            .clamp(1, HARD_MAX_BYTES),
+        serde_json::to_string_pretty(&args.body).context("cannot render JSON request body")?
+    ))
+}
+
+pub async fn http_post(config: &Config, args: &HttpPostArgs) -> Result<String> {
+    let url = validate_public_url(&args.url).await?;
+    let max_bytes = args
+        .max_bytes
+        .unwrap_or(DEFAULT_MAX_BYTES)
+        .clamp(1, HARD_MAX_BYTES);
+    let body = serde_json::to_vec(&args.body).context("cannot encode JSON request body")?;
+    if body.len() > POST_MAX_BODY_BYTES {
+        bail!("JSON request body exceeds the hard byte limit")
+    }
+    let client = build_tool_http_client(config)?;
+    let mut response = client
+        .post(url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body)
+        .send()
+        .await
+        .context("bounded HTTP POST failed")?;
+    if response.status().is_redirection() {
+        bail!("HTTP redirects are disabled for bounded tools")
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        bail!("HTTP response exceeds the configured byte limit")
+    }
+    let status = response.status().as_u16();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let mut response_body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .context("cannot read HTTP POST response")?
+    {
+        if response_body.len().saturating_add(chunk.len()) > max_bytes {
+            bail!("HTTP response exceeds the configured byte limit")
+        }
+        response_body.extend_from_slice(&chunk);
+    }
+    serde_json::to_string_pretty(&json!({"status":status,"content_type":content_type,"bytes":response_body.len(),"body":String::from_utf8_lossy(&response_body)})).context("cannot encode HTTP POST result")
 }
 
 pub struct PreparedDownload {

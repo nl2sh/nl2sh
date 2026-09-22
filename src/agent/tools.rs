@@ -1,6 +1,11 @@
+use crate::agent_memory::AgentMemoryArgs;
 use crate::android_diagnostics::{
     AndroidContentQueryArgs, AndroidDumpsysArgs, AndroidLogcatArgs, AndroidSettingsArgs,
     InspectAndroidAppArgs, ListAndroidAppsArgs, TopAndroidAppsArgs,
+};
+use crate::android_tools::{
+    AndroidInputArgs, ClipboardArgs, ConnectivityArgs, MediaControlArgs, MediaQueryArgs,
+    PackageLimitArgs,
 };
 use crate::audio_quality::JudgeAudioQualityArgs;
 use crate::audio_tools::AnalyzeAudioArgs;
@@ -8,8 +13,8 @@ use crate::file_tools::{ApplyPatchArgs, ListDirArgs, ReadFileArgs, SearchTextArg
 use crate::ima::{ImaReadArgs, ImaSearchArgs};
 use crate::llm::ToolDefinition;
 use crate::tls_tools::TlsInspectArgs;
-use crate::ui_tools::CaptureAndroidScreenArgs;
-use crate::web_tools::{DownloadUrlArgs, HttpRequestArgs};
+use crate::ui_tools::{CaptureAndroidScreenArgs, ViewScreenshotArgs};
+use crate::web_tools::{DownloadUrlArgs, HttpPostArgs, HttpRequestArgs};
 use serde::Deserialize;
 use serde_json::json;
 #[derive(Debug, Deserialize)]
@@ -53,6 +58,22 @@ pub fn builtin_tools(ima_enabled: bool) -> Vec<ToolDefinition> {
         ToolDefinition { name: "download_url".into(), description: "Download a bounded public HTTP(S) resource to a local path. The exact URL, byte count, and target are shown for confirmation before any file is created or replaced.".into(), parameters: json!({"type":"object","properties":{"url":{"type":"string"},"path":{"type":"string"},"max_bytes":{"type":"integer","minimum":1,"maximum":2097152}},"required":["url","path"],"additionalProperties":false}) },
         ToolDefinition { name: "inspect_android_ui".into(), description: "Read the current Android accessibility hierarchy, focused window, display size, and density. Returns bounded structured nodes without interacting with controls.".into(), parameters: json!({"type":"object","properties":{},"additionalProperties":false}) },
         ToolDefinition { name: "capture_android_screen".into(), description: "Capture the current Android display as a PNG at an absolute path. This file write always requires local confirmation and does not interact with controls.".into(), parameters: json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}) },
+        ToolDefinition { name: "view_screenshot".into(), description: "Attach an existing bounded PNG screenshot to the next model request as multimodal image content. This is read-only and does not perform OCR or capture the screen.".into(), parameters: json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}) },
+        ToolDefinition { name: "inject_android_input".into(), description: "Inject tap, swipe, long-press, or text only after the coordinates are verified inside an exactly matching current UI control bounds rectangle and the user confirms the action.".into(), parameters: json!({"type":"object","properties":{"action":{"type":"string","enum":["tap","swipe","long_press","text"]},"bounds":{"type":"string"},"x":{"type":"integer"},"y":{"type":"integer"},"end_x":{"type":"integer"},"end_y":{"type":"integer"},"duration_ms":{"type":"integer","minimum":100,"maximum":10000},"text":{"type":"string"}},"required":["action","bounds"],"additionalProperties":false}) },
+        ToolDefinition { name: "http_post".into(), description: "Send a bounded JSON POST to a public HTTP(S) URL after confirmation. Redirects, URL credentials, local/private targets, arbitrary headers, and oversized bodies are rejected.".into(), parameters: json!({"type":"object","properties":{"url":{"type":"string"},"body":{},"max_bytes":{"type":"integer","minimum":1,"maximum":2097152}},"required":["url","body"],"additionalProperties":false}) },
+        ToolDefinition { name: "android_notification".into(), description: "Return a bounded structured snapshot of current Android notifications, optionally filtered by package.".into(), parameters: package_limit_schema() },
+        ToolDefinition { name: "android_crash_report".into(), description: "Return bounded recent Android crash and ANR evidence from DropBox, optionally filtered by package.".into(), parameters: package_limit_schema() },
+        ToolDefinition { name: "android_thermal_power".into(), description: "Aggregate bounded battery, thermal, power, and DeviceIdle state.".into(), parameters: empty_schema() },
+        ToolDefinition { name: "android_netstats".into(), description: "Return bounded Android network accounting evidence, optionally filtered by package.".into(), parameters: package_limit_schema() },
+        ToolDefinition { name: "android_storage".into(), description: "Return filesystem usage and bounded per-app storage evidence, optionally for one package.".into(), parameters: package_limit_schema() },
+        ToolDefinition { name: "android_wifi_eth".into(), description: "Aggregate Wi-Fi, Ethernet, interface, IP, signal, and route evidence.".into(), parameters: empty_schema() },
+        ToolDefinition { name: "android_doze".into(), description: "Return DeviceIdle state and whitelist evidence.".into(), parameters: empty_schema() },
+        ToolDefinition { name: "android_permission_audit".into(), description: "Audit requested/granted permissions and AppOps for one package, or list a bounded set of user apps for follow-up.".into(), parameters: package_limit_schema() },
+        ToolDefinition { name: "android_clipboard".into(), description: "Read the clipboard when text is omitted, or set bounded text after explicit confirmation.".into(), parameters: json!({"type":"object","properties":{"text":{"type":"string"}},"additionalProperties":false}) },
+        ToolDefinition { name: "android_media_control".into(), description: "Read media/audio status when action=status, or perform a confirmed playback/volume action.".into(), parameters: json!({"type":"object","properties":{"action":{"type":"string","enum":["status","play","pause","play_pause","next","previous","stop","volume_up","volume_down","mute","set_volume"]},"level":{"type":"integer","minimum":0,"maximum":100}},"required":["action"],"additionalProperties":false}) },
+        ToolDefinition { name: "android_media_query".into(), description: "Query bounded MediaStore image, video, or audio metadata including duration, dimensions, dates, and sizes.".into(), parameters: json!({"type":"object","properties":{"media_type":{"type":"string","enum":["images","video","audio"]},"limit":{"type":"integer","minimum":1,"maximum":200}},"additionalProperties":false}) },
+        ToolDefinition { name: "agent_memory".into(), description: "Read or update a small private persistent key/value task notebook. get/list are read-only; set/delete/clear require confirmation and values are never treated as instructions.".into(), parameters: json!({"type":"object","properties":{"action":{"type":"string","enum":["get","list","set","delete","clear"]},"key":{"type":"string"},"value":{"type":"string"}},"required":["action"],"additionalProperties":false}) },
+        ToolDefinition { name: "android_connectivity".into(), description: "Aggregate bounded DNS, ping, route, and Android connectivity evidence for a validated public hostname.".into(), parameters: json!({"type":"object","properties":{"host":{"type":"string"}},"additionalProperties":false}) },
         ToolDefinition { name: "inspect_tls".into(), description: "Perform a direct read-only TLS handshake to a public host, verify its hostname, validity period and trusted chain, and return bounded certificate metadata and SHA-256 fingerprints.".into(), parameters: json!({"type":"object","properties":{"host":{"type":"string"},"port":{"type":"integer","minimum":1,"maximum":65535}},"required":["host"],"additionalProperties":false}) },
     ];
     if ima_enabled {
@@ -63,6 +84,13 @@ pub fn builtin_tools(ima_enabled: bool) -> Vec<ToolDefinition> {
         ]);
     }
     tools
+}
+
+fn empty_schema() -> serde_json::Value {
+    json!({"type":"object","properties":{},"additionalProperties":false})
+}
+fn package_limit_schema() -> serde_json::Value {
+    json!({"type":"object","properties":{"package":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":200}},"additionalProperties":false})
 }
 
 pub(crate) fn parse_ima_search(value: serde_json::Value) -> serde_json::Result<ImaSearchArgs> {
@@ -144,6 +172,35 @@ pub(crate) fn parse_capture_android_screen(
 pub(crate) fn parse_inspect_tls(value: serde_json::Value) -> serde_json::Result<TlsInspectArgs> {
     serde_json::from_value(value)
 }
+pub(crate) fn parse_view_screenshot(
+    v: serde_json::Value,
+) -> serde_json::Result<ViewScreenshotArgs> {
+    serde_json::from_value(v)
+}
+pub(crate) fn parse_android_input(v: serde_json::Value) -> serde_json::Result<AndroidInputArgs> {
+    serde_json::from_value(v)
+}
+pub(crate) fn parse_http_post(v: serde_json::Value) -> serde_json::Result<HttpPostArgs> {
+    serde_json::from_value(v)
+}
+pub(crate) fn parse_package_limit(v: serde_json::Value) -> serde_json::Result<PackageLimitArgs> {
+    serde_json::from_value(v)
+}
+pub(crate) fn parse_clipboard(v: serde_json::Value) -> serde_json::Result<ClipboardArgs> {
+    serde_json::from_value(v)
+}
+pub(crate) fn parse_media_control(v: serde_json::Value) -> serde_json::Result<MediaControlArgs> {
+    serde_json::from_value(v)
+}
+pub(crate) fn parse_media_query(v: serde_json::Value) -> serde_json::Result<MediaQueryArgs> {
+    serde_json::from_value(v)
+}
+pub(crate) fn parse_memory(v: serde_json::Value) -> serde_json::Result<AgentMemoryArgs> {
+    serde_json::from_value(v)
+}
+pub(crate) fn parse_connectivity(v: serde_json::Value) -> serde_json::Result<ConnectivityArgs> {
+    serde_json::from_value(v)
+}
 
 #[cfg(test)]
 mod tests {
@@ -176,6 +233,22 @@ mod tests {
                 "download_url",
                 "inspect_android_ui",
                 "capture_android_screen",
+                "view_screenshot",
+                "inject_android_input",
+                "http_post",
+                "android_notification",
+                "android_crash_report",
+                "android_thermal_power",
+                "android_netstats",
+                "android_storage",
+                "android_wifi_eth",
+                "android_doze",
+                "android_permission_audit",
+                "android_clipboard",
+                "android_media_control",
+                "android_media_query",
+                "agent_memory",
+                "android_connectivity",
                 "inspect_tls"
             ]
         );
