@@ -47,3 +47,5 @@ pub mod ui_tools;
 pub mod update;
 /// Bounded HTTP retrieval and confirmed atomic downloads for Agent tools.
 pub mod web_tools;
+/// Embedded browser interface for configuration and Agent sessions.
+pub mod web_ui;

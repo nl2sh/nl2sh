@@ -1,0 +1,20 @@
+{
+  "name": "nl2sh-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "test": "node --experimental-strip-types --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "markdown-it": "^15.0.2",
+    "preact": "^10.27.2"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "@types/markdown-it": "^14.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.7"
+  }
+}

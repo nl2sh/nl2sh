@@ -9,6 +9,9 @@ TERMUX_PKG_BUILD_IN_SRC=true
 TERMUX_PKG_AUTO_UPDATE=true
 
 termux_step_pre_configure() {
+	if [[ -f "${TERMUX_PKG_SRCDIR}/build.rs" ]]; then
+		termux_setup_nodejs
+	fi
 	termux_setup_rust
 }
 

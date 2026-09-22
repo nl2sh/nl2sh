@@ -69,6 +69,12 @@ pub(crate) fn startup_history(
             format!("{hint} Controls: Ctrl+C cancels or clears input; Ctrl+Q quits safely"),
         ],
     };
+    if let Some(url) = crate::web_ui::welcome_url() {
+        history.insert(1, match language {
+            UiLanguage::ZhCn => format!("{hint} Web 界面及配置：{url}（同一网络中的设备可访问；无需登录）"),
+            UiLanguage::En => format!("{hint} Web interface and settings: {url} (available on the same network; no login)"),
+        });
+    }
     history.extend(support_history(show_buddha_ascii_art));
     if show_train_ascii_art {
         history.push(WELCOME_TRAIN_ANCHOR.into());

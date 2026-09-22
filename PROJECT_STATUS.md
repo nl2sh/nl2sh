@@ -1,9 +1,16 @@
 # Project Status
 
-Last Updated: 2026-09-22
+Last Updated: 2026-09-23
 
 ## Recent Changes
 
+- Web 资源改为 Cargo 编译前从锁定的 npm 依赖自动生成；发布 CI 固定 Node 版本，TUR 源码含构建脚本时使用主机 Node 工具，`web/dist/` 不再纳入版本控制，Android 仍交付单一可执行文件。
+- 内置 Web 服务默认优先监听 9999，端口占用时再选择可用端口；侧栏选中已保存会话时先恢复快照，再加载并显示对话历史，切换时忽略旧会话的迟到响应。
+- Web 模型回答与流式文本改用完整 Markdown 解析，支持表格、编号列表、嵌套内容和代码块；原始 HTML 保持转义，危险链接不生成可点击地址，并补充对应样式与回归测试。
+- Web 技术栈重构为 Tokio + Axum 0.8 + serde JSON：Agent 更新使用 SSE，安全终端使用 WebSocket；前端迁移为 Preact + TypeScript + Vite + 纯 CSS，生产资源由 rust-embed 编入单一 Android ELF。
+- Web 对话增加安全 Markdown 渲染和默认折叠的工具输出，流式增量保持在同一段；顶部快捷栏支持切换 Provider、模型和审批策略，并显示轮次、步骤、工具调用、Token/上下文和 Root 状态。
+- Web 界面升级为类似 dsh 的多会话工作区：会话拥有独立运行、输出、审批和问答状态，可在多个后台 Agent 之间快速切换；首轮完成后由当前 LLM 自动生成短标题并随会话持久化。
+- 新增内置 Web 页面与 HTTP 服务：欢迎消息显示设备 IPv4 URL；浏览器无需登录即可编辑、校验并原子保存 TOML 配置。Web 提供独立 Agent 对话、流式文本和命令输出、审批与命令编辑、结构化问答、新会话及历史会话恢复；所有命令仍经过原安全分类、确认和执行链。
 - 修复 Agent 流式输出期间主输入框无法编辑：运行中的普通按键继续进入输入框，Enter 在任务结束前保留草稿；审批与用户问答弹窗仍优先接收按键，安全与 PTY 路径不变。
 - 修复 Provider 在工具轮之后超时导致“继续”丢失上下文：Agent 错误携带已完成的部分 transcript，TUI 将包含工具证据的失败 turn 纳入当前模型历史并自动保存；初次请求即失败仍不产生空会话，安全确认、Root 与 PTY 边界不变。
 - 修复长期超时的 TUI 保活回归：用例不再从 ratatui 原始差分 ANSI 字节流匹配连续中文，也不再混测 `/help` 与 `/clear`；测试关闭启动装饰、复用统一 PTY 启动器，并以合法 Responses SSE 增量及完成事件验证 Agent 回答显示、TUI 保活、Ctrl+Q 退出和审计记录。
@@ -174,6 +181,15 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- Web 构建顺序调整：`cargo package --allow-dirty` 在不包含 `web/dist/` 的源码包上通过验证；`npm test`、`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings`、`cargo test`、TUR Bash 语法检查及 AArch64 Android API 26 `RUST_TARGET=aarch64-linux-android NL2SH_PACKAGE_MANAGER_BUILD=1 ./cross-compile.sh` 通过。
+- Axum/Preact Web 栈：`npm ci && npm run build`、`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 和全量 `cargo test` 通过；HTTP 集成回归覆盖 rust-embed 首页、CSP、JSON 状态、SSE 首事件与 WebSocket 握手/响应。AArch64 Android API 26 `cargo build --release --target aarch64-linux-android --no-default-features` 通过，产物为使用 `/system/bin/linker64` 的 64 位 PIE，前端资源包含在 5,423,832-byte 单一 ELF 中。
+
+- Web Markdown、工具折叠与快捷控制：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings`、全量 `cargo test`、内嵌 JavaScript `node --check` 及 AArch64 Android API 26 `cargo check --target aarch64-linux-android --no-default-features` 通过。新增回归覆盖流式增量同段拼接、工具结果类型转换及 Provider/模型/审批策略保存。
+
+- Web 并发多会话与自动标题：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings`、全量 `cargo test` 及 AArch64 Android API 26 `cargo check --target aarch64-linux-android --no-default-features` 通过。新增回归覆盖会话状态隔离、列表并发状态、标题清理与长度限制，以及标题持久化。
+
+- 内置 Web 页面：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo test`、AArch64 Android API 26 `cargo check --target aarch64-linux-android --no-default-features` 通过。新增测试覆盖 HTTP 页面/状态返回、配置保存与无效配置拒绝、危险操作强确认及待审批状态保持。
 
 - TUI 保活回归稳定化：目标用例连续运行 5 次通过；`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 和全量 `cargo test --all-targets` 通过，其中 114 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及全部 7 项 TUI 伪终端测试通过，1 项显式凭据 ima live smoke 按设计忽略。
 - 运行期权限许可：`cargo fmt --all -- --check`、`cargo check --all-targets` 与 `cargo clippy --all-targets -- -D warnings` 通过；114 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及其余非 TUI 测试通过，AArch64 Android API 26 release 交叉编译通过。新增回归覆盖确认框运行期许可及高风险禁用；全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。

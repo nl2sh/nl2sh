@@ -4,4 +4,6 @@
 /config.toml
 *.swp
 *.log
-/23d250dd-0b73-4645-b87e-3c6b56cb4c36.png
+/web/node_modules/
+/web/dist/
+/web/tsconfig.tsbuildinfo

@@ -38,6 +38,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Node.js for embedded Web assets
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
       - name: Install Rust toolchain
         id: toolchain
         uses: dtolnay/rust-toolchain@stable

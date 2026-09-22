@@ -15,6 +15,8 @@ const MAX_SESSIONS: usize = 200;
 struct SessionDocument {
     version: u32,
     name: String,
+    #[serde(default)]
+    title: String,
     updated_unix_secs: u64,
     turns: Vec<Vec<ConversationItem>>,
 }
@@ -24,6 +26,8 @@ struct SessionDocument {
 pub struct SessionInfo {
     /// User-visible session name.
     pub name: String,
+    /// Short user-facing title; old snapshots fall back to the stable name.
+    pub title: String,
     /// Number of complete conversation turns.
     pub turns: usize,
     /// Last save time as Unix seconds.
@@ -70,12 +74,33 @@ impl SessionStore {
         tool_limit: usize,
         secrets: &[String],
     ) -> Result<()> {
+        self.save_redacted_with_title(name, name, turns, tool_limit, secrets)
+    }
+
+    /// Saves a session with an independent user-facing title.
+    pub fn save_redacted_with_title(
+        &self,
+        name: &str,
+        title: &str,
+        turns: &[Vec<ConversationItem>],
+        tool_limit: usize,
+        secrets: &[String],
+    ) -> Result<()> {
         validate_name(name)?;
+        let title = if title.trim().is_empty() {
+            name
+        } else {
+            title.trim()
+        };
+        if title.len() > 160 {
+            bail!("session title exceeds 160 bytes")
+        }
         let mut bounded = bound_turns(turns, tool_limit);
         redact_turns(&mut bounded, secrets);
         let document = SessionDocument {
             version: 1,
             name: name.into(),
+            title: title.into(),
             updated_unix_secs: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
@@ -146,8 +171,14 @@ impl SessionStore {
             let Ok(document) = serde_json::from_slice::<SessionDocument>(&bytes) else {
                 continue;
             };
+            let title = if document.title.is_empty() {
+                document.name.clone()
+            } else {
+                document.title
+            };
             sessions.push(SessionInfo {
                 name: document.name,
+                title,
                 turns: document.turns.len(),
                 updated_unix_secs: document.updated_unix_secs,
             });
@@ -168,8 +199,13 @@ impl SessionStore {
         if target.exists() {
             bail!("session {new} already exists")
         }
+        let title = self
+            .list()?
+            .into_iter()
+            .find(|session| session.name == old)
+            .map_or_else(|| old.to_owned(), |session| session.title);
         let turns = self.load(old, usize::MAX, MAX_SESSION_BYTES as usize)?;
-        self.save(new, &turns, MAX_SESSION_BYTES as usize)?;
+        self.save_redacted_with_title(new, &title, &turns, MAX_SESSION_BYTES as usize, &[])?;
         fs::remove_file(self.path(old))
             .with_context(|| format!("renamed session but cannot remove old session {old}"))
     }
@@ -315,6 +351,8 @@ mod tests {
         ))]];
         store.save("first", &turns, 1024)?;
         assert_eq!(store.list()?[0].name, "first");
+        store.save_redacted_with_title("first", "LLM generated title", &turns, 1024, &[])?;
+        assert_eq!(store.list()?[0].title, "LLM generated title");
         assert_eq!(store.load("first", 10, 1024)?, turns);
         store.rename("first", "second")?;
         store.delete("second")?;

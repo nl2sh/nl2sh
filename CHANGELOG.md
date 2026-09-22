@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Generate embedded Web assets from the npm lockfile during Cargo builds, and stop tracking `web/dist`; Android releases remain single binaries.
+- Rebuilt the embedded Web UI with Axum 0.8, rust-embed, SSE, security-gated WebSocket terminal commands, and a Preact/TypeScript/Vite frontend while retaining single-binary Android distribution.
 - Stabilized the live-TUI Agent-response regression by using a valid Responses SSE fixture, disabling startup decoration in that test, and avoiding assertions against fragmented raw ratatui ANSI output.
 - Added a process-lifetime approval option and `/permission` controls for eligible mutations; root, strong-confirmation, Dangerous, and Critical operations remain individually confirmed.
 - Made Android visual workflows bounded and evidence-driven: compact UI inspection, post-input UI state, PNG/JPEG/WebP viewing with in-process downscaling, provider-error detection, and corrected MediaStore projections and ordering.
@@ -11,6 +13,9 @@
 
 ### Added
 
+- Added Web Markdown rendering, collapsible tool output, joined streaming responses, quick provider/model/approval controls, and session usage statistics.
+- Added concurrent Web Agent sessions with a persistent session sidebar, per-session approvals, background status, and LLM-generated titles.
+- Added an embedded browser interface for configuration and Agent conversations, including live output, approvals, follow-up questions, and saved sessions.
 - Added confirmed, bounds-validated Android input injection; bounded screenshot image attachments; confirmed public JSON POST; structured notification, crash/ANR, thermal/power, netstats, storage, Wi-Fi/Ethernet, Doze, permission, clipboard, media, connectivity, and persistent Agent-memory tools. Mutations remain behind local confirmation and image payloads are omitted from saved sessions.
 - Added Codex-style `!command` execution in the Agent TUI. Commands bypass the Provider but retain local security classification, confirmation, root, PTY, timeout, and terminal-restoration boundaries; bounded output and exit status remain visible without entering model context.
 - Added built-in `analyze_audio` and `judge_audio_quality` tools: deterministic WAV/raw-PCM DSP with explicit `needs_input` for unknown headerless metadata, plus Jev-backed quality scoring with general-LLM fallback only when Jev is not configured.

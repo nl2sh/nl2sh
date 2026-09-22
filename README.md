@@ -34,7 +34,7 @@ Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环�
 
 ## 构建
 
-需要 stable Rust（edition 2021）。桌面 Unix 环境用于开发验证：
+需要 stable Rust（edition 2021）和 Node.js 22+ / npm。Cargo 构建脚本会将 `web/` 源码复制到 Cargo 输出目录，在副本中执行 `npm ci` 与 `npm run build`，再把页面资源编入 Rust 程序；修改前端源码后直接运行 Cargo 即可。桌面 Unix 环境用于开发验证：
 
 ```bash
 cargo build
@@ -43,6 +43,25 @@ cargo build --release
 ```
 
 HTTP 使用 rustls，未启用 native-tls。
+
+### 内置 Web 界面
+
+交互式启动时会同时在 `0.0.0.0:9999` 启动内置 HTTP 服务；端口占用时会选择可用端口。欢迎消息显示当前设备的 IPv4 访问地址，例如 `http://192.168.1.20:9999/`。同一网络中的浏览器可打开页面，无需登录。页面可编辑并保存完整 TOML 配置；服务会校验配置并沿用私有权限的原子保存流程。Web 会话每个新任务读取最新配置，终端 TUI 的当前会话需重启后才会使用 Web 修改的配置。
+
+Web 页面提供类似 dsh 的多会话侧栏。多个 Agent 会话可同时运行；切换会话不会停止后台任务，列表会显示运行中和等待审批状态。每个会话独立保存对话、实时文字与命令输出、审批和结构化补充信息，首轮完成后由当前 LLM 自动生成简短标题。历史会话可从侧栏快速恢复。模型流式增量会拼接在同一 Markdown 段落，工具调用和输出默认折叠。顶部快捷栏可切换 Provider、模型和审批策略、刷新 Provider 模型列表，并显示轮次、Agent 步骤、工具调用、Token/上下文和 Root 状态。Web Agent 使用与 TUI 相同的安全评估、确认和执行链；Web 审批的命令采用捕获式执行。Web 与终端各自维护对话状态。配置包含 API Key 等凭据，且 Web 无登录并监听所有 IPv4 接口；请只在受信任的网络中运行。
+
+Web 后端使用 Tokio 和 Axum 0.8，配置及会话协议使用 serde JSON，Agent 状态和流式输出通过 SSE 推送，安全终端使用 WebSocket。前端源码位于 `web/`，使用 Preact、TypeScript、Vite 和纯 CSS；生产资源由 `rust-embed` 编入可执行文件。发布包无需携带 HTML、JavaScript 或 Node.js，Android ARM64 仍只部署一个 ELF binary。
+
+单独验证前端可运行：
+
+```bash
+cd web
+npm ci
+npm test
+npm run build
+```
+
+`web/dist/` 仅用于手工运行前端构建，Cargo 构建产物位于 `target/`；两者和 `web/node_modules/` 都不纳入源码管理。发布 CI、Android 交叉编译及 Termux 打包同样由 Cargo 构建脚本生成 Web 资源，不改写发布源码包；构建时需有可用的 Node.js/npm，设备运行时仍无需 Node.js。
 
 项目使用 MIT License，详见 `LICENSE`。
 

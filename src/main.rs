@@ -52,6 +52,8 @@ async fn main() -> Result<()> {
         .await?;
         return Ok(());
     }
+    let web = nl2sh::web_ui::start(path.clone()).await?;
+    nl2sh::web_ui::set_welcome_url(web.url().to_owned());
     if matches!(cli.mode, Mode::Agent) {
         loop {
             match tui::run_agent_session(

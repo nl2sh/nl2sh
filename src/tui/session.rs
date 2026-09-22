@@ -1612,7 +1612,7 @@ impl SessionPicker {
                     "{} {:>2}. {}  {} {}  {}",
                     if index == self.selected { ">" } else { " " },
                     index + 1,
-                    session.name,
+                    session.title,
                     session.turns,
                     match self.language {
                         UiLanguage::ZhCn => "轮",
@@ -3588,11 +3588,13 @@ mod tests {
         let sessions = vec![
             SessionInfo {
                 name: "newest".into(),
+                title: "newest".into(),
                 turns: 3,
                 updated_unix_secs: 30,
             },
             SessionInfo {
                 name: "older".into(),
+                title: "older".into(),
                 turns: 2,
                 updated_unix_secs: 20,
             },
