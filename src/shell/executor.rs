@@ -59,6 +59,16 @@ pub trait CommandExecutor: Send + Sync {
         needs_root: bool,
         interactive: bool,
     ) -> Result<ExecutionResult>;
+
+    /// Executes a fixed internal probe without streaming raw output to UI or audit sinks.
+    async fn execute_quiet(
+        &self,
+        command: &str,
+        needs_root: bool,
+        interactive: bool,
+    ) -> Result<ExecutionResult> {
+        self.execute(command, needs_root, interactive).await
+    }
 }
 /// Receives incremental command output without coupling shell code to a UI.
 pub trait OutputSink: Send + Sync {
@@ -137,7 +147,8 @@ impl ShellExecutor {
     /// This bypasses Agent classification because its input comes directly
     /// from the user, while retaining terminal suspension and child cleanup.
     pub async fn execute_user_shell(&self, command: &str) -> Result<ExecutionResult> {
-        self.execute_resolved(command, false, true, true).await
+        self.execute_resolved(command, false, true, true, false)
+            .await
     }
 
     async fn execute_resolved(
@@ -146,6 +157,7 @@ impl ShellExecutor {
         needs_root: bool,
         interactive: bool,
         force_pty: bool,
+        quiet: bool,
     ) -> Result<ExecutionResult> {
         let (program, args) = resolve_invocation(
             command,
@@ -164,7 +176,11 @@ impl ShellExecutor {
             timeout_secs: timeout,
             use_pty: force_pty || self.config.enable_pty,
             interactive,
-            output: self.output.clone(),
+            output: if quiet {
+                Arc::new(NullOutput)
+            } else {
+                self.output.clone()
+            },
             capture_max_bytes: self.config.tool_output_max_bytes,
             tui_active: self.tui_active,
             tui_suspended: self.tui_suspended.clone(),
@@ -224,7 +240,17 @@ impl CommandExecutor for ShellExecutor {
         needs_root: bool,
         interactive: bool,
     ) -> Result<ExecutionResult> {
-        self.execute_resolved(command, needs_root, interactive, false)
+        self.execute_resolved(command, needs_root, interactive, false, false)
+            .await
+    }
+
+    async fn execute_quiet(
+        &self,
+        command: &str,
+        needs_root: bool,
+        interactive: bool,
+    ) -> Result<ExecutionResult> {
+        self.execute_resolved(command, needs_root, interactive, false, true)
             .await
     }
 }

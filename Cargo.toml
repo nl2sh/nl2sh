@@ -18,6 +18,7 @@ self-update = []
 anyhow = "1"
 async-trait = "0.1"
 base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 clap = { version = "4", features = ["derive"] }
 crossterm = "0.28"
 libc = "0.2"

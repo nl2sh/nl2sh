@@ -647,12 +647,17 @@ impl AgentRunner<'_> {
                         }
                     }
                 }
-                "inspect_android_ui" => ui_tools::inspect_android_ui(self.executor).await,
+                "inspect_android_ui" => {
+                    let args = super::tools::parse_inspect_android_ui(call.arguments)
+                        .context("invalid inspect_android_ui arguments")?;
+                    ui_tools::inspect_android_ui(self.executor, &args).await
+                }
                 "view_screenshot" => {
                     let args = super::tools::parse_view_screenshot(call.arguments)
                         .context("invalid view_screenshot arguments")?;
-                    attachment = Some(tokio::task::spawn_blocking(move || ui_tools::view_screenshot(&args)).await.context("view_screenshot worker failed")??);
-                    Ok("Screenshot attached as image/png for multimodal inspection.".into())
+                    let viewed = tokio::task::spawn_blocking(move || ui_tools::view_screenshot(&args)).await.context("view_screenshot worker failed")??;
+                    attachment = Some(viewed.attachment);
+                    Ok(viewed.summary)
                 }
                 "capture_android_screen" => {
                     let args = super::tools::parse_capture_android_screen(call.arguments)
@@ -699,7 +704,11 @@ impl AgentRunner<'_> {
                     if self.confirm_structured(&format!("Validated UI input\n{initial}"),"structured-android-input","Android input changes device UI state",runtime).await? {
                         let command=android_tools::prepare_input(self.executor,&args).await?;
                         let result=self.executor.execute(&command,false,false).await?;
-                        if result.exit_code==Some(0) && !result.timed_out && !result.interrupted { Ok("Android input injected after current-bounds revalidation and confirmation.".into()) } else { bail!("Android input failed: {}",result.stderr) }
+                        if result.exit_code==Some(0) && !result.timed_out && !result.interrupted {
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            let state=ui_tools::inspect_android_ui(self.executor,&ui_tools::InspectAndroidUiArgs::default()).await?;
+                            Ok(format!("Android input injected after current-bounds revalidation and confirmation.\nPost-action UI state:\n{state}"))
+                        } else { bail!("Android input failed: {}",result.stderr) }
                     } else { Ok("Android input not injected: user rejected the operation.".into()) }
                 }
                 "android_notification" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::notification(self.executor,&a).await }
@@ -938,7 +947,7 @@ fn apply_audio_answers(
 
 fn system_prompt(runtime: Option<&str>) -> String {
     let mut system = format!(
-        "You are an Android device shell agent. Prefer read_file, list_dir, search_text, and apply_patch for text file work; do not use sed, shell redirection, or echo to edit files. For local WAV or raw PCM audio, use analyze_audio instead of read_file or shell commands. Use analyze_audio alone for objective metrics such as clipping, SNR estimate, levels, silence, or spectrum. Use judge_audio_quality only when the user asks for qualitative, perceptual, suitability, or overall audio-quality judgment. If analyze_audio returns status=needs_input, do not guess the missing raw PCM metadata and do not probe it with shell commands; ask the user only for the fields listed in missing, then call analyze_audio again with those fields. Use execute_shell_command for other evidence. Never claim unexecuted results. {} Write the final answer in the user's language for a human reader. Summarize conclusions instead of dumping raw tool protocol output. Use a concise Markdown table when comparing multiple items or presenting repeated structured fields; otherwise use clear concise text.",
+        "You are an Android device shell agent. Prefer read_file, list_dir, search_text, and apply_patch for text file work; do not use sed, shell redirection, or echo to edit files. For local WAV or raw PCM audio, use analyze_audio instead of read_file or shell commands. Use analyze_audio alone for objective metrics such as clipping, SNR estimate, levels, silence, or spectrum. Use judge_audio_quality only when the user asks for qualitative, perceptual, suitability, or overall audio-quality judgment. If analyze_audio returns status=needs_input, do not guess the missing raw PCM metadata and do not probe it with shell commands; ask the user only for the fields listed in missing, then call analyze_audio again with those fields. Use execute_shell_command for other evidence. Never claim unexecuted results. Treat structured-tool protocol errors as failures even when an underlying command reports exit code zero. After UI input, use the returned post-action UI state before requesting another hierarchy dump. Never infer visual content from capture metadata: if image inspection fails, report the task as partial and state what remains unverified. {} Write the final answer in the user's language for a human reader. Summarize conclusions instead of dumping raw tool protocol output. Use a concise Markdown table when comparing multiple items or presenting repeated structured fields; otherwise use clear concise text.",
         android_shell_constraints()
     );
     if let Some(runtime) = runtime {

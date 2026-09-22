@@ -53,6 +53,8 @@ pub struct MediaQueryArgs {
     pub media_type: Option<String>,
     #[serde(default)]
     pub limit: Option<usize>,
+    #[serde(default)]
+    pub created_after_epoch_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -69,7 +71,7 @@ pub async fn prepare_input(
 ) -> Result<String> {
     let bounds = parse_bounds(&args.bounds)?;
     let xml = executor
-        .execute("p=/data/local/tmp/.nl2sh-input-$$.xml; trap 'rm -f \"$p\"' EXIT HUP INT TERM; uiautomator dump \"$p\" >/dev/null && cat \"$p\"", false, false)
+        .execute_quiet("p=/data/local/tmp/.nl2sh-input-$$.xml; trap 'rm -f \"$p\"' EXIT HUP INT TERM; uiautomator dump \"$p\" >/dev/null && cat \"$p\"", false, false)
         .await
         .context("cannot refresh Android UI hierarchy")?;
     if xml.exit_code != Some(0) {
@@ -249,30 +251,59 @@ pub fn media_control_command(args: &MediaControlArgs) -> Result<String> {
 }
 
 pub async fn media_query(executor: &dyn CommandExecutor, args: &MediaQueryArgs) -> Result<String> {
-    let (uri, projection) = match args.media_type.as_deref().unwrap_or("images") {
-        "images" => (
-            "content://media/external/images/media",
-            "_id:_display_name:width:height:date_taken:size",
-        ),
-        "video" => (
-            "content://media/external/video/media",
-            "_id:_display_name:duration:width:height:date_taken:size",
-        ),
-        "audio" => (
-            "content://media/external/audio/media",
-            "_id:_display_name:duration:artist:album:size",
-        ),
-        _ => bail!("media_type must be images, video, or audio"),
-    };
+    let (uri, preferred_projection, fallback_projection) =
+        match args.media_type.as_deref().unwrap_or("images") {
+            "images" => (
+                "content://media/external/images/media",
+                "_id:_display_name:width:height:datetaken:date_added:_size",
+                "_id:_display_name:date_added:_size",
+            ),
+            "video" => (
+                "content://media/external/video/media",
+                "_id:_display_name:duration:width:height:datetaken:date_added:_size",
+                "_id:_display_name:duration:date_added:_size",
+            ),
+            "audio" => (
+                "content://media/external/audio/media",
+                "_id:_display_name:duration:artist:album:date_added:_size",
+                "_id:_display_name:duration:date_added:_size",
+            ),
+            _ => bail!("media_type must be images, video, or audio"),
+        };
     let limit = args.limit.unwrap_or(50).clamp(1, MAX_ROWS);
-    encode(
-        "media_query",
-        readonly(
-            executor,
-            &format!("content query --uri {uri} --projection {projection} | head -n {limit}"),
-        )
-        .await?,
-    )
+    let where_clause = args
+        .created_after_epoch_secs
+        .map(|value| format!(" --where 'date_added>{value}'"))
+        .unwrap_or_default();
+    let command = |projection: &str| {
+        format!("content query --uri {uri} --projection {projection}{where_clause} --sort 'date_added DESC' | head -n {limit}")
+    };
+    let preferred = readonly(executor, &command(preferred_projection)).await?;
+    let (result, projection_mode) = if content_protocol_failed(&preferred) {
+        let fallback = readonly(executor, &command(fallback_projection)).await?;
+        if content_protocol_failed(&fallback) {
+            bail!(
+                "MediaStore query failed with preferred and fallback projections: {}",
+                fallback.stdout.trim()
+            )
+        }
+        (fallback, "fallback")
+    } else {
+        (preferred, "preferred")
+    };
+    serde_json::to_string_pretty(&json!({
+        "kind":"media_query",
+        "projection_mode":projection_mode,
+        "result":result_value(result),
+    }))
+    .context("cannot encode MediaStore query result")
+}
+
+fn content_protocol_failed(result: &ExecutionResult) -> bool {
+    let output = format!("{}\n{}", result.stdout, result.stderr);
+    output.contains("Error while accessing provider")
+        || output.contains("IllegalArgumentException")
+        || output.contains("SecurityException")
 }
 
 pub async fn connectivity(
@@ -320,7 +351,7 @@ async fn aggregate(
 }
 
 async fn readonly(executor: &dyn CommandExecutor, command: &str) -> Result<ExecutionResult> {
-    executor.execute(command, false, false).await
+    executor.execute_quiet(command, false, false).await
 }
 
 fn encode(kind: &str, result: ExecutionResult) -> Result<String> {

@@ -53,9 +53,19 @@ pub struct AndroidSettingsArgs {
 pub struct AndroidContentQueryArgs {
     pub uri: String,
     #[serde(default)]
-    pub projection: Option<String>,
+    pub projection: Option<ProjectionArg>,
     #[serde(default)]
     pub where_clause: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+/// Backward-compatible content-provider projection accepted as text or columns.
+pub enum ProjectionArg {
+    /// Comma- or colon-delimited projection used by older callers.
+    Text(String),
+    /// Preferred structured list of projection columns.
+    Columns(Vec<String>),
 }
 
 pub async fn inspect_android_app(
@@ -227,10 +237,10 @@ pub async fn android_content_query(
 ) -> Result<String> {
     validate_content_uri(&args.uri)?;
     let mut command = format!("content query --uri {}", shell_quote(&args.uri));
-    if let Some(projection) = args.projection.as_deref().filter(|value| !value.is_empty()) {
-        validate_content_fragment("projection", projection)?;
+    if let Some(projection) = args.projection.as_ref() {
+        let projection = normalize_projection(projection)?;
         command.push_str(" --projection ");
-        command.push_str(&shell_quote(projection));
+        command.push_str(&shell_quote(&projection));
     }
     if let Some(where_clause) = args
         .where_clause
@@ -241,14 +251,46 @@ pub async fn android_content_query(
         command.push_str(" --where ");
         command.push_str(&shell_quote(where_clause));
     }
-    encode_single("content_query", execute_readonly(executor, &command).await?)
+    let result = execute_readonly(executor, &command).await?;
+    reject_content_protocol_error(&result)?;
+    encode_single("content_query", result)
+}
+
+fn normalize_projection(value: &ProjectionArg) -> Result<String> {
+    let columns = match value {
+        ProjectionArg::Text(value) => value
+            .split([',', ':'])
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .collect::<Vec<_>>(),
+        ProjectionArg::Columns(values) => values.clone(),
+    };
+    if columns.is_empty() || columns.len() > 64 {
+        bail!("content query projection must contain 1 to 64 columns")
+    }
+    for column in &columns {
+        validate_identifier("content projection column", column)?;
+    }
+    Ok(columns.join(":"))
+}
+
+fn reject_content_protocol_error(result: &ExecutionResult) -> Result<()> {
+    let combined = format!("{}\n{}", result.stdout, result.stderr);
+    if combined.contains("Error while accessing provider")
+        || combined.contains("IllegalArgumentException")
+        || combined.contains("SecurityException")
+    {
+        bail!("Android content query failed: {}", combined.trim())
+    }
+    Ok(())
 }
 
 async fn execute_readonly(
     executor: &dyn CommandExecutor,
     command: &str,
 ) -> Result<ExecutionResult> {
-    executor.execute(command, false, false).await
+    executor.execute_quiet(command, false, false).await
 }
 
 fn encode_single(kind: &str, result: ExecutionResult) -> Result<String> {
@@ -374,7 +416,8 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        foreground_component, parse_package_line, validate_content_uri, validate_identifier,
+        foreground_component, normalize_projection, parse_package_line, validate_content_uri,
+        validate_identifier, ProjectionArg,
     };
 
     #[test]
@@ -399,5 +442,16 @@ mod tests {
             .unwrap_or_default();
         assert_eq!(value["package"], "com.example");
         assert_eq!(value["uid"], "10123");
+    }
+
+    #[test]
+    fn normalizes_content_projection_lists() {
+        assert_eq!(
+            normalize_projection(&ProjectionArg::Text("_id,_display_name,size".into()))
+                .ok()
+                .as_deref(),
+            Some("_id:_display_name:size")
+        );
+        assert!(normalize_projection(&ProjectionArg::Columns(vec!["bad;column".into()])).is_err());
     }
 }
