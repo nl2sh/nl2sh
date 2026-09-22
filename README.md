@@ -16,6 +16,8 @@ Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环�
 - 内置 `read_file`、`list_dir`、`search_text`、`apply_patch` 结构化文件工具；允许绝对路径、父目录和符号链接，资源大小仍受限，补丁先展示 diff 并确认。
 - 内置 `analyze_audio` 对 WAV/Raw PCM 做纯 Rust 确定性 DSP 分析；WAV 以真实 header 为准，无头 PCM 缺少可靠元数据时弹出结构化问答窗口，可直接选择常用值或输入自定义采样率、声道数和采样格式，不会把猜测当事实。
 - 内置 `judge_audio_quality` 对 Feature JSON 做多维音质判断；配置 Jev Key 时使用 Jev，否则使用当前通用 LLM，原始 WAV 不上传给判断模型。
+- 内置完整 Android 交互闭环：读取 UI 树后可对仍匹配的控件 bounds 执行确认后的点击、滑动、长按和文本输入；截图可作为有界 PNG 图片交给支持视觉的模型，图片不保存进会话。
+- 内置通知、Crash/ANR、温控功耗、流量、存储、Wi-Fi/以太网、Doze、权限、剪贴板、媒体、MediaStore 和连接性结构化工具，以及小型私有 Agent 便签；写入与控制操作始终需要确认。
 - 输入 `@` 可引用文件或目录并显示候选，支持相对/绝对路径及 `@~`、`@/`、`@.`；Up/Down 选择、Enter/Tab 补全，也可直接输入 `@test.txt写的是什么内容`。引用只解析路径，内容由有界结构化文件工具读取。
 - 可选接入腾讯 ima 知识库，Agent 可发现知识库、搜索资料并读取有界原文；连接器只读、始终无代理直连，不提供上传、追加、导入或删除操作。
 - 完整对话自动保存，可用 `/sessions` 列表、恢复、重命名或删除；凭据、余额和临时审批不保存。
@@ -266,9 +268,9 @@ Command 模式生成、分类后执行单条命令；`--dry-run` 只展示。TUI
 
 Agent 内置只读 Android 诊断工具，可结构化查询前台或指定应用的 Activity、进程、内存、版本、安装位置和存储证据，也可执行参数受限的 `dumpsys`、`logcat`、`settings` 读取及 `content query`。这些接口不提供写设置、service call 或 ContentProvider 写操作。
 
-网络工具只允许对公网 HTTP(S) 地址执行有界 GET/HEAD，禁用重定向、URL 凭据和私网目标。下载操作会在展示 URL、实际字节数与目标路径后请求确认，批准前不会创建或替换目标文件。
+网络工具只允许对公网 HTTP(S) 地址执行有界 GET/HEAD，或在确认后发送有界 JSON POST；禁用重定向、URL 凭据、私网目标和任意自定义 header。下载操作会在展示 URL、实际字节数与目标路径后请求确认，批准前不会创建或替换目标文件。
 
-`inspect_android_ui` 可读取当前 UIAutomator 控件树、焦点窗口和显示信息，不会点击控件；`capture_android_screen` 在确认后将屏幕保存为指定 PNG。识别出的界面内容不会授权后续输入操作，任何有副作用动作仍须独立进入安全与确认链。
+`inspect_android_ui` 可读取当前 UIAutomator 控件树、焦点窗口和显示信息；`capture_android_screen` 在确认后将屏幕保存为指定 PNG，`view_screenshot` 将不超过 2 MiB 的 PNG 作为多模态内容送入下一次模型请求且不持久化。`inject_android_input` 要求明确的控件 bounds，确认前与执行前都会重新读取当前 UI 树，坐标必须位于仍存在且 enabled/clickable 的相同 bounds 内。识别界面不会自动授权输入，每次操作仍独立确认。
 
 `inspect_tls` 对公网主机执行只读 TLS 握手，校验主机名、有效期和受信链，并返回各级证书的主题、颁发者、起止时间和 SHA-256 指纹；该工具不发送 HTTP 请求，也不接受本机或私网目标。
 

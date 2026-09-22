@@ -52,14 +52,16 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 | `src/audio_tools` | `AudioToolExecutor`、WAV/Raw PCM 解析、DSP/FFT | 本地音频 → 客观 Feature JSON 或 `needs_input` | 纯 Rust、只读、不调用模型或 shell；Raw PCM 不可靠参数不得静默猜测 |
 | `src/audio_quality` | `judge_audio_quality`、Jev/通用 LLM 归一化 | 完整 Feature JSON → 0–5 多维质量评分 | Jev 配置存在时失败不回退；未配置才使用当前 LLM；不上传原始音频 |
 | `src/android_diagnostics` | 固定参数的应用、dumpsys、logcat、settings 与 ContentProvider 只读诊断 | 经严格校验的结构化参数 → 分项状态和有界原始证据 | 不暴露写设置、service call 或 ContentProvider 写操作；不接受 shell 元字符 |
+| `src/android_tools` | UI bounds 校验输入、通知/崩溃/功耗/网络/存储/权限聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认的固定命令 | 输入注入在确认前和执行前重读 UI 树；写入与控制操作必须确认，不接受任意 shell |
+| `src/agent_memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
 | `src/provider_metadata` | `ProviderMetadataClient`、Provider 识别、模型列表与上下文元数据归一化 | Provider 配置 → `ModelMetadata` 列表 | 只读网络访问，不记录凭据/原始账户响应，不参与模型推理与安全判断 |
 | `src/provider_account` | `ProviderAccountClient`、余额结果归一化 | Provider 凭据 → 可显示余额 | 仅调用公开只读接口；不记录凭据、余额或原始响应，不参与推理、安全或执行 |
 | `src/runtime` | `AndroidRuntime`、Termux 标记与 prefix 探测 | 进程环境 → Android shell/Termux | 只提供兼容性信息和 shell/path 选择，不参与安全分类、确认或 root 授权 |
 | `src/network` | 统一 rustls HTTP Client、HTTP/SOCKS 代理、认证和绕过策略 | `Config` → `reqwest::Client` | 代理凭据不得进入日志、错误详情或模型上下文；关闭总开关不清理配置 |
-| `src/web_tools` | 公网 HTTP(S) 有界读取与确认后原子下载 | GET/HEAD URL 或 URL+目标路径 → 有界正文/文件 | 禁止重定向、URL 凭据、本机/私网目标、任意 header/body；下载确认前不创建目标文件 |
-| `src/ui_tools` | UIAutomator 控件树、焦点窗口、显示信息与截图命令 | 当前界面 → 有界结构化节点或 PNG | 控件树使用自动清理的内部临时文件；截图属于写操作并必须确认；不提供输入事件 |
+| `src/web_tools` | 公网 HTTP(S) 有界读取、确认后 JSON POST 与原子下载 | GET/HEAD/JSON POST URL 或 URL+目标路径 → 有界正文/文件 | 禁止重定向、URL 凭据、本机/私网目标和任意 header；POST、下载均须确认 |
+| `src/ui_tools` | UIAutomator 控件树、焦点窗口、显示信息、截图及 PNG 模型附件 | 当前界面/本地 PNG → 有界结构化节点、PNG 或临时多模态内容 | 截图写入必须确认；图片限 2 MiB，只进入下一模型请求，不持久化到会话 |
 | `src/tls_tools` | 公网 TLS 握手、SNI/信任链校验和 X.509 元数据 | 主机/端口 → 证书主题、颁发者、有效期与 SHA-256 | 只读直连，不发送 HTTP；拒绝本机/私网目标，使用 ring 与 Mozilla 根证书集合 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、工具 schema、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |

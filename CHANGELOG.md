@@ -8,6 +8,7 @@
 
 ### Added
 
+- Added confirmed, bounds-validated Android input injection; bounded screenshot image attachments; confirmed public JSON POST; structured notification, crash/ANR, thermal/power, netstats, storage, Wi-Fi/Ethernet, Doze, permission, clipboard, media, connectivity, and persistent Agent-memory tools. Mutations remain behind local confirmation and image payloads are omitted from saved sessions.
 - Added Codex-style `!command` execution in the Agent TUI. Commands bypass the Provider but retain local security classification, confirmation, root, PTY, timeout, and terminal-restoration boundaries; bounded output and exit status remain visible without entering model context.
 - Added built-in `analyze_audio` and `judge_audio_quality` tools: deterministic WAV/raw-PCM DSP with explicit `needs_input` for unknown headerless metadata, plus Jev-backed quality scoring with general-LLM fallback only when Jev is not configured.
 - Added a Codex-style structured question popup for missing tool input. Headerless raw PCM analysis now lets users select common metadata values or type custom answers, then retries locally without asking the model to guess.

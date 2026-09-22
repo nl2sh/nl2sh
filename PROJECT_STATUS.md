@@ -4,6 +4,7 @@ Last Updated: 2026-09-22
 
 ## Recent Changes
 
+- 新增 Android 交互闭环与结构化运维工具：UI bounds 双次校验输入、PNG 多模态查看、确认后 JSON POST、通知/Crash/ANR/功耗/流量/存储/网络/Doze/权限聚合、剪贴板、媒体、连接性和持久便签。所有写入、远程 POST、输入注入及媒体控制均保持独立确认；图片附件不进入持久会话。
 - 新增 `inspect_tls` 公网 TLS 诊断：直连握手并验证 SNI 主机名、证书有效期和 Mozilla 信任链，返回各级证书主题、颁发者、起止时间与 SHA-256；拒绝本机/私网目标，不发送 HTTP 请求。
 - TUI 为 Provider 401、429、流提前结束、网络超时及 ima 连接失败附加本地诊断和 `/config` 操作建议；原始错误仍保留，401 继续立即失败且不重试，流式残片不冒充完整回答。
 - 新增 `inspect_android_ui`，通过自动清理的内部临时 XML 返回有界 UIAutomator 控件节点、焦点窗口及显示尺寸/密度；新增 `capture_android_screen`，仅在用户确认后把当前画面写为指定 PNG，不提供自动点击或输入。
@@ -78,7 +79,7 @@ Last Updated: 2026-09-22
 
 ## Current Phase
 
-1.0.1 兼容版已完成 TUR 四架构构建、Termux 真机/模拟器运行矩阵及上游配方 PR，正在等待 TUR CI/Review。
+Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR 上游配方仍在等待 CI/Review。
 
 ## Overall Status
 
@@ -168,6 +169,7 @@ Last Updated: 2026-09-22
 
 ## Verification Performed
 
+- Android 交互闭环与结构化运维：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings`、111 项有效库测试及其余非 TUI 测试通过；AArch64 Android API 26 release 交叉编译通过。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - 设备诊断与工具可靠性：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features`、`cargo clippy --all-targets -- -D warnings`、106 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及其余非 TUI 测试通过；新增 `/new`/斜杠纠错伪终端回归单独通过。API 26 AArch64 release 交叉编译通过，产物为使用 `/system/bin/linker64` 的 PIE。真机只读探测验证 toybox Top 字段、包列表和 UIAutomator 临时控件树命令；全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - 结构化用户问答窗口：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features` 与 `cargo clippy --all-targets -- -D warnings` 通过；95 项有效库测试、3 项主程序测试、15 项 Agent loop 测试及其余非 TUI 测试通过，1 项显式凭据 ima smoke 按设计忽略。新增回归覆盖候选答案、自定义输入、Esc 取消，以及 Raw PCM 三项缺失元数据收集后不经过模型直接重试。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - 测试 target 编译修复：`cargo fmt --all -- --check`、`cargo check --all-targets` 与 `cargo check --all-targets --no-default-features` 通过；`cargo test` 的 93 项有效库测试、3 项主程序测试、14 项 Agent loop 测试及其余非 TUI 测试通过，1 项显式凭据 ima smoke 按设计忽略。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
