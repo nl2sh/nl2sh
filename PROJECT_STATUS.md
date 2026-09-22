@@ -4,6 +4,7 @@ Last Updated: 2026-09-22
 
 ## Recent Changes
 
+- 权限确认新增“本次运行全部允许”选项，并新增 `/permission [status|allow|ask]` 本地命令；运行期许可只存在于当前进程内存，仅自动批准非 Root、无需强确认且最高为 `Mutating` 的操作，Dangerous、Critical、Root 与强确认仍必须逐次审批。
 - 修复 Android 视觉任务闭环：截图查看接受 PNG/JPEG/WebP，超出 2 MiB 时在进程内有界缩放；UI 检查默认仅返回可操作、有标签或聚焦节点，输入成功后直接附带最新界面状态。固定结构化探测改用静默执行，不再把内部 UI XML 或 dumpsys 原文重复写入实时输出与审计 sink。
 - 修复 ContentProvider/MediaStore 假成功：投影支持结构化列数组并规范化为 Android `content` 语法，识别退出码为零但正文含 provider 异常的结果；媒体列改为 `datetaken`、`date_added` 与 `_size`，支持按创建时间过滤、倒序和兼容投影回退。最终回答约束禁止从拍摄元数据推断画面内容，视觉检查失败时必须明确报告部分完成。
 - 新增 Android 交互闭环与结构化运维工具：UI bounds 双次校验输入、PNG 多模态查看、确认后 JSON POST、通知/Crash/ANR/功耗/流量/存储/网络/Doze/权限聚合、剪贴板、媒体、连接性和持久便签。所有写入、远程 POST、输入注入及媒体控制均保持独立确认；图片附件不进入持久会话。
@@ -171,6 +172,7 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
+- 运行期权限许可：`cargo fmt --all -- --check`、`cargo check --all-targets` 与 `cargo clippy --all-targets -- -D warnings` 通过；114 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及其余非 TUI 测试通过，AArch64 Android API 26 release 交叉编译通过。新增回归覆盖确认框运行期许可及高风险禁用；全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - Android 视觉闭环可靠性修复：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 通过；113 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及其余非 TUI 测试通过，AArch64 Android API 26 release 交叉编译通过。MediaStore 首选投影在真机以 `_size`、`datetaken`、`date_added` 验证不再返回 provider 列异常。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - Android 交互闭环与结构化运维：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings`、111 项有效库测试及其余非 TUI 测试通过；AArch64 Android API 26 release 交叉编译通过。全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
 - 设备诊断与工具可靠性：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features`、`cargo clippy --all-targets -- -D warnings`、106 项有效库测试、3 项主程序测试、16 项 Agent loop 测试及其余非 TUI 测试通过；新增 `/new`/斜杠纠错伪终端回归单独通过。API 26 AArch64 release 交叉编译通过，产物为使用 `/system/bin/linker64` 的 PIE。真机只读探测验证 toybox Top 字段、包列表和 UIAutomator 临时控件树命令；全量测试仍只有既有 `agent_reply_remains_in_live_tui_until_ctrl_q` 因启动动画 ANSI 差分文本匹配超时。
