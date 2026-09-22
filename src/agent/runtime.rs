@@ -97,3 +97,67 @@ pub(crate) fn action_fingerprint(command: &str, result: &ExecutionResult) -> u64
     result.stderr.trim().hash(&mut hasher);
     hasher.finish()
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CommandOutcomeStatus {
+    Complete,
+    Partial,
+    Failed,
+    TimedOut,
+}
+
+impl CommandOutcomeStatus {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Complete => "complete",
+            Self::Partial => "partial",
+            Self::Failed => "failed",
+            Self::TimedOut => "timed_out",
+        }
+    }
+
+    pub(crate) const fn has_evidence(self) -> bool {
+        matches!(self, Self::Complete | Self::Partial)
+    }
+}
+
+pub(crate) fn command_outcome_status(result: &ExecutionResult) -> CommandOutcomeStatus {
+    if result.timed_out || result.interrupted {
+        return CommandOutcomeStatus::TimedOut;
+    }
+    if result.exit_code == Some(0) {
+        return CommandOutcomeStatus::Complete;
+    }
+    if !result.stdout.trim().is_empty() {
+        return CommandOutcomeStatus::Partial;
+    }
+    CommandOutcomeStatus::Failed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{command_outcome_status, CommandOutcomeStatus};
+    use crate::shell::ExecutionResult;
+
+    fn result(exit_code: Option<i32>, stdout: &str) -> ExecutionResult {
+        ExecutionResult {
+            stdout: stdout.into(),
+            stderr: String::new(),
+            exit_code,
+            timed_out: false,
+            interrupted: false,
+        }
+    }
+
+    #[test]
+    fn preserves_partial_evidence_from_nonzero_compound_commands() {
+        assert_eq!(
+            command_outcome_status(&result(Some(1), "/system/bin/sqlite3\n")),
+            CommandOutcomeStatus::Partial
+        );
+        assert_eq!(
+            command_outcome_status(&result(Some(1), "")),
+            CommandOutcomeStatus::Failed
+        );
+    }
+}

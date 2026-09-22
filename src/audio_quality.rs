@@ -11,7 +11,11 @@ use std::{collections::BTreeMap, time::Duration};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct JudgeAudioQualityArgs {
-    pub features: Value,
+    #[serde(default)]
+    pub features: Option<Value>,
+    /// Exact path of a completed analysis cached by the current Agent task.
+    #[serde(default)]
+    pub analysis_path: Option<String>,
     #[serde(default)]
     pub purpose: Option<String>,
 }
@@ -92,7 +96,11 @@ pub async fn judge_audio_quality(
     llm: &dyn LlmClient,
     args: &JudgeAudioQualityArgs,
 ) -> Result<AudioQualityJudgment> {
-    validate_features(&args.features)?;
+    validate_features(
+        args.features
+            .as_ref()
+            .context("audio quality judgment requires resolved analyze_audio features")?,
+    )?;
     match selected_backend(config) {
         AudioJudgeBackend::Jev => judge_with_jev(config, args).await,
         AudioJudgeBackend::GeneralLlm => judge_with_llm(config, llm, args).await,
@@ -133,7 +141,7 @@ The overall score should be a holistic usability judgment for the stated purpose
 Return one valid JSON object only, with keys clarity, background_noise, distortion, loudness, continuity, usability, overall, and optional summary. Do not return Markdown or commentary outside JSON."#;
     let user = serde_json::to_string(&json!({
         "purpose": purpose,
-        "features": args.features.clone(),
+        "features": args.features.clone().context("missing resolved audio features")?,
     }))?;
     let response = llm
         .complete(LlmRequest {
@@ -167,7 +175,7 @@ async fn judge_with_jev(
     let body = json!({
         "state": {
             "purpose": purpose,
-            "features": args.features.clone(),
+            "features": args.features.clone().context("missing resolved audio features")?,
         },
         "model": config.jev_model.clone(),
         "questions": jev_questions(),
@@ -466,7 +474,8 @@ mod tests {
             &config,
             &llm,
             &JudgeAudioQualityArgs {
-                features: features(),
+                features: Some(features()),
+                analysis_path: None,
                 purpose: Some("speech recognition".into()),
             },
         )

@@ -1,6 +1,8 @@
 //! Reusable nl2sh core. UI and CLI are deliberately thin adapters.
 /// Agent loop, conversation policy, confirmation, and built-in tools.
 pub mod agent;
+/// Bounded, read-only Android framework diagnostics used by structured tools.
+pub mod android_diagnostics;
 /// Audio-quality judgment using Jev or the configured general LLM.
 pub mod audio_quality;
 /// Deterministic WAV/raw-PCM parsing and DSP feature extraction.
@@ -31,7 +33,13 @@ pub mod security;
 pub mod sessions;
 /// PTY/pipeline execution, process cleanup, and Android root selection.
 pub mod shell;
+/// Direct, read-only TLS chain and certificate diagnostics.
+pub mod tls_tools;
 /// Ratatui/crossterm terminal input interface.
 pub mod tui;
+/// Structured Android UI hierarchy inspection and confirmed screenshots.
+pub mod ui_tools;
 /// Signed-by-checksum GitHub Release discovery and self-update support.
 pub mod update;
+/// Bounded HTTP retrieval and confirmed atomic downloads for Agent tools.
+pub mod web_tools;

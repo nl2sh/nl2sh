@@ -748,3 +748,92 @@ async fn raw_audio_missing_metadata_is_collected_and_retried_without_the_model()
     assert_eq!(llm.calls.load(Ordering::SeqCst), 2);
     Ok(())
 }
+
+struct CachedAudioJudgeLlm {
+    calls: AtomicUsize,
+    path: String,
+}
+
+#[async_trait]
+impl LlmClient for CachedAudioJudgeLlm {
+    async fn complete(&self, req: LlmRequest) -> Result<LlmResponse> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        match call {
+            0 => Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "analyze".into(),
+                    name: "analyze_audio".into(),
+                    arguments: json!({
+                        "path": self.path,
+                        "sample_rate": 16000,
+                        "channels": 1,
+                        "sample_format": "s16le"
+                    }),
+                }],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            }),
+            1 => Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "judge".into(),
+                    name: "judge_audio_quality".into(),
+                    arguments: json!({
+                        "analysis_path": self.path,
+                        "features": {"missing":"status and all real metrics"}
+                    }),
+                }],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            }),
+            2 => {
+                assert!(req.tools.is_empty());
+                let user = req.items.iter().find_map(|item| match item {
+                    ConversationItem::Message(message) if message.role == Role::User => {
+                        Some(message.content.as_str())
+                    }
+                    _ => None,
+                });
+                assert!(user.is_some_and(|value| value.contains("\"status\":\"ok\"")));
+                Ok(LlmResponse {
+                    text: Some(r#"{"clarity":{"score":4,"confidence":1},"background_noise":{"score":4,"confidence":1},"distortion":{"score":4,"confidence":1},"loudness":{"score":4,"confidence":1},"continuity":{"score":4,"confidence":1},"usability":{"score":4,"confidence":1},"overall":{"score":4,"confidence":1}}"#.into()),
+                    tool_calls: vec![],
+                    usage: Usage::default(),
+                    finish_reason: FinishReason::Stop,
+                })
+            }
+            _ => Ok(LlmResponse {
+                text: Some("judged-from-cache".into()),
+                tool_calls: vec![],
+                usage: Usage::default(),
+                finish_reason: FinishReason::Stop,
+            }),
+        }
+    }
+}
+
+#[tokio::test]
+async fn audio_judgment_uses_cached_complete_analysis_instead_of_model_copy() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("raw.pcm");
+    std::fs::write(&path, vec![0u8; 3200])?;
+    let llm = CachedAudioJudgeLlm {
+        calls: AtomicUsize::new(0),
+        path: path.display().to_string(),
+    };
+    let cfg = Config::default();
+    let outcome = AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &Exec {
+            calls: Arc::new(AtomicUsize::new(0)),
+        },
+        confirmer: &Confirm(false),
+    }
+    .run("analyze and judge")
+    .await?;
+    assert_eq!(outcome.final_text, "judged-from-cache");
+    assert_eq!(llm.calls.load(Ordering::SeqCst), 4);
+    Ok(())
+}

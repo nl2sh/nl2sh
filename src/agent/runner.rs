@@ -1,9 +1,12 @@
-use super::runtime::{action_fingerprint, normalize_command, LimitType, TaskRuntime};
+use super::runtime::{
+    action_fingerprint, command_outcome_status, normalize_command, LimitType, TaskRuntime,
+};
 use super::{
     builtin_tools, ConfirmationDecision, Confirmer, ConversationContext, QuestionOption,
     ShellToolArgs, UserQuestion,
 };
 use crate::{
+    android_diagnostics,
     audio_quality::judge_audio_quality,
     audio_tools::{AnalyzeAudioArgs, AudioAnalysisResult, AudioToolExecutor, RawSampleFormat},
     config::{Config, UiLanguage},
@@ -17,6 +20,7 @@ use crate::{
     runtime::{android_runtime, AndroidRuntime},
     security::{assess, MatchedRule, RiskLevel, SecurityAssessment},
     shell::CommandExecutor,
+    tls_tools, ui_tools, web_tools,
 };
 use anyhow::{bail, Context, Result};
 use std::{
@@ -107,6 +111,7 @@ impl AgentRunner<'_> {
         let tool_base = std::env::current_dir().context("cannot determine tool base directory")?;
         let file_tools = FileToolExecutor::new(&tool_base)?;
         let audio_tools = AudioToolExecutor::new(&tool_base)?;
+        let mut audio_analysis_cache: HashMap<String, serde_json::Value> = HashMap::new();
         let ima = ImaClient::from_config(self.config)?;
         let effective_steps = self
             .config
@@ -206,6 +211,7 @@ impl AgentRunner<'_> {
                             ima.as_ref(),
                             call.clone(),
                             &mut runtime,
+                            &mut audio_analysis_cache,
                         )
                         .await;
                     step_made_progress |= result.success;
@@ -311,17 +317,20 @@ impl AgentRunner<'_> {
                     Ok(x) if x.interrupted => {
                         bail!("agent interrupted during command execution")
                     }
-                    Ok(x) => ToolResult {
+                    Ok(x) => {
+                        let status = command_outcome_status(&x);
+                        ToolResult {
                         call_id: call.id,
                         output: format!(
-                            "executed_command={}\nrisk={:?} root={} matched_rules={}\nexit={:?} timed_out={} interrupted={}\nstdout:\n{}\nstderr:\n{}",
+                            "executed_command={}\nrisk={:?} root={} matched_rules={}\nstatus={} exit={:?} timed_out={} interrupted={}\nstdout:\n{}\nstderr:\n{}",
                             command,
                             assessment.risk_level,
                             assessment.requires_root,
                             assessment.matched_rules.iter().map(|rule| rule.id.as_str()).collect::<Vec<_>>().join(","),
-                            x.exit_code, x.timed_out, x.interrupted, x.stdout, x.stderr
+                            status.as_str(), x.exit_code, x.timed_out, x.interrupted, x.stdout, x.stderr
                         ),
-                        success: x.exit_code == Some(0) && !x.timed_out && !x.interrupted,
+                        success: status.has_evidence(),
+                    }
                     },
                     Err(e) => ToolResult {
                         call_id: call.id,
@@ -426,6 +435,7 @@ impl AgentRunner<'_> {
         ima: Option<&ImaClient>,
         call: crate::llm::ToolCall,
         runtime: &mut TaskRuntime,
+        audio_analysis_cache: &mut HashMap<String, serde_json::Value>,
     ) -> ToolResult {
         let call_id = call.id.clone();
         let outcome: Result<String> = async {
@@ -484,6 +494,7 @@ impl AgentRunner<'_> {
                 "analyze_audio" => {
                     let mut args = super::tools::parse_analyze_audio(call.arguments)
                         .context("invalid analyze_audio arguments")?;
+                    let analysis_path = args.path.clone();
                     let worker = audio_tools.clone();
                     let worker_args = args.clone();
                     let mut result = tokio::task::spawn_blocking(move || worker.analyze(&worker_args))
@@ -502,15 +513,159 @@ impl AgentRunner<'_> {
                                 .context("analyze_audio retry worker failed")??;
                         }
                     }
-                    serde_json::to_string_pretty(&result)
+                    let value = serde_json::to_value(&result)
+                        .context("cannot serialize analyze_audio result")?;
+                    if matches!(result, AudioAnalysisResult::Ok { .. }) {
+                        audio_analysis_cache.insert(analysis_path, value.clone());
+                    }
+                    serde_json::to_string_pretty(&value)
                         .context("cannot serialize analyze_audio result")
                 }
                 "judge_audio_quality" => {
-                    let args = super::tools::parse_judge_audio_quality(call.arguments)
+                    let mut args = super::tools::parse_judge_audio_quality(call.arguments)
                         .context("invalid judge_audio_quality arguments")?;
+                    let cached = args
+                        .analysis_path
+                        .as_ref()
+                        .and_then(|path| audio_analysis_cache.get(path))
+                        .or_else(|| {
+                            if audio_analysis_cache.len() == 1 {
+                                audio_analysis_cache.values().next()
+                            } else {
+                                None
+                            }
+                        });
+                    if let Some(features) = cached {
+                        args.features = Some(features.clone());
+                    } else if args.features.is_none() {
+                        bail!("no completed analyze_audio result is available; call analyze_audio first and pass its exact path as analysis_path")
+                    }
                     let judgment = judge_audio_quality(self.config, self.llm, &args).await?;
                     serde_json::to_string_pretty(&judgment)
                         .context("cannot serialize judge_audio_quality result")
+                }
+                "inspect_android_app" => {
+                    let args = super::tools::parse_inspect_android_app(call.arguments)
+                        .context("invalid inspect_android_app arguments")?;
+                    android_diagnostics::inspect_android_app(self.executor, &args).await
+                }
+                "list_android_apps" => {
+                    let args = super::tools::parse_list_android_apps(call.arguments)
+                        .context("invalid list_android_apps arguments")?;
+                    android_diagnostics::list_android_apps(self.executor, &args).await
+                }
+                "top_android_apps" => {
+                    let args = super::tools::parse_top_android_apps(call.arguments)
+                        .context("invalid top_android_apps arguments")?;
+                    android_diagnostics::top_android_apps(self.executor, &args).await
+                }
+                "android_dumpsys" => {
+                    let args = super::tools::parse_android_dumpsys(call.arguments)
+                        .context("invalid android_dumpsys arguments")?;
+                    android_diagnostics::android_dumpsys(self.executor, &args).await
+                }
+                "android_logcat" => {
+                    let args = super::tools::parse_android_logcat(call.arguments)
+                        .context("invalid android_logcat arguments")?;
+                    android_diagnostics::android_logcat(self.executor, &args).await
+                }
+                "android_settings" => {
+                    let args = super::tools::parse_android_settings(call.arguments)
+                        .context("invalid android_settings arguments")?;
+                    android_diagnostics::android_settings(self.executor, &args).await
+                }
+                "android_content_query" => {
+                    let args = super::tools::parse_android_content_query(call.arguments)
+                        .context("invalid android_content_query arguments")?;
+                    android_diagnostics::android_content_query(self.executor, &args).await
+                }
+                "http_request" => {
+                    let args = super::tools::parse_http_request(call.arguments)
+                        .context("invalid http_request arguments")?;
+                    web_tools::http_request(self.config, &args).await
+                }
+                "download_url" => {
+                    let args = super::tools::parse_download_url(call.arguments)
+                        .context("invalid download_url arguments")?;
+                    let prepared = web_tools::prepare_download(self.config, &args).await?;
+                    let summary = prepared.summary();
+                    let assessment = SecurityAssessment {
+                        risk_level: RiskLevel::Mutating,
+                        matched_rules: vec![MatchedRule {
+                            id: "structured-download".into(),
+                            message: "Download writes a local file".into(),
+                        }],
+                        requires_confirmation: true,
+                        requires_double_confirmation: false,
+                        requires_root: false,
+                        explanation: "Downloaded data is written only after confirmation.".into(),
+                    };
+                    let confirmation_started = Instant::now();
+                    let decision = self.confirmer.confirm(&summary, &assessment).await?;
+                    runtime.add_confirmation_time(confirmation_started.elapsed());
+                    match decision {
+                        ConfirmationDecision::Approve
+                        | ConfirmationDecision::ApproveForTask
+                        | ConfirmationDecision::ApproveCaptured
+                        | ConfirmationDecision::ApproveInteractive => {
+                            tokio::task::spawn_blocking(move || prepared.apply())
+                                .await
+                                .context("download write worker failed")??;
+                            Ok("Download written atomically after user confirmation.".into())
+                        }
+                        ConfirmationDecision::Edit(_) => Ok(
+                            "Download not written: edit is unavailable; request a new target."
+                                .into(),
+                        ),
+                        ConfirmationDecision::Reject => {
+                            Ok("Download not written: user rejected the operation.".into())
+                        }
+                    }
+                }
+                "inspect_android_ui" => ui_tools::inspect_android_ui(self.executor).await,
+                "capture_android_screen" => {
+                    let args = super::tools::parse_capture_android_screen(call.arguments)
+                        .context("invalid capture_android_screen arguments")?;
+                    let command = ui_tools::capture_command(&args.path)?;
+                    let assessment = SecurityAssessment {
+                        risk_level: RiskLevel::Mutating,
+                        matched_rules: vec![MatchedRule {
+                            id: "structured-screenshot".into(),
+                            message: "Screenshot writes a local PNG file".into(),
+                        }],
+                        requires_confirmation: true,
+                        requires_double_confirmation: false,
+                        requires_root: false,
+                        explanation: "Screen capture writes the displayed target after confirmation.".into(),
+                    };
+                    let confirmation_started = Instant::now();
+                    let decision = self.confirmer.confirm(&command, &assessment).await?;
+                    runtime.add_confirmation_time(confirmation_started.elapsed());
+                    match decision {
+                        ConfirmationDecision::Approve
+                        | ConfirmationDecision::ApproveForTask
+                        | ConfirmationDecision::ApproveCaptured
+                        | ConfirmationDecision::ApproveInteractive => {
+                            let result = self.executor.execute(&command, false, false).await?;
+                            if result.exit_code == Some(0) && !result.timed_out && !result.interrupted {
+                                Ok(format!("Screenshot written to {} after confirmation.", args.path))
+                            } else {
+                                bail!("screenshot command failed: exit={:?} stderr={}", result.exit_code, result.stderr)
+                            }
+                        }
+                        ConfirmationDecision::Edit(_) => Ok(
+                            "Screenshot not written: edit is unavailable; request a new path."
+                                .into(),
+                        ),
+                        ConfirmationDecision::Reject => {
+                            Ok("Screenshot not written: user rejected the operation.".into())
+                        }
+                    }
+                }
+                "inspect_tls" => {
+                    let args = super::tools::parse_inspect_tls(call.arguments)
+                        .context("invalid inspect_tls arguments")?;
+                    tls_tools::inspect_tls(&args, self.config.llm_request_timeout_secs).await
                 }
                 "ima_list_knowledge_bases" => ima
                     .context("ima connector is not configured")?
@@ -536,7 +691,9 @@ impl AgentRunner<'_> {
         match outcome {
             Ok(output) => ToolResult {
                 call_id,
-                success: !output.starts_with("Patch not applied"),
+                success: !output.starts_with("Patch not applied")
+                    && !output.starts_with("Download not written")
+                    && !output.starts_with("Screenshot not written"),
                 output: truncate_text(&output, self.config.tool_output_max_bytes),
             },
             Err(error) => ToolResult {

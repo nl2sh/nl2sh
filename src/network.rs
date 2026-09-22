@@ -7,7 +7,19 @@ use std::time::Duration;
 
 /// Builds a rustls client used by every Provider-facing request.
 pub fn build_http_client(config: &Config) -> Result<Client> {
-    let mut builder = ClientBuilder::new()
+    build_http_client_with(config, ClientBuilder::new())
+}
+
+/// Builds the shared client policy with redirects disabled for bounded tools.
+pub fn build_tool_http_client(config: &Config) -> Result<Client> {
+    build_http_client_with(
+        config,
+        ClientBuilder::new().redirect(reqwest::redirect::Policy::none()),
+    )
+}
+
+fn build_http_client_with(config: &Config, builder: ClientBuilder) -> Result<Client> {
+    let mut builder = builder
         .no_proxy()
         .timeout(Duration::from_secs(config.llm_request_timeout_secs));
     if config.proxy_enabled {
