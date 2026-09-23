@@ -42,6 +42,7 @@ tower-http = { version = "0.6", features = ["set-header"] }
 toml = "0.8"
 url = "2"
 unicode-width = "0.2"
+zip = { version = "0.6.6", default-features = false }
 
 [dev-dependencies]
 futures-util = "0.3"

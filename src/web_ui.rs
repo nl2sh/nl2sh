@@ -26,6 +26,7 @@ use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
+    io::{Cursor, Write},
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
     sync::{
@@ -44,6 +45,7 @@ const PORT: u16 = 9999;
 const MAX_REQUEST: usize = 256 * 1024;
 const MAX_HISTORY: usize = 400;
 const MAX_WEB_SESSIONS: usize = 64;
+const MAX_EXPORT_LOG_BYTES: u64 = 20 * 1024 * 1024;
 static WELCOME_URL: OnceLock<String> = OnceLock::new();
 static SESSION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -195,6 +197,15 @@ struct Snapshot {
 struct WebEntry {
     kind: &'static str,
     text: String,
+}
+
+#[derive(Serialize)]
+struct ExportConversation {
+    id: String,
+    title: String,
+    exported_unix_secs: u64,
+    busy: bool,
+    entries: Vec<WebEntry>,
 }
 
 #[derive(Serialize)]
@@ -386,6 +397,7 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/sessions", get(get_sessions))
         .route("/api/sessions/new", post(new_session))
         .route("/api/sessions/load", post(load_session))
+        .route("/api/sessions/export", get(export_session))
         .route("/api/message", post(post_message))
         .route("/api/decision", post(post_decision))
         .route("/api/events", get(session_events))
@@ -527,6 +539,77 @@ async fn get_state(
         output_tokens: inner.output_tokens,
         final_input_tokens: inner.final_input_tokens,
     }))
+}
+
+async fn export_session(
+    State(state): State<Arc<Shared>>,
+    Query(query): Query<StateQuery>,
+) -> ApiResult<Response> {
+    let current = session(&state, &query.id)?;
+    let conversation = {
+        let inner = current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("web session lock poisoned"))?;
+        ExportConversation {
+            id: inner.id.clone(),
+            title: inner.title.clone(),
+            exported_unix_secs: unix_seconds(),
+            busy: inner.busy,
+            entries: web_entries(&inner.history),
+        }
+    };
+    let path = state.path.clone();
+    let id = conversation.id.clone();
+    let archive =
+        tokio::task::spawn_blocking(move || build_session_export(&path, &conversation)).await??;
+    let disposition = HeaderValue::from_str(&format!("attachment; filename=\"nl2sh-{id}.zip\""))
+        .context("invalid export filename")?;
+    Ok((
+        [
+            (
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/zip"),
+            ),
+            (header::CONTENT_DISPOSITION, disposition),
+        ],
+        archive,
+    )
+        .into_response())
+}
+
+fn build_session_export(
+    path: &std::path::Path,
+    conversation: &ExportConversation,
+) -> Result<Vec<u8>> {
+    let cfg = config::load_or_default_unvalidated(path)?;
+    let log_path = if cfg.history_log_file.is_absolute() {
+        cfg.history_log_file
+    } else {
+        config::state_dir(path)?.join(cfg.history_log_file)
+    };
+    let log = match std::fs::metadata(&log_path) {
+        Ok(metadata) if !metadata.is_file() || metadata.len() > MAX_EXPORT_LOG_BYTES => {
+            bail!("history log is invalid or exceeds export size limit")
+        }
+        Ok(_) => std::fs::read(&log_path).context("cannot read history log")?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => return Err(error).context("cannot inspect history log"),
+    };
+    if log.len() as u64 > MAX_EXPORT_LOG_BYTES {
+        bail!("history log exceeds export size limit")
+    }
+    let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    archive.start_file("conversation.json", options)?;
+    serde_json::to_writer_pretty(&mut archive, conversation)
+        .context("cannot encode conversation")?;
+    archive.start_file("nl2sh.log", options)?;
+    archive.write_all(&log).context("cannot add history log")?;
+    archive.start_file("README.txt", options)?;
+    archive.write_all(b"conversation.json contains the selected Web session's visible conversation at export time.\nnl2sh.log is the shared audit log and may contain events from other sessions. An empty log means no log file existed.\n")?;
+    Ok(archive.finish()?.into_inner())
 }
 
 async fn get_config(State(state): State<Arc<Shared>>) -> ApiResult<String> {
@@ -1221,6 +1304,8 @@ impl WebConfirmer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
+    use tempfile::tempdir;
 
     fn state(path: PathBuf) -> Arc<Shared> {
         let mut inner = SessionState::empty();
@@ -1263,12 +1348,37 @@ mod tests {
         assert_eq!(entries[1].kind, "tool_result");
         Ok(())
     }
+
+    #[test]
+    fn export_keeps_selected_entries_when_log_does_not_exist() -> Result<()> {
+        let dir = tempdir()?;
+        let conversation = ExportConversation {
+            id: "selected".into(),
+            title: "当前会话".into(),
+            exported_unix_secs: 1,
+            busy: true,
+            entries: web_entries(&["> 本轮问题".into(), "🤖 本轮回答".into()]),
+        };
+        let bytes = build_session_export(&dir.path().join("config.toml"), &conversation)?;
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
+        let mut json = String::new();
+        archive
+            .by_name("conversation.json")?
+            .read_to_string(&mut json)?;
+        let value: serde_json::Value = serde_json::from_str(&json)?;
+        assert_eq!(value["id"], "selected");
+        assert_eq!(value["entries"][0]["text"], "本轮问题");
+        assert_eq!(value["entries"][1]["text"], "本轮回答");
+        assert_eq!(archive.by_name("nl2sh.log")?.size(), 0);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod http_tests {
     use super::*;
     use futures_util::{SinkExt, StreamExt};
+    use std::io::Read;
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -1331,6 +1441,54 @@ mod http_tests {
         let port = occupied.local_addr()?.port();
         let fallback = bind_web_listener(port).await?;
         assert_ne!(fallback.local_addr()?.port(), port);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn exports_selected_conversation_and_shared_log_as_zip() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("config.toml");
+        std::fs::write(dir.path().join("nl2sh.log"), b"{\"event\":\"test\"}\n")?;
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
+        let server = start_with_listener(path, listener).await?;
+        let port = url::Url::parse(server.url())?
+            .port()
+            .context("missing port")?;
+        let base = format!("http://127.0.0.1:{port}");
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let sessions: serde_json::Value = client
+            .get(format!("{base}/api/sessions"))
+            .send()
+            .await?
+            .json()
+            .await?;
+        let id = sessions[0]["id"].as_str().context("missing session id")?;
+        let response = client
+            .get(format!("{base}/api/sessions/export?id={id}"))
+            .send()
+            .await?;
+        assert!(response.status().is_success());
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "application/zip");
+        let bytes = response.bytes().await?;
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
+        let mut conversation = String::new();
+        archive
+            .by_name("conversation.json")?
+            .read_to_string(&mut conversation)?;
+        let conversation: serde_json::Value = serde_json::from_str(&conversation)?;
+        assert_eq!(conversation["id"], id);
+        assert_eq!(conversation["entries"].as_array().map(Vec::len), Some(0));
+        let mut log = String::new();
+        archive.by_name("nl2sh.log")?.read_to_string(&mut log)?;
+        assert_eq!(log, "{\"event\":\"test\"}\n");
+        assert_eq!(
+            client
+                .get(format!("{base}/api/sessions/export?id=missing"))
+                .send()
+                .await?
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
         Ok(())
     }
 

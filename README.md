@@ -50,6 +50,8 @@ HTTP 使用 rustls，未启用 native-tls。
 
 Web 页面提供类似 dsh 的多会话侧栏。多个 Agent 会话可同时运行；切换会话不会停止后台任务，列表会显示运行中和等待审批状态。每个会话独立保存对话、实时文字与命令输出、审批和结构化补充信息，首轮完成后由当前 LLM 自动生成简短标题。历史会话可从侧栏快速恢复。模型流式增量会拼接在同一 Markdown 段落，工具调用和输出默认折叠。顶部快捷栏可切换 Provider、模型和审批策略、刷新 Provider 模型列表，并显示轮次、Agent 步骤、工具调用、Token/上下文和 Root 状态。Web Agent 使用与 TUI 相同的安全评估、确认和执行链；Web 审批的命令采用捕获式执行。Web 与终端各自维护对话状态。配置包含 API Key 等凭据，且 Web 无登录并监听所有 IPv4 接口；请只在受信任的网络中运行。
 
+页面右上角的“导出日志”会下载当前选中会话的 ZIP，包含导出时显示的对话 `conversation.json`、当前审计日志 `nl2sh.log` 和范围说明。审计日志由所有会话共用，因此可能包含其他会话事件；如果尚无日志文件，包内日志为空。
+
 Web 后端使用 Tokio 和 Axum 0.8，配置及会话协议使用 serde JSON，Agent 状态和流式输出通过 SSE 推送，安全终端使用 WebSocket。前端源码位于 `web/`，使用 Preact、TypeScript、Vite 和纯 CSS；生产资源由 `rust-embed` 编入可执行文件。发布包无需携带 HTML、JavaScript 或 Node.js，Android ARM64 仍只部署一个 ELF binary。
 
 单独验证前端可运行：
