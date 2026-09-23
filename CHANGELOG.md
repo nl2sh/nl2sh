@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Repaint the TUI frame when conversation scrolling changes to clear characters left by previously displayed history lines.
 - Generate embedded Web assets from the npm lockfile during Cargo builds, and stop tracking `web/dist`; Android releases remain single binaries.
 - Rebuilt the embedded Web UI with Axum 0.8, rust-embed, SSE, security-gated WebSocket terminal commands, and a Preact/TypeScript/Vite frontend while retaining single-binary Android distribution.
 - Stabilized the live-TUI Agent-response regression by using a valid Responses SSE fixture, disabling startup decoration in that test, and avoiding assertions against fragmented raw ratatui ANSI output.

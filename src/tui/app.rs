@@ -180,6 +180,7 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
     let mut fragmented_arrow = events::FragmentedArrowFilter::default();
     let windows_scroll = super::terminal::windows_scroll_fallback();
     let mut windows_scroll_filter = events::WindowsScrollFilter::default();
+    let mut last_conversation_scroll = app.conversation_scroll;
     loop {
         if windows_scroll {
             apply_windows_scroll_action(&mut app, windows_scroll_filter.take_expired());
@@ -193,7 +194,7 @@ fn run_inner(options: TuiOptions, mut history: Vec<String>) -> Result<Option<Str
             app.advance_welcome_train(viewport_width);
             last_train_frame = Instant::now();
         }
-        term.terminal().draw(|f| ui::draw(f, &mut app))?;
+        ui::draw_repainting_scroll(term.terminal(), &mut app, &mut last_conversation_scroll)?;
         if let Some(event) = events::next()? {
             match event {
                 Event::Mouse(mouse) => match mouse.kind {

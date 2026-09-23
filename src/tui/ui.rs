@@ -5,11 +5,12 @@ use super::{
 };
 use crate::config::UiLanguage;
 use ratatui::{
+    backend::Backend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
-    Frame,
+    Frame, Terminal,
 };
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -435,6 +436,21 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             );
         }
     }
+}
+
+pub(crate) fn draw_repainting_scroll<B: Backend>(
+    terminal: &mut Terminal<B>,
+    app: &mut App,
+    last_scroll: &mut usize,
+) -> std::io::Result<()> {
+    if app.conversation_scroll != *last_scroll {
+        // Some terminals retain cells from wider or longer history lines when
+        // ratatui only writes the changed cells after a scroll.
+        terminal.clear()?;
+    }
+    terminal.draw(|frame| draw(frame, app))?;
+    *last_scroll = app.conversation_scroll;
+    Ok(())
 }
 
 fn render_file_menu(f: &mut Frame, app: &App, input_area: ratatui::layout::Rect, theme: Theme) {
@@ -1036,7 +1052,103 @@ mod tests {
         assert_eq!(popup_color(true, false, theme), theme.error);
     }
     use crate::tui::{app::PopupView, input::Input};
-    use ratatui::{backend::TestBackend, Terminal};
+    use ratatui::{
+        backend::{CrosstermBackend, TestBackend},
+        layout::Rect,
+        Terminal, TerminalOptions, Viewport,
+    };
+    use std::{
+        io::{self, Write},
+        sync::{Arc, Mutex},
+    };
+
+    #[derive(Clone)]
+    struct SharedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for SharedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0
+                .lock()
+                .map_err(|_| io::Error::other("test output lock is poisoned"))?
+                .write(bytes)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn scrolling_repaints_terminal_before_reusing_history_rows() -> anyhow::Result<()> {
+        let output = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let backend = CrosstermBackend::new(SharedWriter(Arc::clone(&output)));
+        let mut terminal = Terminal::with_options(
+            backend,
+            TerminalOptions {
+                viewport: Viewport::Fixed(Rect::new(0, 0, 40, 12)),
+            },
+        )?;
+        let mut app = App {
+            input: Input::default(),
+            input_history: Vec::new(),
+            input_history_index: None,
+            input_history_draft: String::new(),
+            cursor_visible: true,
+            command_selection: 0,
+            file_selection: 0,
+            file_suggestion_query: None,
+            file_suggestions: Vec::new(),
+            history: (0..20)
+                .map(|index| format!("message {index}: 宽字符与长内容"))
+                .collect(),
+            conversation_scroll: 0,
+            tool_results_expanded: false,
+            welcome_train_frame: None,
+            model: "test".into(),
+            root: "Normal".into(),
+            ascii: true,
+            language: UiLanguage::En,
+            api_type: "Responses".into(),
+            mode: "Agent".into(),
+            turn: 0,
+            max_context: 10,
+            status: "idle".into(),
+            provider_balance: None,
+            popup: None,
+        };
+        let mut last_scroll = 0;
+        draw_repainting_scroll(&mut terminal, &mut app, &mut last_scroll)?;
+        let written = output
+            .lock()
+            .map_err(|error| anyhow::anyhow!("{error}"))?
+            .len();
+
+        draw_repainting_scroll(&mut terminal, &mut app, &mut last_scroll)?;
+        let unchanged = output
+            .lock()
+            .map_err(|error| anyhow::anyhow!("{error}"))?
+            .len();
+        assert!(
+            !output.lock().map_err(|error| anyhow::anyhow!("{error}"))?[written..unchanged]
+                .windows(3)
+                .any(|bytes| bytes == b"\x1b[J")
+        );
+
+        app.scroll_conversation_up(3);
+        draw_repainting_scroll(&mut terminal, &mut app, &mut last_scroll)?;
+        assert!(
+            output.lock().map_err(|error| anyhow::anyhow!("{error}"))?[unchanged..]
+                .windows(3)
+                .any(|bytes| bytes == b"\x1b[J")
+        );
+        assert!(
+            output.lock().map_err(|error| anyhow::anyhow!("{error}"))?[unchanged..]
+                .windows("宽".len())
+                .any(|bytes| bytes == "宽".as_bytes())
+        );
+        assert_eq!(last_scroll, 3);
+        Ok(())
+    }
 
     #[test]
     fn input_and_status_use_separate_rows() -> anyhow::Result<()> {

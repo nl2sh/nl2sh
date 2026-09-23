@@ -223,6 +223,7 @@ async fn run_inner(
     let mut fragmented_arrow = super::events::FragmentedArrowFilter::default();
     let windows_scroll = super::terminal::windows_scroll_fallback();
     let mut windows_scroll_filter = super::events::WindowsScrollFilter::default();
+    let mut last_conversation_scroll = app.conversation_scroll;
 
     loop {
         if settings_editor.is_some()
@@ -290,9 +291,11 @@ async fn run_inner(
             if windows_scroll && active.is_none() {
                 apply_windows_scroll_action(&mut app, windows_scroll_filter.take_expired());
             }
-            terminal
-                .terminal()
-                .draw(|frame| ui::draw(frame, &mut app))?;
+            ui::draw_repainting_scroll(
+                terminal.terminal(),
+                &mut app,
+                &mut last_conversation_scroll,
+            )?;
         }
 
         let mut completed = None;
