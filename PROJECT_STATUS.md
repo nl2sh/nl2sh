@@ -4,7 +4,8 @@ Last Updated: 2026-09-23
 
 ## Recent Changes
 
-- 修复 TUI 消息历史滚动后的旧字符残留：滚动位置变化时清除终端旧差分缓存并重绘当前帧；普通 TUI 与 Agent 会话共用此绘制路径，不改变输入、安全确认或 PTY 行为。
+- Web 页面配色统一到 TUI TrueColor 语义色板：背景、文字、导航、焦点、Markdown 与状态色由 CSS token 集中管理；不调整 Agent 审批、安全或执行路径。
+- 修复 TUI 消息历史滚动后的旧字符残留与整屏闪烁：滚动位置变化时补画消息区域的全部可见单元格，包括宽字符后与短行右侧的空格，不再整屏清除；普通 TUI 与 Agent 会话共用此绘制路径，不改变输入、安全确认或 PTY 行为。
 - Web 顶栏新增当前会话日志导出：下载 ZIP 包含导出时可见对话的 `conversation.json`、当前共用审计日志 `nl2sh.log` 及范围说明；空日志也可导出。导出只读取数据，不改变 Agent 安全审批或执行路径。
 - Web 资源改为 Cargo 编译前从锁定的 npm 依赖自动生成；发布 CI 固定 Node 版本，TUR 源码含构建脚本时使用主机 Node 工具，`web/dist/` 不再纳入版本控制，Android 仍交付单一可执行文件。
 - 内置 Web 服务默认优先监听 9999，端口占用时再选择可用端口；侧栏选中已保存会话时先恢复快照，再加载并显示对话历史，切换时忽略旧会话的迟到响应。
@@ -184,7 +185,7 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
-- TUI 历史滚动重绘：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings`、`cargo test` 通过；新增回归验证滚动前普通帧不发送清屏控制序列，滚动时执行清屏并重绘含宽字符的历史内容。
+- TUI 历史滚动重绘：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings`、`cargo test` 通过；配置 NDK API 26 编译器后的 `cargo check --target aarch64-linux-android --no-default-features` 通过。回归验证滚动帧不发送清屏控制序列，消息区域补画宽字符和空白单元格。
 - Web 构建顺序调整：`cargo package --allow-dirty` 在不包含 `web/dist/` 的源码包上通过验证；`npm test`、`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings`、`cargo test`、TUR Bash 语法检查及 AArch64 Android API 26 `RUST_TARGET=aarch64-linux-android NL2SH_PACKAGE_MANAGER_BUILD=1 ./cross-compile.sh` 通过。
 - Axum/Preact Web 栈：`npm ci && npm run build`、`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 和全量 `cargo test` 通过；HTTP 集成回归覆盖 rust-embed 首页、CSP、JSON 状态、SSE 首事件与 WebSocket 握手/响应。AArch64 Android API 26 `cargo build --release --target aarch64-linux-android --no-default-features` 通过，产物为使用 `/system/bin/linker64` 的 64 位 PIE，前端资源包含在 5,423,832-byte 单一 ELF 中。
 

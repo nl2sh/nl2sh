@@ -54,6 +54,8 @@ Web 页面提供类似 dsh 的多会话侧栏。多个 Agent 会话可同时运�
 
 Web 后端使用 Tokio 和 Axum 0.8，配置及会话协议使用 serde JSON，Agent 状态和流式输出通过 SSE 推送，安全终端使用 WebSocket。前端源码位于 `web/`，使用 Preact、TypeScript、Vite 和纯 CSS；生产资源由 `rust-embed` 编入可执行文件。发布包无需携带 HTML、JavaScript 或 Node.js，Android ARM64 仍只部署一个 ELF binary。
 
+Web 深色页面与 TUI 共用 `UI_DESIGN.md` 的语义色板：灰白正文、青蓝导航与焦点，以及仅用于状态的绿/黄/红；CSS token 集中在 `web/src/style.css`。颜色不替代审批和风险文字。
+
 单独验证前端可运行：
 
 ```bash
@@ -342,7 +344,7 @@ Android 真机建议依次验证：启动/退出后终端恢复；`id` 和 `getp
 
 - `使用说明.md`：面向下载预编译压缩包的 Linux/Windows 用户。
 - `ARCHITECTURE.md`：模块、数据流、安全、执行与扩展架构。
-- `UI_DESIGN.md`：TUI 深色主题、语义颜色、组件样式、终端 fallback 与验收标准。
+- `UI_DESIGN.md`：TUI 与 Web 深色主题、语义颜色、组件样式、终端 fallback 与验收标准。
 - `AGENTS.md`：后续 AI 维护约束。
 - `PROJECT_PLAN.md`：阶段计划与实际状态。
 - `PROJECT_STATUS.md`：当前验证和限制。

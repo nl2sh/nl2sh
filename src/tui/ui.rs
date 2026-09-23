@@ -6,7 +6,8 @@ use super::{
 use crate::config::UiLanguage;
 use ratatui::{
     backend::Backend,
-    layout::{Constraint, Direction, Layout},
+    buffer::Cell,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
@@ -443,14 +444,54 @@ pub(crate) fn draw_repainting_scroll<B: Backend>(
     app: &mut App,
     last_scroll: &mut usize,
 ) -> std::io::Result<()> {
-    if app.conversation_scroll != *last_scroll {
-        // Some terminals retain cells from wider or longer history lines when
-        // ratatui only writes the changed cells after a scroll.
-        terminal.clear()?;
+    let cells = {
+        let completed = terminal.draw(|frame| draw(frame, app))?;
+        if app.conversation_scroll != *last_scroll {
+            // Repaint every history cell, including spaces after shorter lines.
+            // Clearing the whole terminal here makes rapid wheel scrolling flash.
+            conversation_cells(completed.buffer, conversation_area(completed.area))
+        } else {
+            Vec::new()
+        }
+    };
+    if !cells.is_empty() {
+        terminal
+            .backend_mut()
+            .draw(cells.iter().map(|(x, y, cell)| (*x, *y, cell)))?;
+        terminal.backend_mut().flush()?;
     }
-    terminal.draw(|frame| draw(frame, app))?;
     *last_scroll = app.conversation_scroll;
     Ok(())
+}
+
+fn conversation_area(area: Rect) -> Rect {
+    Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(5),
+            Constraint::Length(4),
+        ])
+        .split(area)[1]
+}
+
+fn conversation_cells(buffer: &ratatui::buffer::Buffer, area: Rect) -> Vec<(u16, u16, Cell)> {
+    let mut cells = Vec::with_capacity(area.area() as usize);
+    for y in area.top()..area.bottom() {
+        let mut covered = 0;
+        for x in area.left()..area.right() {
+            if covered > 0 {
+                covered -= 1;
+                continue;
+            }
+            let cell = &buffer[(x, y)];
+            if !cell.skip {
+                cells.push((x, y, cell.clone()));
+            }
+            covered = cell.symbol().width().saturating_sub(1);
+        }
+    }
+    cells
 }
 
 fn render_file_menu(f: &mut Frame, app: &App, input_area: ratatui::layout::Rect, theme: Theme) {
@@ -1079,7 +1120,7 @@ mod tests {
     }
 
     #[test]
-    fn scrolling_repaints_terminal_before_reusing_history_rows() -> anyhow::Result<()> {
+    fn scrolling_repaints_history_without_clearing_terminal() -> anyhow::Result<()> {
         let output = Arc::new(Mutex::new(Vec::<u8>::new()));
         let backend = CrosstermBackend::new(SharedWriter(Arc::clone(&output)));
         let mut terminal = Terminal::with_options(
@@ -1137,7 +1178,7 @@ mod tests {
         app.scroll_conversation_up(3);
         draw_repainting_scroll(&mut terminal, &mut app, &mut last_scroll)?;
         assert!(
-            output.lock().map_err(|error| anyhow::anyhow!("{error}"))?[unchanged..]
+            !output.lock().map_err(|error| anyhow::anyhow!("{error}"))?[unchanged..]
                 .windows(3)
                 .any(|bytes| bytes == b"\x1b[J")
         );
@@ -1148,6 +1189,21 @@ mod tests {
         );
         assert_eq!(last_scroll, 3);
         Ok(())
+    }
+
+    #[test]
+    fn history_repaint_includes_blank_cells_after_wide_characters() {
+        let area = Rect::new(0, 0, 5, 1);
+        let mut buffer = ratatui::buffer::Buffer::empty(area);
+        buffer.set_string(0, 0, "中", Style::default());
+        let cells = conversation_cells(&buffer, area);
+        assert_eq!(
+            cells
+                .iter()
+                .map(|(x, _, cell)| (*x, cell.symbol()))
+                .collect::<Vec<_>>(),
+            vec![(0, "中"), (2, " "), (3, " "), (4, " ")]
+        );
     }
 
     #[test]
