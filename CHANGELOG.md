@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Add F2 to expand or collapse all Web tool results while preserving per-card controls.
+- Render escaped newlines in Web tool output as visible line breaks without changing stored results.
+- Show each Web tool call and its matching output in a separate collapsible item, including restored sessions.
 - Aligned the Web dark theme with the TUI's semantic palette, including navigation, Markdown, focus, and status colors.
 - Repaint only the TUI conversation area on scroll, including blank cells after shorter lines, to remove old characters without flashing the whole screen.
 - Generate embedded Web assets from the npm lockfile during Cargo builds, and stop tracking `web/dist`; Android releases remain single binaries.

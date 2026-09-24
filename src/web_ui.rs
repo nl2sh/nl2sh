@@ -2,7 +2,10 @@
 use crate::{
     agent::{AgentRunner, ConfirmationDecision, Confirmer, QuestionAnswers, UserQuestion},
     config::{self, Config, ConfirmPolicy},
-    llm::{build_client, ConversationItem, ConversationMessage, LlmRequest, Role, TextDeltaSink},
+    llm::{
+        build_client, ConversationItem, ConversationMessage, LlmRequest, Role, TextDeltaSink,
+        ToolRound,
+    },
     provider_metadata::build_metadata_client,
     security::SecurityAssessment,
     sessions::SessionStore,
@@ -955,6 +958,39 @@ async fn run_terminal_command(
     Ok(serde_json::json!({"stdout":result.stdout,"stderr":result.stderr,"exit_code":result.exit_code,"timed_out":result.timed_out,"interrupted":result.interrupted}).to_string())
 }
 
+fn append_tool_round(lines: &mut Vec<String>, round: &ToolRound) {
+    let mut remaining = round.results.iter().collect::<Vec<_>>();
+    for call in &round.calls {
+        lines.push(format!("🔧 {}", call.name));
+        if let Some(index) = remaining
+            .iter()
+            .position(|result| result.call_id == call.id)
+        {
+            let result = remaining.remove(index);
+            lines.push(format!(
+                "{}{}",
+                if result.success {
+                    "\u{1e}TOOL_OK:"
+                } else {
+                    "\u{1e}TOOL_ERR:"
+                },
+                result.output
+            ));
+        }
+    }
+    for result in remaining {
+        lines.push(format!(
+            "{}{}",
+            if result.success {
+                "\u{1e}TOOL_OK:"
+            } else {
+                "\u{1e}TOOL_ERR:"
+            },
+            result.output
+        ));
+    }
+}
+
 fn render_turns(turns: &[Vec<ConversationItem>]) -> Vec<String> {
     let mut lines = Vec::new();
     for turn in turns {
@@ -965,22 +1001,7 @@ fn render_turns(turns: &[Vec<ConversationItem>]) -> Vec<String> {
                     Role::Assistant => lines.push(format!("🤖 {}", message.content)),
                     _ => {}
                 },
-                ConversationItem::Tools(round) => {
-                    for call in &round.calls {
-                        lines.push(format!("🔧 {}", call.name));
-                    }
-                    for result in &round.results {
-                        lines.push(format!(
-                            "{}{}",
-                            if result.success {
-                                "\u{1e}TOOL_OK:"
-                            } else {
-                                "\u{1e}TOOL_ERR:"
-                            },
-                            result.output
-                        ));
-                    }
-                }
+                ConversationItem::Tools(round) => append_tool_round(&mut lines, round),
             }
         }
     }
@@ -1061,22 +1082,10 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
         inner.history.retain(|line| !line.starts_with("… "));
         for item in &result.transcript {
             if let ConversationItem::Tools(round) = item {
-                for call in &round.calls {
-                    push(&mut inner, format!("🔧 {}", call.name));
-                }
-                for output in &round.results {
-                    push(
-                        &mut inner,
-                        format!(
-                            "{}{}",
-                            if output.success {
-                                "\u{1e}TOOL_OK:"
-                            } else {
-                                "\u{1e}TOOL_ERR:"
-                            },
-                            output.output
-                        ),
-                    );
+                let mut lines = Vec::new();
+                append_tool_round(&mut lines, round);
+                for line in lines {
+                    push(&mut inner, line);
                 }
             }
         }
@@ -1304,6 +1313,7 @@ impl WebConfirmer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::{ToolCall, ToolResult};
     use std::io::Read;
     use tempfile::tempdir;
 
@@ -1347,6 +1357,51 @@ mod tests {
         assert_eq!(entries[0].kind, "stream");
         assert_eq!(entries[1].kind, "tool_result");
         Ok(())
+    }
+
+    #[test]
+    fn tool_round_results_follow_their_matching_calls_in_live_and_restored_history() {
+        let round = ToolRound {
+            calls: vec![
+                ToolCall {
+                    id: "first".into(),
+                    name: "read_file".into(),
+                    arguments: serde_json::json!({}),
+                },
+                ToolCall {
+                    id: "second".into(),
+                    name: "list_dir".into(),
+                    arguments: serde_json::json!({}),
+                },
+            ],
+            results: vec![
+                ToolResult {
+                    call_id: "second".into(),
+                    output: "second output".into(),
+                    success: false,
+                    attachments: Vec::new(),
+                },
+                ToolResult {
+                    call_id: "first".into(),
+                    output: "first output".into(),
+                    success: true,
+                    attachments: Vec::new(),
+                },
+            ],
+        };
+        let expected = vec![
+            "🔧 read_file",
+            "\u{1e}TOOL_OK:first output",
+            "🔧 list_dir",
+            "\u{1e}TOOL_ERR:second output",
+        ];
+        let mut live = Vec::new();
+        append_tool_round(&mut live, &round);
+        assert_eq!(live, expected);
+        assert_eq!(
+            render_turns(&[vec![ConversationItem::Tools(round)]]),
+            expected
+        );
     }
 
     #[test]

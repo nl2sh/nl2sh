@@ -1,9 +1,12 @@
 # Project Status
 
-Last Updated: 2026-09-23
+Last Updated: 2026-09-24
 
 ## Recent Changes
 
+- Web 对话支持 F2 同步展开或收起所有工具卡片，同时保留每张卡片的独立点击控制；审批和终端弹窗优先接收键盘事件。
+- Web 工具结果及实时输出在展示时将字面量 `\\n` 还原为换行，保留已有真实换行与成对反斜杠；仅影响浏览器显示，不改写原始 Tool Result、模型上下文或审计数据。
+- Web 对话不再把连续工具事件合入同一折叠项：每次调用与按 ID 匹配的结果独立显示，已保存会话恢复沿用相同顺序；原始实时输出仍单独呈现，不改变执行和审批边界。
 - Web 页面配色统一到 TUI TrueColor 语义色板：背景、文字、导航、焦点、Markdown 与状态色由 CSS token 集中管理；不调整 Agent 审批、安全或执行路径。
 - 修复 TUI 消息历史滚动后的旧字符残留与整屏闪烁：滚动位置变化时补画消息区域的全部可见单元格，包括宽字符后与短行右侧的空格，不再整屏清除；普通 TUI 与 Agent 会话共用此绘制路径，不改变输入、安全确认或 PTY 行为。
 - Web 顶栏新增当前会话日志导出：下载 ZIP 包含导出时可见对话的 `conversation.json`、当前共用审计日志 `nl2sh.log` 及范围说明；空日志也可导出。导出只读取数据，不改变 Agent 安全审批或执行路径。
@@ -185,6 +188,8 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
+- Web F2 工具折叠：前端 `npm test`、`npm run build`，以及主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 通过；回归验证全部展开、全部收起、混合状态及空列表。
+- Web 逐工具结果展示：前端 `npm test`、`npm run build`，以及主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 通过；回归覆盖多工具结果按调用 ID 配对、错误结果、无结果调用及历史会话重建。
 - TUI 历史滚动重绘：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings`、`cargo test` 通过；配置 NDK API 26 编译器后的 `cargo check --target aarch64-linux-android --no-default-features` 通过。回归验证滚动帧不发送清屏控制序列，消息区域补画宽字符和空白单元格。
 - Web 构建顺序调整：`cargo package --allow-dirty` 在不包含 `web/dist/` 的源码包上通过验证；`npm test`、`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings`、`cargo test`、TUR Bash 语法检查及 AArch64 Android API 26 `RUST_TARGET=aarch64-linux-android NL2SH_PACKAGE_MANAGER_BUILD=1 ./cross-compile.sh` 通过。
 - Axum/Preact Web 栈：`npm ci && npm run build`、`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 和全量 `cargo test` 通过；HTTP 集成回归覆盖 rust-embed 首页、CSP、JSON 状态、SSE 首事件与 WebSocket 握手/响应。AArch64 Android API 26 `cargo build --release --target aarch64-linux-android --no-default-features` 通过，产物为使用 `/system/bin/linker64` 的 64 位 PIE，前端资源包含在 5,423,832-byte 单一 ELF 中。

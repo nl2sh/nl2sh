@@ -189,6 +189,7 @@ adb 或宿主终端可能把方向键 CSI 序列拆成 `Esc`、`[`、`A/B` 等�
 - Web 在 `web/src/style.css` 的 `:root` 集中声明与上表 TrueColor 一致的 CSS 语义变量；组件、Markdown 和会话状态仅引用变量，不散落硬编码业务色值。`decorative_gold` 只在 Web 真正呈现同类装饰插图时引入。
 - Web 主背景、输入区、边框与正文分别使用 `background`、`background_alt`、`border` 与 `text_primary`；导航/焦点使用 `accent`，工具及次级标题使用 `cyan`，状态分别使用 `success`、`warning`、`error`，模型或特殊对象才使用 `special`。用户和 AI 的长文本、原始命令输出不得整段着状态色。
 - Web 的审批和 Root 状态保留文字说明，聚焦控件有可见边框或轮廓；遮罩可以用半透明黑色，但页面底色不得改为纯黑。配色变动不得修改审批行为或执行链。
+- Web 工具结果默认折叠，点击标题可独立切换；对话页的 F2 将全部工具卡片统一展开或收起，若当前有任一卡片折叠则先全部展开。审批/终端弹窗打开时不拦截 F2。
 - `Theme`/`Palette` 是唯一颜色来源；Widget、Markdown renderer 和工具结果 renderer 只请求语义样式。
 - 主题层不得读取或改变 LLM 消息、日志内容、安全评估、确认策略或执行结果。
 - 主题背景应覆盖 frame、Block、Line 和 Span 的默认区域，避免局部 `Reset` 露出纯黑宿主背景；弹窗出现时，底层输入框按失焦边框显示。
