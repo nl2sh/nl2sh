@@ -4,6 +4,8 @@ Last Updated: 2026-09-24
 
 ## Recent Changes
 
+- 准备发布 `v1.0.2`：版本号和 changelog 已从 Unreleased 收敛到 2026-09-24 的补丁版本；tag 推送继续通过既有工作流构建双 ABI Android、自更新裸二进制、Termux `.deb`、签名 APT 仓库及 GitHub Release。
+- Web 工具调用改为逐项实时显示：Agent display sink 在每个工具开始与完成时携带 `call_id` 发布事件，浏览器立即显示调用卡片并按 ID 回填成功或失败结果；任务结束仍以完整 transcript 持久化会话，但当前消息列表不再重复追加同一工具轮。此变更不改变工具串行执行、安全确认、Root、Android 或 PTY 边界。
 - Web 会话输入框下方显示空闲、模型思考、工具执行和等待审批/补充信息状态，并每秒更新当前状态时长；轮次、步骤、工具、Token 与 Root 统计也移至输入框下方。状态由现有 Agent 执行事件驱动，不改变安全确认、Android 执行或 PTY 路径。
 - 工具公共路径统一为 `src/tools/<domain>/`：内部引用已迁移，旧顶层兼容导出已移除。此项改变 Rust 库模块路径，不改变工具注册、安全确认、Android 执行或 PTY 行为。
 - Web 输入框新增与 TUI 共用的 `@` 文件/目录候选和路径引用提示；右上角工具目录展示当前配置下注册的工具名称、简介及搜索过滤。候选读取有界，目录接口只读；Agent 安全分类、确认、Root 与 PTY 边界不变。
@@ -193,6 +195,8 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
+- `v1.0.2` 发布门禁：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`cargo build --release`、前端测试/生产构建、Release workflow 静态检查和发布相关 Bash 语法检查通过；NDK r28c/API 26 的 AArch64 与 ARMv7 release 交叉编译通过，分别验证为使用 `/system/bin/linker64` 的 64 位 PIE 和 `/system/bin/linker` 的 32 位 PIE。
+- Web 工具调用实时显示：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 和 `cargo test --all-targets` 通过；回归覆盖工具开始即进入消息列表、完成结果按 `call_id` 配对、乱序完成映射及 Runner 开始/完成事件顺序。全量测试为 129 项有效库测试、3 项主程序测试、20 项 Agent loop 测试及其余集成/PTY/TUI 测试通过，1 项显式凭据 ima live smoke 按设计忽略。
 - Web 输入区状态与统计布局：主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，以及前端 `npm test --prefix web`、`npm run build --prefix web`、`git diff --check` 通过。
 - 工具公共路径清理：主机目标 `cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features`、`cargo clippy --all-targets -- -D warnings`、`cargo test` 与 `git diff --check` 通过；工具注册、参数 schema、确认、安全分类和 PTY 回归保持通过。
 - Web `@` 补全与工具目录：主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，以及前端 `npm test`、`npm run build`、`git diff --check` 通过；回归覆盖光标所在引用的替换、工具目录 HTTP 响应及文件候选 HTTP 响应。Android 运行时不增加 Node 依赖。

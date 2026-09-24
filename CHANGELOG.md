@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-24
+
 ### Changed
 
+- Stream each Web tool call into the conversation as it starts and fill in its bounded result by call ID as soon as it completes, while keeping the final transcript as the single persistence source without duplicating cards.
 - Removed the old top-level Rust tool-module re-exports; library callers now use `nl2sh::tools::<domain>` paths.
 - Reorganized all built-in tool implementations by domain and routed them through an explicit registry with derived schemas, local risk metadata, and prepare/confirm/execute handling. Existing Android, audio, network, memory, Web approval, and shell safety behavior remains in place; the procedural macro is build-time only.
 - Add F2 to expand or collapse all Web tool results while preserving per-card controls.

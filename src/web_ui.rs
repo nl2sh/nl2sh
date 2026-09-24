@@ -51,6 +51,8 @@ const MAX_REQUEST: usize = 256 * 1024;
 const MAX_HISTORY: usize = 400;
 const MAX_WEB_SESSIONS: usize = 64;
 const MAX_EXPORT_LOG_BYTES: u64 = 20 * 1024 * 1024;
+const LIVE_TOOL_CALL_PREFIX: &str = "\u{1e}TOOL_CALL:";
+const LIVE_TOOL_PENDING_PREFIX: &str = "\u{1e}TOOL_PENDING:";
 static WELCOME_URL: OnceLock<String> = OnceLock::new();
 static SESSION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -221,7 +223,7 @@ struct Snapshot {
     activity_elapsed_ms: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 struct WebEntry {
     kind: &'static str,
     text: String,
@@ -513,8 +515,13 @@ fn session(state: &Shared, id: &str) -> Result<Arc<WebSession>> {
 fn web_entries(history: &[String]) -> Vec<WebEntry> {
     history
         .iter()
-        .map(|line| {
-            let (kind, text) = if let Some(text) = line.strip_prefix("> ") {
+        .filter_map(|line| {
+            let (kind, text) = if line.starts_with(LIVE_TOOL_PENDING_PREFIX) {
+                return None;
+            } else if let Some(encoded) = line.strip_prefix(LIVE_TOOL_CALL_PREFIX) {
+                let (_, name) = encoded.split_once('\t').unwrap_or(("", encoded));
+                ("tool_call", name)
+            } else if let Some(text) = line.strip_prefix("> ") {
                 ("user", text)
             } else if let Some(text) = line.strip_prefix("🤖 ") {
                 ("assistant", text)
@@ -533,10 +540,10 @@ fn web_entries(history: &[String]) -> Vec<WebEntry> {
             } else {
                 ("notice", line.as_str())
             };
-            WebEntry {
+            Some(WebEntry {
                 kind,
                 text: text.to_owned(),
-            }
+            })
         })
         .collect()
 }
@@ -1156,15 +1163,6 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
             .lock()
             .map_err(|_| anyhow!("web session lock poisoned"))?;
         inner.history.retain(|line| !line.starts_with("… "));
-        for item in &result.transcript {
-            if let ConversationItem::Tools(round) = item {
-                let mut lines = Vec::new();
-                append_tool_round(&mut lines, round);
-                for line in lines {
-                    push(&mut inner, line);
-                }
-            }
-        }
         push(&mut inner, format!("🤖 {}", result.final_text));
         inner.turns.push(result.transcript);
         if inner.turns.len() > cfg.max_context_turns {
@@ -1328,6 +1326,43 @@ impl TextDeltaSink for WebTextSink {
         }
         notify(&self.session, "delta");
     }
+
+    fn tool_started(&self, call_id: &str, name: &str) {
+        if let Ok(mut inner) = self.session.inner.lock() {
+            push(
+                &mut inner,
+                format!("{LIVE_TOOL_CALL_PREFIX}{call_id}\t{name}"),
+            );
+            push(&mut inner, format!("{LIVE_TOOL_PENDING_PREFIX}{call_id}"));
+        }
+        notify(&self.session, "tool_started");
+    }
+
+    fn tool_finished(&self, call_id: &str, output: &str, success: bool) {
+        if let Ok(mut inner) = self.session.inner.lock() {
+            let result = format!(
+                "{}{}",
+                if success {
+                    "\u{1e}TOOL_OK:"
+                } else {
+                    "\u{1e}TOOL_ERR:"
+                },
+                output
+            );
+            let pending = format!("{LIVE_TOOL_PENDING_PREFIX}{call_id}");
+            if let Some(entry) = inner
+                .history
+                .iter_mut()
+                .rev()
+                .find(|line| line.as_str() == pending)
+            {
+                *entry = result;
+            } else {
+                push(&mut inner, result);
+            }
+        }
+        notify(&self.session, "tool_finished");
+    }
 }
 
 struct WebConfirmer {
@@ -1440,6 +1475,60 @@ mod tests {
         let entries = web_entries(&inner.history);
         assert_eq!(entries[0].kind, "stream");
         assert_eq!(entries[1].kind, "tool_result");
+        Ok(())
+    }
+
+    #[test]
+    fn tool_events_are_visible_immediately_and_match_results_by_call_id() -> Result<()> {
+        let state = state(PathBuf::from("unused.toml"));
+        let current = session(&state, "web-test")?;
+        let sink = WebTextSink {
+            session: current.clone(),
+        };
+
+        sink.tool_started("first", "analyze_audio");
+        sink.tool_started("second", "analyze_audio");
+        {
+            let inner = current.inner.lock().map_err(|_| anyhow!("lock poisoned"))?;
+            assert_eq!(
+                web_entries(&inner.history),
+                vec![
+                    WebEntry {
+                        kind: "tool_call",
+                        text: "analyze_audio".into(),
+                    },
+                    WebEntry {
+                        kind: "tool_call",
+                        text: "analyze_audio".into(),
+                    },
+                ]
+            );
+        }
+
+        sink.tool_finished("second", "second result", true);
+        sink.tool_finished("first", "first result", false);
+        let inner = current.inner.lock().map_err(|_| anyhow!("lock poisoned"))?;
+        assert_eq!(
+            web_entries(&inner.history),
+            vec![
+                WebEntry {
+                    kind: "tool_call",
+                    text: "analyze_audio".into(),
+                },
+                WebEntry {
+                    kind: "tool_error",
+                    text: "first result".into(),
+                },
+                WebEntry {
+                    kind: "tool_call",
+                    text: "analyze_audio".into(),
+                },
+                WebEntry {
+                    kind: "tool_result",
+                    text: "second result".into(),
+                },
+            ]
+        );
         Ok(())
     }
 

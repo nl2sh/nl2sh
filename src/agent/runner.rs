@@ -240,11 +240,14 @@ impl AgentRunner<'_> {
                 runtime.tool_calls_used += 1;
                 if let Some(sink) = text_sink {
                     sink.agent_activity("tool", Some(&call.name));
+                    sink.tool_started(&call.id, &call.name);
                 }
                 round_calls.push(call.clone());
                 let Some(tool) = registry.get(&call.name) else {
-                    results.push(
+                    push_tool_result(
+                        &mut results,
                         self.tool_error_result(&call.id, format!("unsupported tool {}", call.name)),
+                        text_sink,
                     );
                     continue;
                 };
@@ -263,8 +266,10 @@ impl AgentRunner<'_> {
                     let prepared = match tool.prepare(&tool_context, call.arguments).await {
                         Ok(prepared) => prepared,
                         Err(error) => {
-                            results.push(
+                            push_tool_result(
+                                &mut results,
                                 self.tool_error_result(&call.id, format!("Tool failed: {error:#}")),
+                                text_sink,
                             );
                             continue;
                         }
@@ -282,15 +287,19 @@ impl AgentRunner<'_> {
                                 )
                                 .await;
                             step_made_progress |= result.success;
-                            results.push(result);
+                            push_tool_result(&mut results, result, text_sink);
                             continue;
                         }
                         PreparedAction::Shell(args) => {
                             if tool.metadata().risk != ToolRisk::DynamicShell {
-                                results.push(self.tool_error_result(
-                                    &call.id,
-                                    "shell tool metadata is invalid".into(),
-                                ));
+                                push_tool_result(
+                                    &mut results,
+                                    self.tool_error_result(
+                                        &call.id,
+                                        "shell tool metadata is invalid".into(),
+                                    ),
+                                    text_sink,
+                                );
                                 continue;
                             }
                             args
@@ -337,15 +346,19 @@ impl AgentRunner<'_> {
                             command = edited;
                         }
                         ConfirmationDecision::Reject => {
-                            results.push(ToolResult {
-                                call_id: call.id,
-                                output: format!(
-                                    "risk={:?} root={}\nNot executed: user rejected command.",
-                                    assessment.risk_level, assessment.requires_root
-                                ),
-                                success: false,
-                                attachments: Vec::new(),
-                            });
+                            push_tool_result(
+                                &mut results,
+                                ToolResult {
+                                    call_id: call.id,
+                                    output: format!(
+                                        "risk={:?} root={}\nNot executed: user rejected command.",
+                                        assessment.risk_level, assessment.requires_root
+                                    ),
+                                    success: false,
+                                    attachments: Vec::new(),
+                                },
+                                text_sink,
+                            );
                             continue 'tool_calls;
                         }
                     }
@@ -355,26 +368,30 @@ impl AgentRunner<'_> {
                     .get(&normalized)
                     .is_some_and(|(_, repeats)| *repeats >= self.config.max_same_action_retries)
                 {
-                    results.push(ToolResult {
+                    push_tool_result(&mut results, ToolResult {
                         call_id: call.id,
                         output: format!(
                             "executed_command={command}\nREPEATED_ACTION_BLOCKED: identical command and result reached the retry limit; change strategy."
                         ),
                         success: false,
                         attachments: Vec::new(),
-                    });
+                    }, text_sink);
                     continue;
                 }
                 let remaining = Duration::from_secs(self.config.max_task_execution_time_secs)
                     .saturating_sub(runtime.active_time());
                 if remaining.is_zero() {
                     stopped_by = Some(LimitType::ExecutionTime);
-                    results.push(ToolResult {
-                        call_id: call.id,
-                        output: "Not executed: active task time limit was reached.".into(),
-                        success: false,
-                        attachments: Vec::new(),
-                    });
+                    push_tool_result(
+                        &mut results,
+                        ToolResult {
+                            call_id: call.id,
+                            output: "Not executed: active task time limit was reached.".into(),
+                            success: false,
+                            attachments: Vec::new(),
+                        },
+                        text_sink,
+                    );
                     break 'tool_calls;
                 }
                 let execution = self
@@ -429,7 +446,7 @@ impl AgentRunner<'_> {
                     },
                 };
                 result.output = truncate_text(&result.output, self.config.tool_output_max_bytes);
-                results.push(result);
+                push_tool_result(&mut results, result, text_sink);
                 if runtime.active_time()
                     >= Duration::from_secs(self.config.max_task_execution_time_secs)
                 {
@@ -607,6 +624,17 @@ impl AgentRunner<'_> {
     ) -> Result<AgentOutcome> {
         self.run_inner(&input, &history, Some(text_sink)).await
     }
+}
+
+fn push_tool_result(
+    results: &mut Vec<ToolResult>,
+    result: ToolResult,
+    sink: Option<&dyn TextDeltaSink>,
+) {
+    if let Some(sink) = sink {
+        sink.tool_finished(&result.call_id, &result.output, result.success);
+    }
+    results.push(result);
 }
 
 pub(crate) fn audio_metadata_questions(

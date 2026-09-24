@@ -19,6 +19,10 @@ pub trait TextDeltaSink: Send + Sync {
     fn delta(&self, text: &str);
     /// Finishes the current generation. `completed` is false on failure/cancellation.
     fn end(&self, _completed: bool) {}
+    /// Reports that one model-requested tool is about to execute.
+    fn tool_started(&self, _call_id: &str, _name: &str) {}
+    /// Reports the final bounded result of one model-requested tool.
+    fn tool_finished(&self, _call_id: &str, _output: &str, _success: bool) {}
 }
 
 #[async_trait]

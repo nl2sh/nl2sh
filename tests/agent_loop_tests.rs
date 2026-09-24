@@ -7,7 +7,7 @@ use nl2sh::{
     config::Config,
     llm::{
         ConversationItem, ConversationMessage, FinishReason, LlmClient, LlmRequest, LlmResponse,
-        Role, ToolCall, Usage,
+        Role, TextDeltaSink, ToolCall, Usage,
     },
     security::SecurityAssessment,
     shell::{CommandExecutor, ExecutionResult},
@@ -17,12 +17,36 @@ use std::{
     collections::BTreeMap,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex,
     },
 };
 struct MockLlm {
     calls: AtomicUsize,
     command: &'static str,
+}
+
+#[derive(Default)]
+struct ToolEventSink {
+    events: Mutex<Vec<String>>,
+}
+
+impl TextDeltaSink for ToolEventSink {
+    fn delta(&self, _: &str) {}
+
+    fn tool_started(&self, call_id: &str, name: &str) {
+        if let Ok(mut events) = self.events.lock() {
+            events.push(format!("started:{call_id}:{name}"));
+        }
+    }
+
+    fn tool_finished(&self, call_id: &str, output: &str, success: bool) {
+        if let Ok(mut events) = self.events.lock() {
+            events.push(format!(
+                "finished:{call_id}:{success}:{}",
+                output.contains("stdout:\nok")
+            ));
+        }
+    }
 }
 
 struct AlwaysToolLlm {
@@ -404,6 +428,35 @@ async fn readonly_auto_executes_and_result_returns() {
     .unwrap();
     assert_eq!(out.final_text, "done");
     assert_eq!(calls.load(Ordering::SeqCst), 1)
+}
+
+#[tokio::test]
+async fn streaming_sink_receives_tool_start_and_finish_in_order() -> Result<()> {
+    let cfg = Config::default();
+    let llm = MockLlm {
+        calls: AtomicUsize::new(0),
+        command: "id",
+    };
+    let exec = Exec {
+        calls: Arc::new(AtomicUsize::new(0)),
+    };
+    let sink = ToolEventSink::default();
+    AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &exec,
+        confirmer: &Confirm(false),
+    }
+    .run_with_history_streaming_owned("who".into(), Vec::new(), &sink)
+    .await?;
+    assert_eq!(
+        sink.events
+            .lock()
+            .map_err(|_| anyhow::anyhow!("tool event lock poisoned"))?
+            .as_slice(),
+        ["started:1:execute_shell_command", "finished:1:true:true"]
+    );
+    Ok(())
 }
 #[tokio::test]
 async fn mutating_rejection_prevents_execution() {

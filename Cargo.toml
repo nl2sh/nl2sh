@@ -1,6 +1,6 @@
 [package]
 name = "nl2sh"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 description = "Natural Language to Shell for Android"
 license = "MIT"
