@@ -101,6 +101,9 @@ struct SessionState {
     input_tokens: u64,
     output_tokens: u64,
     final_input_tokens: Option<u64>,
+    activity: &'static str,
+    activity_detail: Option<String>,
+    activity_since_ms: u64,
 }
 
 impl SessionState {
@@ -125,6 +128,9 @@ impl SessionState {
             input_tokens: 0,
             output_tokens: 0,
             final_input_tokens: None,
+            activity: "idle",
+            activity_detail: None,
+            activity_since_ms: unix_millis(),
         }
     }
 }
@@ -145,6 +151,20 @@ fn unix_seconds() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs())
+}
+
+fn unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_millis() as u64)
+}
+
+fn set_activity(inner: &mut SessionState, activity: &'static str, detail: Option<&str>) {
+    if inner.activity != activity || inner.activity_detail.as_deref() != detail {
+        inner.activity = activity;
+        inner.activity_detail = detail.map(str::to_owned);
+        inner.activity_since_ms = unix_millis();
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -196,6 +216,9 @@ struct Snapshot {
     input_tokens: u64,
     output_tokens: u64,
     final_input_tokens: Option<u64>,
+    activity: &'static str,
+    activity_detail: Option<String>,
+    activity_elapsed_ms: u64,
 }
 
 #[derive(Serialize)]
@@ -545,6 +568,9 @@ async fn get_state(
         input_tokens: inner.input_tokens,
         output_tokens: inner.output_tokens,
         final_input_tokens: inner.final_input_tokens,
+        activity: inner.activity,
+        activity_detail: inner.activity_detail.clone(),
+        activity_elapsed_ms: unix_millis().saturating_sub(inner.activity_since_ms),
     }))
 }
 
@@ -835,6 +861,9 @@ async fn load_session(
         input_tokens: 0,
         output_tokens: 0,
         final_input_tokens: None,
+        activity: "idle",
+        activity_detail: None,
+        activity_since_ms: unix_millis(),
     });
     state
         .sessions
@@ -868,6 +897,7 @@ async fn post_message(
         return Err(ApiError::conflict("this Agent session is already running"));
     }
     inner.busy = true;
+    set_activity(&mut inner, "thinking", None);
     inner.updated = unix_seconds();
     push(&mut inner, format!("> {text}"));
     drop(inner);
@@ -907,6 +937,7 @@ async fn post_decision(
         }),
     };
     inner.pending = None;
+    set_activity(&mut inner, "tool", None);
     inner
         .reply
         .take()
@@ -1066,6 +1097,7 @@ async fn run_message(state: Arc<Shared>, current: Arc<WebSession>, text: String)
         inner.busy = false;
         inner.pending = None;
         inner.reply = None;
+        set_activity(&mut inner, "idle", None);
     }
     notify(&current, "state");
 }
@@ -1271,6 +1303,13 @@ struct WebTextSink {
     session: Arc<WebSession>,
 }
 impl TextDeltaSink for WebTextSink {
+    fn agent_activity(&self, activity: &'static str, detail: Option<&str>) {
+        if let Ok(mut inner) = self.session.inner.lock() {
+            set_activity(&mut inner, activity, detail);
+        }
+        notify(&self.session, "activity");
+    }
+
     fn delta(&self, text: &str) {
         if let Ok(mut inner) = self.session.inner.lock() {
             let bounded = crate::limits::truncate_text(text, 4096);
@@ -1348,6 +1387,7 @@ impl WebConfirmer {
                 .map_err(|_| anyhow!("web state lock poisoned"))?;
             inner.pending = Some(pending);
             inner.reply = Some(tx);
+            set_activity(&mut inner, "waiting", None);
         }
         notify(&self.session, "pending");
         rx.await.context("browser decision was canceled")

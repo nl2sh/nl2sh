@@ -4,6 +4,7 @@ Last Updated: 2026-09-24
 
 ## Recent Changes
 
+- Web 会话输入框下方显示空闲、模型思考、工具执行和等待审批/补充信息状态，并每秒更新当前状态时长；轮次、步骤、工具、Token 与 Root 统计也移至输入框下方。状态由现有 Agent 执行事件驱动，不改变安全确认、Android 执行或 PTY 路径。
 - 工具公共路径统一为 `src/tools/<domain>/`：内部引用已迁移，旧顶层兼容导出已移除。此项改变 Rust 库模块路径，不改变工具注册、安全确认、Android 执行或 PTY 行为。
 - Web 输入框新增与 TUI 共用的 `@` 文件/目录候选和路径引用提示；右上角工具目录展示当前配置下注册的工具名称、简介及搜索过滤。候选读取有界，目录接口只读；Agent 安全分类、确认、Root 与 PTY 边界不变。
 - 工具架构重构：文件、音频、Android、网络、UI 和便签实现迁入 `src/tools/<domain>/`；显式 Registry 分发全部内置工具，参数类型派生 JSON Schema。风险元数据及动态单次风险决定统一审批，预备动作获批后执行；音频缺参问答与缓存、输入二次校验、图片附件、Web 审批、Shell 动态分类/Root/PTY 保持既有边界。`define_tool!` 与编译期 `#[tool(...)]` 均不自动授予权限。
@@ -192,6 +193,7 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
+- Web 输入区状态与统计布局：主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，以及前端 `npm test --prefix web`、`npm run build --prefix web`、`git diff --check` 通过。
 - 工具公共路径清理：主机目标 `cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features`、`cargo clippy --all-targets -- -D warnings`、`cargo test` 与 `git diff --check` 通过；工具注册、参数 schema、确认、安全分类和 PTY 回归保持通过。
 - Web `@` 补全与工具目录：主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，以及前端 `npm test`、`npm run build`、`git diff --check` 通过；回归覆盖光标所在引用的替换、工具目录 HTTP 响应及文件候选 HTTP 响应。Android 运行时不增加 Node 依赖。
 - 工具架构重构：主机目标 `cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets` 与 `cargo build --release` 通过；覆盖全部内置工具注册、参数 schema、混合读写工具的动态风险、补丁确认、音频问答、Android/网络/会话现有回归。显式凭据 ima live smoke 按设计忽略。

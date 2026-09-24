@@ -173,6 +173,9 @@ impl AgentRunner<'_> {
                 items,
                 tools: registry.definitions(),
             };
+            if let Some(sink) = text_sink {
+                sink.agent_activity("thinking", None);
+            }
             let remaining = Duration::from_secs(self.config.max_task_execution_time_secs)
                 .saturating_sub(runtime.active_time());
             let response = timeout(remaining, async {
@@ -235,6 +238,9 @@ impl AgentRunner<'_> {
                     break 'tool_calls;
                 }
                 runtime.tool_calls_used += 1;
+                if let Some(sink) = text_sink {
+                    sink.agent_activity("tool", Some(&call.name));
+                }
                 round_calls.push(call.clone());
                 let Some(tool) = registry.get(&call.name) else {
                     results.push(

@@ -11,6 +11,8 @@ const DIALECT_CHAT_COMPLETIONS: u8 = 2;
 
 /// Receives model-authored text as it arrives from a streaming response.
 pub trait TextDeltaSink: Send + Sync {
+    /// Reports the Agent phase around a streaming request, when supported by the UI.
+    fn agent_activity(&self, _activity: &'static str, _detail: Option<&str>) {}
     /// Starts a new provider generation.
     fn begin(&self) {}
     /// Appends one text fragment in provider order.

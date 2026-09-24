@@ -43,7 +43,12 @@ button:hover:not(:disabled) { border-color: var(--border-focus); }
 button:disabled { opacity: .45; }
 .controls { height: 50px; display: flex; align-items: center; gap: .5rem; padding: 0 1rem; border-bottom: 1px solid var(--border); overflow-x: auto; font-size: .83rem; }
 .controls input, .controls select { background: var(--background-alt); color: var(--text-primary); border: 1px solid var(--border); border-radius: 5px; padding: .3rem; max-width: 170px; }
-.stats { margin-left: auto; white-space: nowrap; color: var(--text-secondary); }
+.session-status { display: flex; align-items: center; justify-content: space-between; gap: .5rem 1rem; flex-wrap: wrap; padding: .5rem .15rem 0; color: var(--text-secondary); font-size: .83rem; }
+.activity { display: inline-flex; align-items: center; gap: .35rem; min-width: 0; }
+.activity i { flex: none; width: .5rem; height: .5rem; border-radius: 50%; background: var(--text-muted); }
+.activity.thinking i, .activity.tool i { background: var(--accent); }
+.activity.waiting i { background: var(--warning); }
+.session-metrics { white-space: normal; overflow-wrap: anywhere; }
 .chat, .config { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 1rem; }
 .history { flex: 1; overflow: auto; background: var(--background); border: 1px solid var(--border); border-radius: 9px; padding: 1rem; }
 .message { padding: .55rem; border-bottom: 1px solid var(--border); white-space: pre-wrap; }
@@ -102,7 +107,7 @@ button:disabled { opacity: .45; }
 @media (max-width: 720px) {
   .shell { grid-template-columns: 115px 1fr; }
   .controls { height: 82px; flex-wrap: wrap; }
-  .stats { width: 100%; margin: 0; }
+  .session-status { align-items: flex-start; flex-direction: column; }
   .sessions > button { padding: .55rem; }
   .top { height: auto; padding: .5rem; flex-wrap: wrap; }
   .top h1 { max-width: 120px; }
