@@ -1,13 +1,13 @@
 //! Agent adapters and bounded structured file operations.
 
-pub(crate) mod domain;
+pub mod domain;
 
+use self::domain::{
+    ApplyPatchArgs, FileToolExecutor, ListDirArgs, PreparedPatch, ReadFileArgs, SearchTextArgs,
+};
 use super::{
     PreparedExecution, PreparedToolCall, ToolCategory, ToolContext, ToolMetadata, ToolOutput,
     ToolRisk,
-};
-use crate::file_tools::{
-    ApplyPatchArgs, FileToolExecutor, ListDirArgs, PreparedPatch, ReadFileArgs, SearchTextArgs,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;

@@ -26,21 +26,20 @@ macro_rules! define_tool {
     };
 }
 
-pub(crate) mod android;
-pub(crate) mod audio;
+pub mod android;
+pub mod audio;
 mod extended;
-pub(crate) mod file;
+pub mod file;
 mod ima;
-pub(crate) mod memory;
-pub(crate) mod network;
+pub mod memory;
+pub mod network;
 mod shell;
-pub(crate) mod ui;
+pub mod ui;
 
+use self::{audio::domain::AudioToolExecutor, file::domain::FileToolExecutor};
 use crate::{
     agent::{Confirmer, TaskRuntime},
-    audio_tools::AudioToolExecutor,
     config::Config,
-    file_tools::FileToolExecutor,
     ima::ImaClient,
     llm::{LlmClient, ToolAttachment, ToolDefinition},
     security::{MatchedRule, RiskLevel, SecurityAssessment},
@@ -335,7 +334,7 @@ mod tests {
     use super::{
         builtin_tools, Capability, ToolCategory, ToolContext, ToolMetadata, ToolRegistry, ToolRisk,
     };
-    use crate::{file_tools::FileToolExecutor, security::RiskLevel};
+    use crate::{security::RiskLevel, tools::file::domain::FileToolExecutor};
     use anyhow::{Context, Result};
     use serde_json::json;
     use std::fs;

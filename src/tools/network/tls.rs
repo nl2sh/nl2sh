@@ -21,7 +21,7 @@ pub async fn inspect_tls(args: &TlsInspectArgs, timeout_secs: u64) -> Result<Str
     validate_host(&args.host)?;
     let port = args.port.unwrap_or(443);
     let validation_url = format!("https://{}:{port}/", bracket_ipv6(&args.host));
-    crate::web_tools::validate_public_url(&validation_url).await?;
+    crate::tools::network::domain::validate_public_url(&validation_url).await?;
 
     let mut roots = RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());

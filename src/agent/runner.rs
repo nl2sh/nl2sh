@@ -3,9 +3,7 @@ use super::runtime::{
 };
 use super::{ConfirmationDecision, Confirmer, ConversationContext, QuestionOption, UserQuestion};
 use crate::{
-    audio_tools::{AnalyzeAudioArgs, AudioToolExecutor, RawSampleFormat},
     config::{Config, UiLanguage},
-    file_tools::FileToolExecutor,
     ima::ImaClient,
     limits::truncate_text,
     llm::{
@@ -16,6 +14,8 @@ use crate::{
     security::assess,
     shell::CommandExecutor,
     tools::{
+        audio::domain::{AnalyzeAudioArgs, AudioToolExecutor, RawSampleFormat},
+        file::domain::FileToolExecutor,
         Capability, PreparedAction, PreparedExecution, ToolContext, ToolMetadata, ToolRegistry,
         ToolRisk,
     },

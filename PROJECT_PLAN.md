@@ -244,7 +244,7 @@
 
 ## Phase 30 工具架构重构 — 完成
 
-- [x] 将文件、音频、Android、网络、UI 与便签工具实现归入 `src/tools/<domain>/`，旧公共路径保留兼容导出。
+- [x] 将文件、音频、Android、网络、UI 与便签工具实现及内部引用统一归入 `src/tools/<domain>/`，移除旧公共路径兼容导出。
 - [x] 使用显式 `ToolRegistry`、`Tool`、`ToolContext` 和 `PreparedToolCall` 分离参数准备、审批与执行，移除 Runner 逐工具分发 match。
 - [x] 从 serde 参数类型派生 JSON Schema，以 `ToolMetadata`、`ToolRisk` 和 `Capability` 统一风险下限与条件暴露。
 - [x] 保留新增工具的动态写入风险、音频缺参问答/缓存、输入二次校验、截图附件及 Web 审批语义。

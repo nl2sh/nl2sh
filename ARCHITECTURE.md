@@ -50,19 +50,19 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 |---|---|---|---|
 | `src/config` | `Config`、枚举、loader、wizard、分层校验 | 文件/缺省值/环境 → 可进入 TUI 的运行配置；完整 Provider 配置 → LLM 可用 | 不执行命令，不持有 UI 状态 |
 | `src/history` | `HistoryLog`、JSON Lines 事件与安全创建 | 交互事件 → 可刷新诊断日志 | 不记录 provider 凭据，不参与安全决策 |
-| `src/tools/file/domain`、`src/file_tools` | `FileToolExecutor`、结构化读取/搜索/补丁与兼容导出 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
-| `src/tools/audio`、原公共路径 | WAV/Raw PCM DSP 与 Jev/通用 LLM 质量判断 | 音频 → Feature JSON、`needs_input` 或评分 | Raw PCM 元数据不得猜测；Jev 已配置时失败不回退；不上传原始音频 |
-| `src/tools/android`、原公共路径 | 固定参数诊断、UI bounds 输入、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；输入在确认前和执行前重读 UI 树；写入必须确认 |
-| `src/tools/memory`、`src/agent_memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
+| `src/tools/file/domain` | `FileToolExecutor`、结构化读取/搜索/补丁 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
+| `src/tools/audio` | WAV/Raw PCM DSP 与 Jev/通用 LLM 质量判断 | 音频 → Feature JSON、`needs_input` 或评分 | Raw PCM 元数据不得猜测；Jev 已配置时失败不回退；不上传原始音频 |
+| `src/tools/android` | 固定参数诊断、UI bounds 输入、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；输入在确认前和执行前重读 UI 树；写入必须确认 |
+| `src/tools/memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
 | `src/provider_metadata` | `ProviderMetadataClient`、Provider 识别、模型列表与上下文元数据归一化 | Provider 配置 → `ModelMetadata` 列表 | 只读网络访问，不记录凭据/原始账户响应，不参与模型推理与安全判断 |
 | `src/provider_account` | `ProviderAccountClient`、余额结果归一化 | Provider 凭据 → 可显示余额 | 仅调用公开只读接口；不记录凭据、余额或原始响应，不参与推理、安全或执行 |
 | `src/runtime` | `AndroidRuntime`、Termux 标记与 prefix 探测 | 进程环境 → Android shell/Termux | 只提供兼容性信息和 shell/path 选择，不参与安全分类、确认或 root 授权 |
 | `src/network` | 统一 rustls HTTP Client、HTTP/SOCKS 代理、认证和绕过策略 | `Config` → `reqwest::Client` | 代理凭据不得进入日志、错误详情或模型上下文；关闭总开关不清理配置 |
-| `src/tools/network`、原公共路径 | 公网 HTTP(S) 有界读取、确认后 POST/下载与 TLS 诊断 | URL/主机 → 有界正文、文件或证书信息 | 禁止重定向、URL 凭据、本机/私网目标和任意 header；POST、下载均须确认 |
+| `src/tools/network` | 公网 HTTP(S) 有界读取、确认后 POST/下载与 TLS 诊断 | URL/主机 → 有界正文、文件或证书信息 | 禁止重定向、URL 凭据、本机/私网目标和任意 header；POST、下载均须确认 |
 | `src/web_ui` | Axum 0.8 HTTP/SSE/WebSocket、多 Agent 会话、LLM 自动标题、快捷运行设置、浏览器审批、rust-embed 资源 | serde JSON + SSE + WebSocket → 独立 Agent Runner、结构化显示条目、原子配置文件 | 无登录，优先监听 IPv4 9999（占用时使用可用端口）；每会话独立锁和审批通道；WebSocket 终端仍走安全分类和确认；请求有大小上限；不直接执行模型输出 |
-| `src/tools/ui`、`src/ui_tools` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
+| `src/tools/ui` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
 | `src/tools` | `Tool`、显式 `ToolRegistry`、风险/能力元数据、派生 schema 与 `PreparedToolCall` | 模型调用 → 预备动作 → 审批后有界结果 | 只用本地元数据定风险；修改预览必须在统一确认入口批准后执行 |

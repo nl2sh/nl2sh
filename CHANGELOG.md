@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Removed the old top-level Rust tool-module re-exports; library callers now use `nl2sh::tools::<domain>` paths.
 - Reorganized all built-in tool implementations by domain and routed them through an explicit registry with derived schemas, local risk metadata, and prepare/confirm/execute handling. Existing Android, audio, network, memory, Web approval, and shell safety behavior remains in place; the procedural macro is build-time only.
 - Add F2 to expand or collapse all Web tool results while preserving per-card controls.
 - Render escaped newlines in Web tool output as visible line breaks without changing stored results.

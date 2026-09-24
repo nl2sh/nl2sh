@@ -1,7 +1,7 @@
 use crate::{
-    audio_tools::AudioAnalysisResult,
     config::Config,
     llm::{ConversationItem, ConversationMessage, LlmClient, LlmRequest, Role},
+    tools::audio::domain::AudioAnalysisResult,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use reqwest::StatusCode;

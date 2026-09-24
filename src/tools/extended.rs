@@ -1,24 +1,35 @@
 //! Adapters for the newer audio, Android, network, UI, and memory tools.
 
 use super::{
+    android::{
+        diagnostics::{
+            self as android_diagnostics, AndroidContentQueryArgs, AndroidDumpsysArgs,
+            AndroidLogcatArgs, AndroidSettingsArgs, InspectAndroidAppArgs, ListAndroidAppsArgs,
+            TopAndroidAppsArgs,
+        },
+        domain::{
+            self as android_tools, AndroidInputArgs, ClipboardArgs, ConnectivityArgs,
+            MediaControlArgs, MediaQueryArgs, PackageLimitArgs,
+        },
+    },
+    audio::{
+        domain::{AnalyzeAudioArgs, AudioAnalysisResult},
+        quality::{judge_audio_quality, JudgeAudioQualityArgs},
+    },
+    memory::domain::{AgentMemory, AgentMemoryArgs},
+    network::{
+        domain::{
+            self as web_tools, DownloadUrlArgs, HttpPostArgs, HttpRequestArgs, PreparedDownload,
+        },
+        tls::{self as tls_tools, TlsInspectArgs},
+    },
+    ui::domain::{
+        self as ui_tools, CaptureAndroidScreenArgs, InspectAndroidUiArgs, ViewScreenshotArgs,
+    },
+};
+use super::{
     definition, parse_args, PreparedExecution, PreparedToolCall, Tool, ToolCategory, ToolContext,
     ToolMetadata, ToolOutput, ToolRisk,
-};
-use crate::{
-    agent_memory::{AgentMemory, AgentMemoryArgs},
-    android_diagnostics::{
-        self, AndroidContentQueryArgs, AndroidDumpsysArgs, AndroidLogcatArgs, AndroidSettingsArgs,
-        InspectAndroidAppArgs, ListAndroidAppsArgs, TopAndroidAppsArgs,
-    },
-    android_tools::{
-        self, AndroidInputArgs, ClipboardArgs, ConnectivityArgs, MediaControlArgs, MediaQueryArgs,
-        PackageLimitArgs,
-    },
-    audio_quality::{judge_audio_quality, JudgeAudioQualityArgs},
-    audio_tools::{AnalyzeAudioArgs, AudioAnalysisResult},
-    tls_tools::{self, TlsInspectArgs},
-    ui_tools::{self, CaptureAndroidScreenArgs, InspectAndroidUiArgs, ViewScreenshotArgs},
-    web_tools::{self, DownloadUrlArgs, HttpPostArgs, HttpRequestArgs, PreparedDownload},
 };
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;

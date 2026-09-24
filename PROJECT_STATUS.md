@@ -4,8 +4,9 @@ Last Updated: 2026-09-24
 
 ## Recent Changes
 
+- 工具公共路径统一为 `src/tools/<domain>/`：内部引用已迁移，旧顶层兼容导出已移除。此项改变 Rust 库模块路径，不改变工具注册、安全确认、Android 执行或 PTY 行为。
 - Web 输入框新增与 TUI 共用的 `@` 文件/目录候选和路径引用提示；右上角工具目录展示当前配置下注册的工具名称、简介及搜索过滤。候选读取有界，目录接口只读；Agent 安全分类、确认、Root 与 PTY 边界不变。
-- 工具架构重构：文件、音频、Android、网络、UI 和便签实现迁入 `src/tools/<domain>/`，旧公共路径保留兼容导出；显式 Registry 分发全部内置工具，参数类型派生 JSON Schema。风险元数据及动态单次风险决定统一审批，预备动作获批后执行；音频缺参问答与缓存、输入二次校验、图片附件、Web 审批、Shell 动态分类/Root/PTY 保持既有边界。`define_tool!` 与编译期 `#[tool(...)]` 均不自动授予权限。
+- 工具架构重构：文件、音频、Android、网络、UI 和便签实现迁入 `src/tools/<domain>/`；显式 Registry 分发全部内置工具，参数类型派生 JSON Schema。风险元数据及动态单次风险决定统一审批，预备动作获批后执行；音频缺参问答与缓存、输入二次校验、图片附件、Web 审批、Shell 动态分类/Root/PTY 保持既有边界。`define_tool!` 与编译期 `#[tool(...)]` 均不自动授予权限。
 - Web 对话支持 F2 同步展开或收起所有工具卡片，同时保留每张卡片的独立点击控制；审批和终端弹窗优先接收键盘事件。
 - Web 工具结果及实时输出在展示时将字面量 `\\n` 还原为换行，保留已有真实换行与成对反斜杠；仅影响浏览器显示，不改写原始 Tool Result、模型上下文或审计数据。
 - Web 对话不再把连续工具事件合入同一折叠项：每次调用与按 ID 匹配的结果独立显示，已保存会话恢复沿用相同顺序；原始实时输出仍单独呈现，不改变执行和审批边界。
@@ -191,6 +192,7 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
+- 工具公共路径清理：主机目标 `cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo check --all-targets --no-default-features`、`cargo clippy --all-targets -- -D warnings`、`cargo test` 与 `git diff --check` 通过；工具注册、参数 schema、确认、安全分类和 PTY 回归保持通过。
 - Web `@` 补全与工具目录：主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，以及前端 `npm test`、`npm run build`、`git diff --check` 通过；回归覆盖光标所在引用的替换、工具目录 HTTP 响应及文件候选 HTTP 响应。Android 运行时不增加 Node 依赖。
 - 工具架构重构：主机目标 `cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets` 与 `cargo build --release` 通过；覆盖全部内置工具注册、参数 schema、混合读写工具的动态风险、补丁确认、音频问答、Android/网络/会话现有回归。显式凭据 ima live smoke 按设计忽略。
 - Web F2 工具折叠：前端 `npm test`、`npm run build`，以及主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 通过；回归验证全部展开、全部收起、混合状态及空列表。
