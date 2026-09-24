@@ -57,6 +57,18 @@ button:disabled { opacity: .45; }
 .tools pre { margin: 0; border-top: 1px solid var(--border); white-space: pre-wrap; color: var(--text-primary); }
 .tools pre.bad { color: var(--error); }
 .composer { display: flex; gap: .6rem; margin-top: .7rem; }
+.composer-area { position: relative; }
+.file-suggestions { position: absolute; bottom: calc(100% + .35rem); left: 0; width: min(100%, 640px); max-height: 240px; overflow-y: auto; padding: .3rem; background: var(--background-alt); border: 1px solid var(--border-focus); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 35%); z-index: 2; }
+.file-suggestions button { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; border: 0; background: transparent; }
+.file-suggestions button.selected, .file-suggestions button:hover { background: var(--background); color: var(--accent); }
+.modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.tool-catalog { display: flex; flex-direction: column; }
+.tool-catalog > input { flex: none; }
+.catalog-count { color: var(--text-secondary); margin: .7rem 0; }
+.catalog-list { overflow-y: auto; }
+.catalog-list article { padding: .7rem 0; border-top: 1px solid var(--border); }
+.catalog-list strong { color: var(--cyan); }
+.catalog-list p { margin: .35rem 0 0; color: var(--text-secondary); white-space: pre-wrap; }
 .composer textarea, .composer input, .config textarea, .modal textarea, .modal input { width: 100%; background: var(--background-alt); color: var(--text-primary); border: 1px solid var(--border); border-radius: 7px; padding: .7rem; }
 .composer textarea { min-height: 68px; }
 .config textarea { flex: 1; font: 13px/1.5 ui-monospace, monospace; }
@@ -92,6 +104,8 @@ button:disabled { opacity: .45; }
   .controls { height: 82px; flex-wrap: wrap; }
   .stats { width: 100%; margin: 0; }
   .sessions > button { padding: .55rem; }
-  .top { padding: .5rem; }
+  .top { height: auto; padding: .5rem; flex-wrap: wrap; }
   .top h1 { max-width: 120px; }
+  .top nav { display: flex; width: 100%; margin-left: 0; overflow-x: auto; }
+  .top nav button { flex: none; }
 }

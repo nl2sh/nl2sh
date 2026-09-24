@@ -2,6 +2,7 @@
 use crate::{
     agent::{AgentRunner, ConfirmationDecision, Confirmer, QuestionAnswers, UserQuestion},
     config::{self, Config, ConfirmPolicy},
+    file_references::{augment_file_references, file_suggestions},
     llm::{
         build_client, ConversationItem, ConversationMessage, LlmRequest, Role, TextDeltaSink,
         ToolRound,
@@ -10,6 +11,7 @@ use crate::{
     security::SecurityAssessment,
     sessions::SessionStore,
     shell::{CommandExecutor, ExecutionResult, OutputSink, ShellExecutor, SystemRootProbe},
+    tools::builtin_tools,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -397,6 +399,8 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/config", get(get_config).post(save_config))
         .route("/api/quick-settings", get(get_quick_settings).post(save_quick_settings))
         .route("/api/models", get(get_models))
+        .route("/api/tools", get(get_tools))
+        .route("/api/file-suggestions", get(get_file_suggestions))
         .route("/api/sessions", get(get_sessions))
         .route("/api/sessions/new", post(new_session))
         .route("/api/sessions/load", post(load_session))
@@ -680,6 +684,41 @@ async fn get_models(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<serd
     let cfg = load_config(state.path.clone()).await?;
     let models = build_metadata_client(&cfg).list_models(&cfg).await?;
     Ok(Json(models.into_iter().map(|m|serde_json::json!({"id":m.id,"context_window":m.context_window,"max_output_tokens":m.max_output_tokens})).collect()))
+}
+
+#[derive(Serialize)]
+struct ToolSummary {
+    name: String,
+    description: String,
+}
+
+async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolSummary>>> {
+    let cfg = load_config(state.path.clone()).await?;
+    Ok(Json(
+        builtin_tools(cfg.ima_enabled)
+            .into_iter()
+            .map(|tool| ToolSummary {
+                name: tool.name,
+                description: tool.description,
+            })
+            .collect(),
+    ))
+}
+
+#[derive(Deserialize)]
+struct FileSuggestionQuery {
+    fragment: String,
+}
+
+async fn get_file_suggestions(
+    Query(query): Query<FileSuggestionQuery>,
+) -> ApiResult<Json<Vec<String>>> {
+    if query.fragment.len() > 1024 || query.fragment.chars().any(char::is_whitespace) {
+        return Err(ApiError::bad(anyhow!("invalid file suggestion fragment")));
+    }
+    let suggestions =
+        tokio::task::spawn_blocking(move || file_suggestions(&query.fragment)).await?;
+    Ok(Json(suggestions))
 }
 
 async fn new_session(State(state): State<Arc<Shared>>) -> ApiResult<Json<SessionSummary>> {
@@ -1066,8 +1105,13 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
     let sink = WebTextSink {
         session: current.clone(),
     };
+    let agent_text = tokio::task::spawn_blocking({
+        let text = text.clone();
+        move || augment_file_references(&text)
+    })
+    .await?;
     let result = runner
-        .run_with_history_streaming_owned(text.clone(), history, &sink)
+        .run_with_history_streaming_owned(agent_text, history, &sink)
         .await?;
     let generated_title = if needs_title {
         generate_title(&llm, &cfg, &text, &result.final_text).await
@@ -1466,6 +1510,32 @@ mod http_tests {
             .await?;
         assert_eq!(state["busy"], false);
         assert!(state["history"].as_array().is_some());
+        let tools: serde_json::Value = client
+            .get(format!("{base}/api/tools"))
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert!(tools
+            .as_array()
+            .is_some_and(|items| items.iter().any(|tool| {
+                tool["name"] == "read_file" && tool["description"].as_str().is_some()
+            })));
+        std::fs::write(dir.path().join("web-reference.txt"), "example")?;
+        let suggestions: Vec<String> = client
+            .get(format!("{base}/api/file-suggestions"))
+            .query(&[(
+                "fragment",
+                dir.path().join("web-ref").to_string_lossy().to_string(),
+            )])
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert_eq!(
+            suggestions,
+            vec![dir.path().join("web-reference.txt").to_string_lossy()]
+        );
         let mut events = client
             .get(format!("{base}/api/events?id={id}"))
             .send()

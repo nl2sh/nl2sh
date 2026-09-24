@@ -1,5 +1,90 @@
 use std::path::{Path, PathBuf};
 
+const MAX_FILE_SUGGESTIONS: usize = 100;
+const MAX_FILE_ENTRIES_SCANNED: usize = 1_000;
+
+/// Lists bounded local path completions using the same rules for TUI and Web.
+pub fn file_suggestions(fragment: &str) -> Vec<String> {
+    let (expanded, display_prefix) = if fragment == "~" || fragment.starts_with("~/") {
+        let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) else {
+            return Vec::new();
+        };
+        let remainder = fragment
+            .strip_prefix('~')
+            .unwrap_or_default()
+            .trim_start_matches('/');
+        (PathBuf::from(home).join(remainder), "~/")
+    } else if fragment.starts_with('/') {
+        (PathBuf::from(fragment), "/")
+    } else {
+        (PathBuf::from(fragment), "")
+    };
+    let list_exact_directory =
+        matches!(fragment, "~" | "/" | "." | "..") || fragment.ends_with('/');
+    let (directory, query, typed_parent) = if list_exact_directory {
+        (expanded.as_path(), "", fragment.trim_end_matches('/'))
+    } else {
+        (
+            expanded.parent().unwrap_or_else(|| Path::new(".")),
+            expanded
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default(),
+            fragment
+                .rsplit_once('/')
+                .map(|(parent, _)| parent)
+                .unwrap_or(""),
+        )
+    };
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return Vec::new();
+    };
+    let mut matches = entries
+        .take(MAX_FILE_ENTRIES_SCANNED)
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            if !name.starts_with(query) || (query.is_empty() && name.starts_with('.')) {
+                return None;
+            }
+            let separator = if typed_parent.is_empty() || typed_parent == "/" {
+                ""
+            } else {
+                "/"
+            };
+            let mut shown = if display_prefix == "~/" {
+                let relative_parent = typed_parent.trim_start_matches('~').trim_matches('/');
+                if relative_parent.is_empty() {
+                    format!("~/{name}")
+                } else {
+                    format!("~/{relative_parent}/{name}")
+                }
+            } else if fragment.starts_with('/') {
+                format!(
+                    "/{typed_parent_trim}{name}",
+                    typed_parent_trim = typed_parent.trim_matches('/').to_string() + separator
+                )
+            } else if typed_parent.is_empty() {
+                name
+            } else {
+                format!("{typed_parent}/{name}")
+            };
+            if entry.path().is_dir() {
+                shown.push('/');
+            }
+            Some(shown)
+        })
+        .collect::<Vec<_>>();
+    matches.sort_by(|left, right| {
+        right
+            .ends_with('/')
+            .cmp(&left.ends_with('/'))
+            .then_with(|| left.cmp(right))
+    });
+    matches.truncate(MAX_FILE_SUGGESTIONS);
+    matches
+}
+
 /// Resolves `@path` mentions to existing absolute paths and appends bounded
 /// context that lets the Agent inspect them through its structured file tools.
 /// The original user text is preserved, including text immediately following

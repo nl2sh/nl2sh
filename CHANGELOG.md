@@ -19,6 +19,7 @@
 
 ### Added
 
+- Added Web `@` path suggestions with keyboard completion and shared path reference resolution, plus a searchable toolbar catalog of available tools and descriptions.
 - Added a Web toolbar action to download the selected conversation and shared audit log as a ZIP archive.
 - Added Web Markdown rendering, collapsible tool output, joined streaming responses, quick provider/model/approval controls, and session usage statistics.
 - Added concurrent Web Agent sessions with a persistent session sidebar, per-session approvals, background status, and LLM-generated titles.

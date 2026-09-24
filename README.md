@@ -52,6 +52,8 @@ Web 页面提供类似 dsh 的多会话侧栏。多个 Agent 会话可同时运�
 
 页面右上角的“导出日志”会下载当前选中会话的 ZIP，包含导出时显示的对话 `conversation.json`、当前审计日志 `nl2sh.log` 和范围说明。审计日志由所有会话共用，因此可能包含其他会话事件；如果尚无日志文件，包内日志为空。
 
+Web 对话输入框输入 `@` 时会列出当前路径候选，支持与 TUI 相同的相对路径、绝对路径、`~/`、`./` 和 `../`；Up/Down 选择，Enter/Tab 补全，目录可继续下钻。提交后路径引用仍只作为 Agent 文件工具提示。右上角“工具”可查看当前配置下可用的工具名称和简介，并按名称或简介搜索。
+
 Web 后端使用 Tokio 和 Axum 0.8，配置及会话协议使用 serde JSON，Agent 状态和流式输出通过 SSE 推送，安全终端使用 WebSocket。前端源码位于 `web/`，使用 Preact、TypeScript、Vite 和纯 CSS；生产资源由 `rust-embed` 编入可执行文件。发布包无需携带 HTML、JavaScript 或 Node.js，Android ARM64 仍只部署一个 ELF binary。
 
 Web 深色页面与 TUI 共用 `UI_DESIGN.md` 的语义色板：灰白正文、青蓝导航与焦点，以及仅用于状态的绿/黄/红；CSS token 集中在 `web/src/style.css`。颜色不替代审批和风险文字。

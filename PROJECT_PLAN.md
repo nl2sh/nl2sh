@@ -240,6 +240,7 @@
 - [x] Web 后端迁移至 Axum 0.8，使用 SSE 推送 Agent 状态、WebSocket 承载安全终端；Preact + TypeScript + Vite 资源经 rust-embed 保持单 Android ELF 分发。
 - [x] Cargo 编译前由构建脚本生成 Web 静态资源，发布和 TUR 构建提供 Node 工具；生成的 `web/dist/` 不纳入版本控制。
 - [x] Web 执行采用捕获式路径，并继续使用 Agent 的安全分类、确认和执行边界。
+- [x] Web 输入框复用 TUI 的 `@` 路径候选和引用解析；工具目录按当前配置展示注册工具及简介，支持搜索。
 
 ## Phase 30 工具架构重构 — 完成
 

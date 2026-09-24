@@ -5,3 +5,4 @@ export interface Question{id:string;header:string;prompt:string;options:{label:s
 export interface Session{id:string;title:string;turns:number;busy:boolean;pending:boolean;updated:number}
 export interface Snapshot{id:string;title:string;entries:Entry[];busy:boolean;pending:Pending|null;turns:number;steps:number;tool_calls:number;input_tokens:number;output_tokens:number;final_input_tokens?:number}
 export interface QuickSettings{endpoint:string;model:string;confirm_policy:'always'|'risk_only'|'never';max_context_turns:number;max_agent_steps:number;max_tool_calls:number;context_window?:number;root:string}
+export interface ToolInfo{name:string;description:string}
