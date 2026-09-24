@@ -4,6 +4,7 @@ Last Updated: 2026-09-24
 
 ## Recent Changes
 
+- 工具架构重构：文件、音频、Android、网络、UI 和便签实现迁入 `src/tools/<domain>/`，旧公共路径保留兼容导出；显式 Registry 分发全部内置工具，参数类型派生 JSON Schema。风险元数据及动态单次风险决定统一审批，预备动作获批后执行；音频缺参问答与缓存、输入二次校验、图片附件、Web 审批、Shell 动态分类/Root/PTY 保持既有边界。`define_tool!` 与编译期 `#[tool(...)]` 均不自动授予权限。
 - Web 对话支持 F2 同步展开或收起所有工具卡片，同时保留每张卡片的独立点击控制；审批和终端弹窗优先接收键盘事件。
 - Web 工具结果及实时输出在展示时将字面量 `\\n` 还原为换行，保留已有真实换行与成对反斜杠；仅影响浏览器显示，不改写原始 Tool Result、模型上下文或审计数据。
 - Web 对话不再把连续工具事件合入同一折叠项：每次调用与按 ID 匹配的结果独立显示，已保存会话恢复沿用相同顺序；原始实时输出仍单独呈现，不改变执行和审批边界。
@@ -173,6 +174,7 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Pending / Known Issues
 
+- 根包若通过 crates.io `cargo package` 发布，需先发布版本匹配的 `nl2sh-tool-macros` 编译期依赖；GitHub/TUR 的完整源码归档构建及单 ELF 运行交付不受影响。
 - 真机矩阵已覆盖 root/非 root、超时和全屏交互程序；未覆盖的设备、su 或终端实现仍可能存在兼容差异。
 - 源码编译启动脚本仅自动映射 `arm64-v8a` 与 `armeabi-v7a`；其他设备 ABI 会明确拒绝，显式 `RUST_TARGET` 与设备不匹配时也会停止。
 - Agent TUI 在 LLM 和捕获式命令执行期间保持同一 ratatui frame；全屏交互命令会临时挂起 TUI，退出后恢复并完整重绘。
@@ -188,6 +190,7 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
+- 工具架构重构：主机目标 `cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets` 与 `cargo build --release` 通过；覆盖全部内置工具注册、参数 schema、混合读写工具的动态风险、补丁确认、音频问答、Android/网络/会话现有回归。显式凭据 ima live smoke 按设计忽略。
 - Web F2 工具折叠：前端 `npm test`、`npm run build`，以及主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 通过；回归验证全部展开、全部收起、混合状态及空列表。
 - Web 逐工具结果展示：前端 `npm test`、`npm run build`，以及主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 通过；回归覆盖多工具结果按调用 ID 配对、错误结果、无结果调用及历史会话重建。
 - TUI 历史滚动重绘：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings`、`cargo test` 通过；配置 NDK API 26 编译器后的 `cargo check --target aarch64-linux-android --no-default-features` 通过。回归验证滚动帧不发送清屏控制序列，消息区域补画宽字符和空白单元格。

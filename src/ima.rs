@@ -3,6 +3,7 @@
 use crate::config::Config;
 use anyhow::{bail, Context, Result};
 use reqwest::{header::HeaderMap, redirect::Policy, Client, ClientBuilder};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{collections::HashSet, time::Duration};
@@ -24,7 +25,8 @@ pub struct ImaClient {
     default_knowledge_base_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 /// Arguments accepted by the ima knowledge-base search tool.
 pub struct ImaSearchArgs {
     /// Natural-language or keyword query.
@@ -33,7 +35,8 @@ pub struct ImaSearchArgs {
     pub knowledge_base_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 /// Arguments accepted by the ima original-content reader.
 pub struct ImaReadArgs {
     /// Media ID returned by `ima_search`.

@@ -39,6 +39,8 @@ pub mod sessions;
 pub mod shell;
 /// Direct, read-only TLS chain and certificate diagnostics.
 pub mod tls_tools;
+/// Model-facing tool adapters and their explicit registry.
+pub mod tools;
 /// Ratatui/crossterm terminal input interface.
 pub mod tui;
 /// Structured Android UI hierarchy inspection and confirmed screenshots.

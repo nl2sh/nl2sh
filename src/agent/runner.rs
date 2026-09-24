@@ -1,15 +1,9 @@
 use super::runtime::{
     action_fingerprint, command_outcome_status, normalize_command, LimitType, TaskRuntime,
 };
-use super::{
-    builtin_tools, ConfirmationDecision, Confirmer, ConversationContext, QuestionOption,
-    ShellToolArgs, UserQuestion,
-};
+use super::{ConfirmationDecision, Confirmer, ConversationContext, QuestionOption, UserQuestion};
 use crate::{
-    agent_memory::AgentMemory,
-    android_diagnostics, android_tools,
-    audio_quality::judge_audio_quality,
-    audio_tools::{AnalyzeAudioArgs, AudioAnalysisResult, AudioToolExecutor, RawSampleFormat},
+    audio_tools::{AnalyzeAudioArgs, AudioToolExecutor, RawSampleFormat},
     config::{Config, UiLanguage},
     file_tools::FileToolExecutor,
     ima::ImaClient,
@@ -19,9 +13,12 @@ use crate::{
         ToolResult, ToolRound, Usage,
     },
     runtime::{android_runtime, AndroidRuntime},
-    security::{assess, MatchedRule, RiskLevel, SecurityAssessment},
+    security::assess,
     shell::CommandExecutor,
-    tls_tools, ui_tools, web_tools,
+    tools::{
+        Capability, PreparedAction, PreparedExecution, ToolContext, ToolMetadata, ToolRegistry,
+        ToolRisk,
+    },
 };
 use anyhow::{bail, Context, Result};
 use std::{
@@ -140,6 +137,12 @@ impl AgentRunner<'_> {
         let audio_tools = AudioToolExecutor::new(&tool_base)?;
         let mut audio_analysis_cache: HashMap<String, serde_json::Value> = HashMap::new();
         let ima = ImaClient::from_config(self.config)?;
+        let capabilities = if ima.is_some() {
+            vec![Capability::Ima]
+        } else {
+            Vec::new()
+        };
+        let registry = ToolRegistry::builtin(&capabilities);
         let effective_steps = self
             .config
             .max_agent_steps
@@ -168,7 +171,7 @@ impl AgentRunner<'_> {
             let request = LlmRequest {
                 model: self.config.model.clone(),
                 items,
-                tools: builtin_tools(ima.is_some()),
+                tools: registry.definitions(),
             };
             let remaining = Duration::from_secs(self.config.max_task_execution_time_secs)
                 .saturating_sub(runtime.active_time());
@@ -233,23 +236,61 @@ impl AgentRunner<'_> {
                 }
                 runtime.tool_calls_used += 1;
                 round_calls.push(call.clone());
-                if call.name != "execute_shell_command" {
-                    let result = self
-                        .run_non_shell_tool(
-                            &file_tools,
-                            &audio_tools,
-                            ima.as_ref(),
-                            call.clone(),
-                            &mut runtime,
-                            &mut audio_analysis_cache,
-                        )
-                        .await;
-                    step_made_progress |= result.success;
-                    results.push(result);
+                let Some(tool) = registry.get(&call.name) else {
+                    results.push(
+                        self.tool_error_result(&call.id, format!("unsupported tool {}", call.name)),
+                    );
                     continue;
-                }
-                let args: ShellToolArgs = serde_json::from_value(call.arguments)
-                    .context("invalid shell tool arguments")?;
+                };
+                let args = {
+                    let mut tool_context = ToolContext {
+                        file_tools: &file_tools,
+                        ima: ima.as_ref(),
+                        config: Some(self.config),
+                        executor: Some(self.executor),
+                        llm: Some(self.llm),
+                        confirmer: Some(self.confirmer),
+                        audio_tools: Some(&audio_tools),
+                        runtime: Some(&mut runtime),
+                        audio_cache: Some(&mut audio_analysis_cache),
+                    };
+                    let prepared = match tool.prepare(&tool_context, call.arguments).await {
+                        Ok(prepared) => prepared,
+                        Err(error) => {
+                            results.push(
+                                self.tool_error_result(&call.id, format!("Tool failed: {error:#}")),
+                            );
+                            continue;
+                        }
+                    };
+                    match prepared.action {
+                        PreparedAction::Operation(operation) => {
+                            let result = self
+                                .run_prepared_operation(
+                                    tool.metadata(),
+                                    prepared.risk,
+                                    &prepared.preview,
+                                    operation,
+                                    &mut tool_context,
+                                    &call.id,
+                                )
+                                .await;
+                            step_made_progress |= result.success;
+                            results.push(result);
+                            continue;
+                        }
+                        PreparedAction::Shell(args) => {
+                            if tool.metadata().risk != ToolRisk::DynamicShell {
+                                results.push(self.tool_error_result(
+                                    &call.id,
+                                    "shell tool metadata is invalid".into(),
+                                ));
+                                continue;
+                            }
+                            args
+                        }
+                    }
+                };
                 let mut command = args.command;
                 let mut interactive_override = None;
                 let assessment = loop {
@@ -481,380 +522,65 @@ impl AgentRunner<'_> {
         })
     }
 
-    async fn run_non_shell_tool(
+    async fn run_prepared_operation(
         &self,
-        tools: &FileToolExecutor,
-        audio_tools: &AudioToolExecutor,
-        ima: Option<&ImaClient>,
-        call: crate::llm::ToolCall,
-        runtime: &mut TaskRuntime,
-        audio_analysis_cache: &mut HashMap<String, serde_json::Value>,
+        metadata: &ToolMetadata,
+        prepared_risk: Option<ToolRisk>,
+        preview: &str,
+        operation: Box<dyn PreparedExecution>,
+        ctx: &mut ToolContext<'_>,
+        call_id: &str,
     ) -> ToolResult {
-        let call_id = call.id.clone();
-        let mut attachment = None;
-        let outcome: Result<String> = async {
-            match call.name.as_str() {
-                "read_file" => {
-                    let args = super::tools::parse_read_file(call.arguments)
-                        .context("invalid read_file arguments")?;
-                    let tools = tools.clone();
-                    tokio::task::spawn_blocking(move || tools.read_file(&args))
-                        .await.context("read_file worker failed")?
+        let outcome: Result<crate::tools::ToolOutput> = async {
+            let assessment = metadata
+                .assessment_for(prepared_risk.unwrap_or(metadata.risk))
+                .context("prepared operation has no structured security assessment")?;
+            if assessment.requires_confirmation {
+                if preview.trim().is_empty() {
+                    bail!("mutating tool has no approval preview")
                 }
-                "list_dir" => {
-                    let args = super::tools::parse_list_dir(call.arguments)
-                        .context("invalid list_dir arguments")?;
-                    let tools = tools.clone();
-                    tokio::task::spawn_blocking(move || tools.list_dir(&args))
-                        .await.context("list_dir worker failed")?
-                }
-                "search_text" => {
-                    let args = super::tools::parse_search_text(call.arguments)
-                        .context("invalid search_text arguments")?;
-                    let tools = tools.clone();
-                    tokio::task::spawn_blocking(move || tools.search_text(&args))
-                        .await.context("search_text worker failed")?
-                }
-                "apply_patch" => {
-                    let args = super::tools::parse_apply_patch(call.arguments)
-                        .context("invalid apply_patch arguments")?;
-                    let tools_for_prepare = tools.clone();
-                    let patch = tokio::task::spawn_blocking(move || tools_for_prepare.prepare_patch(&args))
-                        .await.context("apply_patch prepare worker failed")??;
-                    let assessment = SecurityAssessment {
-                        risk_level: RiskLevel::Mutating,
-                        matched_rules: vec![MatchedRule { id: "structured-file-edit".into(), message: "Structured file modification".into() }],
-                        requires_confirmation: true,
-                        requires_double_confirmation: false,
-                        requires_root: false,
-                        explanation: "Structured file modification requires confirmation after reviewing the diff.".into(),
-                    };
-                    let confirmation_started = Instant::now();
-                    let decision = self.confirmer.confirm(&patch.diff, &assessment).await?;
-                    runtime.add_confirmation_time(confirmation_started.elapsed());
-                    match decision {
-                        ConfirmationDecision::Approve
-                        | ConfirmationDecision::ApproveForTask
-                        | ConfirmationDecision::ApproveForRun
-                        | ConfirmationDecision::ApproveCaptured
-                        | ConfirmationDecision::ApproveInteractive => {
-                            tokio::task::spawn_blocking(move || patch.apply())
-                                .await.context("apply_patch worker failed")??;
-                            Ok("Patch applied after user confirmed the displayed diff.".into())
-                        }
-                        ConfirmationDecision::Edit(_) => Ok("Patch not applied: edit is unavailable for structured diffs; request a new patch.".into()),
-                        ConfirmationDecision::Reject => Ok("Patch not applied: user rejected the displayed diff.".into()),
+                let started = Instant::now();
+                let decision = self.confirmer.confirm(preview, &assessment).await;
+                ctx.runtime.as_deref_mut().context("tool runtime unavailable")?
+                    .add_confirmation_time(started.elapsed());
+                match decision? {
+                    ConfirmationDecision::Approve
+                    | ConfirmationDecision::ApproveForTask
+                    | ConfirmationDecision::ApproveCaptured
+                    | ConfirmationDecision::ApproveInteractive => {}
+                    ConfirmationDecision::ApproveForRun if super::can_remember_approval(&assessment) => {}
+                    ConfirmationDecision::Edit(_) => {
+                        return Ok(crate::tools::ToolOutput::refused(
+                            "Tool not executed: edit is unavailable for a prepared operation; request a new call.",
+                        ));
+                    }
+                    ConfirmationDecision::Reject | ConfirmationDecision::ApproveForRun => {
+                        return Ok(crate::tools::ToolOutput::refused(
+                            "Tool not executed: user rejected the prepared operation.",
+                        ));
                     }
                 }
-                "analyze_audio" => {
-                    let mut args = super::tools::parse_analyze_audio(call.arguments)
-                        .context("invalid analyze_audio arguments")?;
-                    let analysis_path = args.path.clone();
-                    let worker = audio_tools.clone();
-                    let worker_args = args.clone();
-                    let mut result = tokio::task::spawn_blocking(move || worker.analyze(&worker_args))
-                        .await
-                        .context("analyze_audio worker failed")??;
-                    if let AudioAnalysisResult::NeedsInput { missing, .. } = &result {
-                        let questions = audio_metadata_questions(missing, self.config.ui_language);
-                        let question_started = Instant::now();
-                        let answers = self.confirmer.ask_questions(&questions).await?;
-                        runtime.add_confirmation_time(question_started.elapsed());
-                        if let Some(answers) = answers {
-                            apply_audio_answers(&mut args, &answers)?;
-                            let worker = audio_tools.clone();
-                            result = tokio::task::spawn_blocking(move || worker.analyze(&args))
-                                .await
-                                .context("analyze_audio retry worker failed")??;
-                        }
-                    }
-                    let value = serde_json::to_value(&result)
-                        .context("cannot serialize analyze_audio result")?;
-                    if matches!(result, AudioAnalysisResult::Ok { .. }) {
-                        audio_analysis_cache.insert(analysis_path, value.clone());
-                    }
-                    serde_json::to_string_pretty(&value)
-                        .context("cannot serialize analyze_audio result")
-                }
-                "judge_audio_quality" => {
-                    let mut args = super::tools::parse_judge_audio_quality(call.arguments)
-                        .context("invalid judge_audio_quality arguments")?;
-                    let cached = args
-                        .analysis_path
-                        .as_ref()
-                        .and_then(|path| audio_analysis_cache.get(path))
-                        .or_else(|| {
-                            if audio_analysis_cache.len() == 1 {
-                                audio_analysis_cache.values().next()
-                            } else {
-                                None
-                            }
-                        });
-                    if let Some(features) = cached {
-                        args.features = Some(features.clone());
-                    } else if args.features.is_none() {
-                        bail!("no completed analyze_audio result is available; call analyze_audio first and pass its exact path as analysis_path")
-                    }
-                    let judgment = judge_audio_quality(self.config, self.llm, &args).await?;
-                    serde_json::to_string_pretty(&judgment)
-                        .context("cannot serialize judge_audio_quality result")
-                }
-                "inspect_android_app" => {
-                    let args = super::tools::parse_inspect_android_app(call.arguments)
-                        .context("invalid inspect_android_app arguments")?;
-                    android_diagnostics::inspect_android_app(self.executor, &args).await
-                }
-                "list_android_apps" => {
-                    let args = super::tools::parse_list_android_apps(call.arguments)
-                        .context("invalid list_android_apps arguments")?;
-                    android_diagnostics::list_android_apps(self.executor, &args).await
-                }
-                "top_android_apps" => {
-                    let args = super::tools::parse_top_android_apps(call.arguments)
-                        .context("invalid top_android_apps arguments")?;
-                    android_diagnostics::top_android_apps(self.executor, &args).await
-                }
-                "android_dumpsys" => {
-                    let args = super::tools::parse_android_dumpsys(call.arguments)
-                        .context("invalid android_dumpsys arguments")?;
-                    android_diagnostics::android_dumpsys(self.executor, &args).await
-                }
-                "android_logcat" => {
-                    let args = super::tools::parse_android_logcat(call.arguments)
-                        .context("invalid android_logcat arguments")?;
-                    android_diagnostics::android_logcat(self.executor, &args).await
-                }
-                "android_settings" => {
-                    let args = super::tools::parse_android_settings(call.arguments)
-                        .context("invalid android_settings arguments")?;
-                    android_diagnostics::android_settings(self.executor, &args).await
-                }
-                "android_content_query" => {
-                    let args = super::tools::parse_android_content_query(call.arguments)
-                        .context("invalid android_content_query arguments")?;
-                    android_diagnostics::android_content_query(self.executor, &args).await
-                }
-                "http_request" => {
-                    let args = super::tools::parse_http_request(call.arguments)
-                        .context("invalid http_request arguments")?;
-                    web_tools::http_request(self.config, &args).await
-                }
-                "http_post" => {
-                    let args=super::tools::parse_http_post(call.arguments).context("invalid http_post arguments")?;
-                    let summary=web_tools::post_summary(&args)?;
-                    if self.confirm_structured(&summary,"structured-http-post","HTTP POST sends data to a remote service",runtime).await? { web_tools::http_post(self.config,&args).await } else { Ok("HTTP POST not sent: user rejected the operation.".into()) }
-                }
-                "download_url" => {
-                    let args = super::tools::parse_download_url(call.arguments)
-                        .context("invalid download_url arguments")?;
-                    let prepared = web_tools::prepare_download(self.config, &args).await?;
-                    let summary = prepared.summary();
-                    let assessment = SecurityAssessment {
-                        risk_level: RiskLevel::Mutating,
-                        matched_rules: vec![MatchedRule {
-                            id: "structured-download".into(),
-                            message: "Download writes a local file".into(),
-                        }],
-                        requires_confirmation: true,
-                        requires_double_confirmation: false,
-                        requires_root: false,
-                        explanation: "Downloaded data is written only after confirmation.".into(),
-                    };
-                    let confirmation_started = Instant::now();
-                    let decision = self.confirmer.confirm(&summary, &assessment).await?;
-                    runtime.add_confirmation_time(confirmation_started.elapsed());
-                    match decision {
-                        ConfirmationDecision::Approve
-                        | ConfirmationDecision::ApproveForTask
-                        | ConfirmationDecision::ApproveForRun
-                        | ConfirmationDecision::ApproveCaptured
-                        | ConfirmationDecision::ApproveInteractive => {
-                            tokio::task::spawn_blocking(move || prepared.apply())
-                                .await
-                                .context("download write worker failed")??;
-                            Ok("Download written atomically after user confirmation.".into())
-                        }
-                        ConfirmationDecision::Edit(_) => Ok(
-                            "Download not written: edit is unavailable; request a new target."
-                                .into(),
-                        ),
-                        ConfirmationDecision::Reject => {
-                            Ok("Download not written: user rejected the operation.".into())
-                        }
-                    }
-                }
-                "inspect_android_ui" => {
-                    let args = super::tools::parse_inspect_android_ui(call.arguments)
-                        .context("invalid inspect_android_ui arguments")?;
-                    ui_tools::inspect_android_ui(self.executor, &args).await
-                }
-                "view_screenshot" => {
-                    let args = super::tools::parse_view_screenshot(call.arguments)
-                        .context("invalid view_screenshot arguments")?;
-                    let viewed = tokio::task::spawn_blocking(move || ui_tools::view_screenshot(&args)).await.context("view_screenshot worker failed")??;
-                    attachment = Some(viewed.attachment);
-                    Ok(viewed.summary)
-                }
-                "capture_android_screen" => {
-                    let args = super::tools::parse_capture_android_screen(call.arguments)
-                        .context("invalid capture_android_screen arguments")?;
-                    let command = ui_tools::capture_command(&args.path)?;
-                    let assessment = SecurityAssessment {
-                        risk_level: RiskLevel::Mutating,
-                        matched_rules: vec![MatchedRule {
-                            id: "structured-screenshot".into(),
-                            message: "Screenshot writes a local PNG file".into(),
-                        }],
-                        requires_confirmation: true,
-                        requires_double_confirmation: false,
-                        requires_root: false,
-                        explanation: "Screen capture writes the displayed target after confirmation.".into(),
-                    };
-                    let confirmation_started = Instant::now();
-                    let decision = self.confirmer.confirm(&command, &assessment).await?;
-                    runtime.add_confirmation_time(confirmation_started.elapsed());
-                    match decision {
-                        ConfirmationDecision::Approve
-                        | ConfirmationDecision::ApproveForTask
-                        | ConfirmationDecision::ApproveForRun
-                        | ConfirmationDecision::ApproveCaptured
-                        | ConfirmationDecision::ApproveInteractive => {
-                            let result = self.executor.execute(&command, false, false).await?;
-                            if result.exit_code == Some(0) && !result.timed_out && !result.interrupted {
-                                Ok(format!("Screenshot written to {} after confirmation.", args.path))
-                            } else {
-                                bail!("screenshot command failed: exit={:?} stderr={}", result.exit_code, result.stderr)
-                            }
-                        }
-                        ConfirmationDecision::Edit(_) => Ok(
-                            "Screenshot not written: edit is unavailable; request a new path."
-                                .into(),
-                        ),
-                        ConfirmationDecision::Reject => {
-                            Ok("Screenshot not written: user rejected the operation.".into())
-                        }
-                    }
-                }
-                "inject_android_input" => {
-                    let args=super::tools::parse_android_input(call.arguments).context("invalid inject_android_input arguments")?;
-                    let initial=android_tools::prepare_input(self.executor,&args).await?;
-                    if self.confirm_structured(&format!("Validated UI input\n{initial}"),"structured-android-input","Android input changes device UI state",runtime).await? {
-                        let command=android_tools::prepare_input(self.executor,&args).await?;
-                        let result=self.executor.execute(&command,false,false).await?;
-                        if result.exit_code==Some(0) && !result.timed_out && !result.interrupted {
-                            tokio::time::sleep(Duration::from_millis(500)).await;
-                            let state=ui_tools::inspect_android_ui(self.executor,&ui_tools::InspectAndroidUiArgs::default()).await?;
-                            Ok(format!("Android input injected after current-bounds revalidation and confirmation.\nPost-action UI state:\n{state}"))
-                        } else { bail!("Android input failed: {}",result.stderr) }
-                    } else { Ok("Android input not injected: user rejected the operation.".into()) }
-                }
-                "android_notification" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::notification(self.executor,&a).await }
-                "android_crash_report" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::crash_report(self.executor,&a).await }
-                "android_thermal_power" => android_tools::thermal_power(self.executor).await,
-                "android_netstats" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::netstats(self.executor,&a).await }
-                "android_storage" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::storage(self.executor,&a).await }
-                "android_wifi_eth" => android_tools::wifi_eth(self.executor).await,
-                "android_doze" => android_tools::doze(self.executor).await,
-                "android_permission_audit" => { let a=super::tools::parse_package_limit(call.arguments)?; android_tools::permission_audit(self.executor,&a).await }
-                "android_clipboard" => {
-                    let a=super::tools::parse_clipboard(call.arguments)?;
-                    if a.text.is_none() { android_tools::clipboard_read(self.executor).await } else {
-                        let command=android_tools::clipboard_write_command(&a)?;
-                        if self.confirm_structured(&command,"structured-clipboard-write","Clipboard write changes device state",runtime).await? { let r=self.executor.execute(&command,false,false).await?; if r.exit_code==Some(0) { Ok("Clipboard updated after confirmation.".into()) } else { bail!("clipboard write failed: {}",r.stderr) } } else { Ok("Clipboard not changed: user rejected the operation.".into()) }
-                    }
-                }
-                "android_media_control" => {
-                    let a=super::tools::parse_media_control(call.arguments)?;
-                    if a.action=="status" { android_tools::media_status(self.executor).await } else { let command=android_tools::media_control_command(&a)?; if self.confirm_structured(&command,"structured-media-control","Media control changes playback or volume state",runtime).await? { let r=self.executor.execute(&command,false,false).await?; if r.exit_code==Some(0) { Ok("Media action completed after confirmation.".into()) } else { bail!("media action failed: {}",r.stderr) } } else { Ok("Media action not performed: user rejected the operation.".into()) } }
-                }
-                "android_media_query" => { let a=super::tools::parse_media_query(call.arguments)?; android_tools::media_query(self.executor,&a).await }
-                "android_connectivity" => { let a=super::tools::parse_connectivity(call.arguments)?; android_tools::connectivity(self.executor,&a).await }
-                "agent_memory" => {
-                    let agent_memory = AgentMemory::new(tools.base());
-                    let a=super::tools::parse_memory(call.arguments)?;
-                    if matches!(a.action.as_str(),"get"|"list") { agent_memory.read(&a) } else { let summary=agent_memory.mutation_summary(&a)?; if self.confirm_structured(&summary,"structured-agent-memory","Persistent Agent memory modification",runtime).await? { let memory=agent_memory.clone(); tokio::task::spawn_blocking(move || memory.apply(&a)).await.context("agent_memory worker failed")? } else { Ok("Agent memory not changed: user rejected the operation.".into()) } }
-                }
-                "inspect_tls" => {
-                    let args = super::tools::parse_inspect_tls(call.arguments)
-                        .context("invalid inspect_tls arguments")?;
-                    tls_tools::inspect_tls(&args, self.config.llm_request_timeout_secs).await
-                }
-                "ima_list_knowledge_bases" => ima
-                    .context("ima connector is not configured")?
-                    .list_knowledge_bases()
-                    .await,
-                "ima_search" => {
-                    let args = super::tools::parse_ima_search(call.arguments)
-                        .context("invalid ima_search arguments")?;
-                    ima.context("ima connector is not configured")?
-                        .search(&args)
-                        .await
-                }
-                "ima_read" => {
-                    let args = super::tools::parse_ima_read(call.arguments)
-                        .context("invalid ima_read arguments")?;
-                    ima.context("ima connector is not configured")?
-                        .read(&args)
-                        .await
-                }
-                _ => bail!("unsupported tool {}", call.name),
             }
+            operation.execute(ctx).await
         }.await;
         match outcome {
             Ok(output) => ToolResult {
-                call_id,
-                success: !output.starts_with("Patch not applied")
-                    && !output.starts_with("Download not written")
-                    && !output.starts_with("Screenshot not written")
-                    && !output.starts_with("HTTP POST not sent")
-                    && !output.starts_with("Android input not injected")
-                    && !output.starts_with("Clipboard not changed")
-                    && !output.starts_with("Media action not performed")
-                    && !output.starts_with("Agent memory not changed"),
-                output: truncate_text(&output, self.config.tool_output_max_bytes),
-                attachments: attachment.into_iter().collect(),
+                call_id: call_id.into(),
+                success: output.success,
+                output: truncate_text(&output.content, self.config.tool_output_max_bytes),
+                attachments: output.attachments,
             },
-            Err(error) => ToolResult {
-                call_id,
-                output: truncate_text(
-                    &format!("Tool failed: {error:#}"),
-                    self.config.tool_output_max_bytes,
-                ),
-                success: false,
-                attachments: Vec::new(),
-            },
+            Err(error) => self.tool_error_result(call_id, format!("Tool failed: {error:#}")),
         }
     }
 
-    async fn confirm_structured(
-        &self,
-        summary: &str,
-        id: &str,
-        message: &str,
-        runtime: &mut TaskRuntime,
-    ) -> Result<bool> {
-        let assessment = SecurityAssessment {
-            risk_level: RiskLevel::Mutating,
-            matched_rules: vec![MatchedRule {
-                id: id.into(),
-                message: message.into(),
-            }],
-            requires_confirmation: true,
-            requires_double_confirmation: false,
-            requires_root: false,
-            explanation: format!("{message}; explicit confirmation is required."),
-        };
-        let started = Instant::now();
-        let decision = self.confirmer.confirm(summary, &assessment).await?;
-        runtime.add_confirmation_time(started.elapsed());
-        Ok(matches!(
-            decision,
-            ConfirmationDecision::Approve
-                | ConfirmationDecision::ApproveForTask
-                | ConfirmationDecision::ApproveForRun
-                | ConfirmationDecision::ApproveCaptured
-                | ConfirmationDecision::ApproveInteractive
-        ))
+    fn tool_error_result(&self, call_id: &str, output: String) -> ToolResult {
+        ToolResult {
+            call_id: call_id.into(),
+            output: truncate_text(&output, self.config.tool_output_max_bytes),
+            success: false,
+            attachments: Vec::new(),
+        }
     }
 
     /// Owned-history variant suitable for a UI-managed background future.
@@ -877,7 +603,10 @@ impl AgentRunner<'_> {
     }
 }
 
-fn audio_metadata_questions(missing: &[String], language: UiLanguage) -> Vec<UserQuestion> {
+pub(crate) fn audio_metadata_questions(
+    missing: &[String],
+    language: UiLanguage,
+) -> Vec<UserQuestion> {
     missing
         .iter()
         .filter_map(|field| match field.as_str() {
@@ -953,7 +682,7 @@ fn localized_question(language: UiLanguage, zh_cn: &str, en: &str) -> String {
     .into()
 }
 
-fn apply_audio_answers(
+pub(crate) fn apply_audio_answers(
     args: &mut AnalyzeAudioArgs,
     answers: &std::collections::BTreeMap<String, String>,
 ) -> Result<()> {

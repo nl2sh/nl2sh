@@ -240,3 +240,11 @@
 - [x] Web 后端迁移至 Axum 0.8，使用 SSE 推送 Agent 状态、WebSocket 承载安全终端；Preact + TypeScript + Vite 资源经 rust-embed 保持单 Android ELF 分发。
 - [x] Cargo 编译前由构建脚本生成 Web 静态资源，发布和 TUR 构建提供 Node 工具；生成的 `web/dist/` 不纳入版本控制。
 - [x] Web 执行采用捕获式路径，并继续使用 Agent 的安全分类、确认和执行边界。
+
+## Phase 30 工具架构重构 — 完成
+
+- [x] 将文件、音频、Android、网络、UI 与便签工具实现归入 `src/tools/<domain>/`，旧公共路径保留兼容导出。
+- [x] 使用显式 `ToolRegistry`、`Tool`、`ToolContext` 和 `PreparedToolCall` 分离参数准备、审批与执行，移除 Runner 逐工具分发 match。
+- [x] 从 serde 参数类型派生 JSON Schema，以 `ToolMetadata`、`ToolRisk` 和 `Capability` 统一风险下限与条件暴露。
+- [x] 保留新增工具的动态写入风险、音频缺参问答/缓存、输入二次校验、截图附件及 Web 审批语义。
+- [x] 增加声明式 `define_tool!` 和编译期 `#[tool(...)]`，显式注册且保持每 ABI 单一 Android 可执行文件。

@@ -30,6 +30,168 @@ struct AlwaysToolLlm {
     command: &'static str,
 }
 
+struct StructuredFileLlm {
+    calls: AtomicUsize,
+    path: String,
+}
+
+struct StructuredPatchLlm {
+    calls: AtomicUsize,
+    path: String,
+    expected_success: bool,
+}
+
+#[async_trait]
+impl LlmClient for StructuredPatchLlm {
+    async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "patch".into(),
+                    name: "apply_patch".into(),
+                    arguments: json!({"path":self.path,"old_text":"before","new_text":"after"}),
+                }],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            })
+        } else {
+            let result = request.items.iter().find_map(|item| match item {
+                ConversationItem::Tools(round) => round.results.first(),
+                _ => None,
+            });
+            assert_eq!(
+                result.map(|result| result.success),
+                Some(self.expected_success)
+            );
+            Ok(LlmResponse {
+                text: Some("done".into()),
+                tool_calls: vec![],
+                usage: Usage::default(),
+                finish_reason: FinishReason::Stop,
+            })
+        }
+    }
+}
+
+struct PatchConfirm {
+    decision: ConfirmationDecision,
+    calls: AtomicUsize,
+}
+
+#[async_trait]
+impl Confirmer for PatchConfirm {
+    async fn confirm(
+        &self,
+        preview: &str,
+        assessment: &SecurityAssessment,
+    ) -> Result<ConfirmationDecision> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        assert!(preview.contains("-before"));
+        assert!(preview.contains("+after"));
+        assert_eq!(assessment.risk_level, nl2sh::security::RiskLevel::Mutating);
+        assert!(assessment.requires_confirmation);
+        Ok(self.decision.clone())
+    }
+}
+
+#[tokio::test]
+async fn prepared_patch_needs_confirmation_before_writing() -> Result<()> {
+    for decision in [
+        ConfirmationDecision::Reject,
+        ConfirmationDecision::Approve,
+        ConfirmationDecision::Edit("different change".into()),
+    ] {
+        let approve = decision == ConfirmationDecision::Approve;
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("change.txt");
+        std::fs::write(&path, "before")?;
+        let llm = StructuredPatchLlm {
+            calls: AtomicUsize::new(0),
+            path: path.to_string_lossy().into_owned(),
+            expected_success: approve,
+        };
+        let confirm = PatchConfirm {
+            decision,
+            calls: AtomicUsize::new(0),
+        };
+        let shell_calls = Arc::new(AtomicUsize::new(0));
+        AgentRunner {
+            config: &Config::default(),
+            llm: &llm,
+            executor: &Exec {
+                calls: shell_calls.clone(),
+            },
+            confirmer: &confirm,
+        }
+        .run("change the file")
+        .await?;
+        assert_eq!(confirm.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(shell_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            std::fs::read_to_string(path)?,
+            if approve { "after" } else { "before" }
+        );
+    }
+    Ok(())
+}
+
+#[async_trait]
+impl LlmClient for StructuredFileLlm {
+    async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            assert!(request.tools.iter().any(|tool| tool.name == "read_file"));
+            Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "file-read".into(),
+                    name: "read_file".into(),
+                    arguments: json!({"path": self.path}),
+                }],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            })
+        } else {
+            let output = request.items.iter().find_map(|item| match item {
+                ConversationItem::Tools(round) => round.results.first(),
+                _ => None,
+            });
+            assert!(output.is_some_and(|result| result.success && result.output == "file evidence"));
+            Ok(LlmResponse {
+                text: Some("done".into()),
+                tool_calls: vec![],
+                usage: Usage::default(),
+                finish_reason: FinishReason::Stop,
+            })
+        }
+    }
+}
+
+#[tokio::test]
+async fn registry_dispatches_file_result_back_to_model() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("evidence.txt");
+    std::fs::write(&path, "file evidence")?;
+    let llm = StructuredFileLlm {
+        calls: AtomicUsize::new(0),
+        path: path.to_string_lossy().into_owned(),
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let outcome = AgentRunner {
+        config: &Config::default(),
+        llm: &llm,
+        executor: &Exec {
+            calls: calls.clone(),
+        },
+        confirmer: &Confirm(false),
+    }
+    .run("read the file")
+    .await?;
+    assert_eq!(outcome.final_text, "done");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
 #[async_trait]
 impl LlmClient for AlwaysToolLlm {
     async fn complete(&self, _: LlmRequest) -> Result<LlmResponse> {

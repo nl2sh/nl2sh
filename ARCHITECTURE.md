@@ -50,24 +50,23 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 |---|---|---|---|
 | `src/config` | `Config`、枚举、loader、wizard、分层校验 | 文件/缺省值/环境 → 可进入 TUI 的运行配置；完整 Provider 配置 → LLM 可用 | 不执行命令，不持有 UI 状态 |
 | `src/history` | `HistoryLog`、JSON Lines 事件与安全创建 | 交互事件 → 可刷新诊断日志 | 不记录 provider 凭据，不参与安全决策 |
-| `src/file_tools` | `FileToolExecutor`、结构化读取/搜索/补丁 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
-| `src/audio_tools` | `AudioToolExecutor`、WAV/Raw PCM 解析、DSP/FFT | 本地音频 → 客观 Feature JSON 或 `needs_input` | 纯 Rust、只读、不调用模型或 shell；Raw PCM 不可靠参数不得静默猜测 |
-| `src/audio_quality` | `judge_audio_quality`、Jev/通用 LLM 归一化 | 完整 Feature JSON → 0–5 多维质量评分 | Jev 配置存在时失败不回退；未配置才使用当前 LLM；不上传原始音频 |
-| `src/android_diagnostics` | 固定参数的应用、dumpsys、logcat、settings 与 ContentProvider 只读诊断 | 经严格校验的结构化参数 → 分项状态和有界原始证据 | 不暴露写设置、service call 或 ContentProvider 写操作；不接受 shell 元字符 |
-| `src/android_tools` | UI bounds 校验输入、通知/崩溃/功耗/网络/存储/权限聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认的固定命令 | 输入注入在确认前和执行前重读 UI 树；写入与控制操作必须确认，不接受任意 shell |
-| `src/agent_memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
+| `src/tools/file/domain`、`src/file_tools` | `FileToolExecutor`、结构化读取/搜索/补丁与兼容导出 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
+| `src/tools/audio`、原公共路径 | WAV/Raw PCM DSP 与 Jev/通用 LLM 质量判断 | 音频 → Feature JSON、`needs_input` 或评分 | Raw PCM 元数据不得猜测；Jev 已配置时失败不回退；不上传原始音频 |
+| `src/tools/android`、原公共路径 | 固定参数诊断、UI bounds 输入、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；输入在确认前和执行前重读 UI 树；写入必须确认 |
+| `src/tools/memory`、`src/agent_memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
 | `src/provider_metadata` | `ProviderMetadataClient`、Provider 识别、模型列表与上下文元数据归一化 | Provider 配置 → `ModelMetadata` 列表 | 只读网络访问，不记录凭据/原始账户响应，不参与模型推理与安全判断 |
 | `src/provider_account` | `ProviderAccountClient`、余额结果归一化 | Provider 凭据 → 可显示余额 | 仅调用公开只读接口；不记录凭据、余额或原始响应，不参与推理、安全或执行 |
 | `src/runtime` | `AndroidRuntime`、Termux 标记与 prefix 探测 | 进程环境 → Android shell/Termux | 只提供兼容性信息和 shell/path 选择，不参与安全分类、确认或 root 授权 |
 | `src/network` | 统一 rustls HTTP Client、HTTP/SOCKS 代理、认证和绕过策略 | `Config` → `reqwest::Client` | 代理凭据不得进入日志、错误详情或模型上下文；关闭总开关不清理配置 |
-| `src/web_tools` | 公网 HTTP(S) 有界读取、确认后 JSON POST 与原子下载 | GET/HEAD/JSON POST URL 或 URL+目标路径 → 有界正文/文件 | 禁止重定向、URL 凭据、本机/私网目标和任意 header；POST、下载均须确认 |
+| `src/tools/network`、原公共路径 | 公网 HTTP(S) 有界读取、确认后 POST/下载与 TLS 诊断 | URL/主机 → 有界正文、文件或证书信息 | 禁止重定向、URL 凭据、本机/私网目标和任意 header；POST、下载均须确认 |
 | `src/web_ui` | Axum 0.8 HTTP/SSE/WebSocket、多 Agent 会话、LLM 自动标题、快捷运行设置、浏览器审批、rust-embed 资源 | serde JSON + SSE + WebSocket → 独立 Agent Runner、结构化显示条目、原子配置文件 | 无登录，优先监听 IPv4 9999（占用时使用可用端口）；每会话独立锁和审批通道；WebSocket 终端仍走安全分类和确认；请求有大小上限；不直接执行模型输出 |
-| `src/ui_tools` | UIAutomator 控件树、焦点窗口、显示信息、截图及模型图片附件 | 当前界面/本地 PNG、JPEG、WebP → 紧凑或完整的有界节点、截图或临时多模态内容 | 固定内部探测静默执行；超限图片在进程内有界缩放；截图写入必须确认；附件只进入下一模型请求，不持久化到会话 |
-| `src/tls_tools` | 公网 TLS 握手、SNI/信任链校验和 X.509 元数据 | 主机/端口 → 证书主题、颁发者、有效期与 SHA-256 | 只读直连，不发送 HTTP；拒绝本机/私网目标，使用 ring 与 Mozilla 根证书集合 |
+| `src/tools/ui`、`src/ui_tools` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
-| `src/agent` | `AgentRunner`、上下文完整交互单元、工具 schema、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
+| `src/agent` | `AgentRunner`、上下文完整交互单元、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
+| `src/tools` | `Tool`、显式 `ToolRegistry`、风险/能力元数据、派生 schema 与 `PreparedToolCall` | 模型调用 → 预备动作 → 审批后有界结果 | 只用本地元数据定风险；修改预览必须在统一确认入口批准后执行 |
+| `crates/nl2sh-tool-macros` | 编译期 `#[tool]` 生成适配器与元数据 | 注解函数 → Rust Tool 实现 | 只在构建主机运行；不自动注册或授予执行权限 |
 | `src/security` | normalize、side-effect 分类、内置/自定义规则、`SecurityAssessment` | 原始命令 → 风险和确认要求 | 不依赖 TUI、LLM 或执行器 |
 | `src/shell` | `CommandExecutor`、root invocation、process group、pipeline/PTY 边界 | 已批准命令 → `ExecutionResult` | 不自行降低风险或批准命令 |
 | `src/tui` | terminal guard、session 状态机、独立 output/history 生命周期、事件、输入、`@` 文件候选、中英文文案、ratatui 渲染 | key/mouse event → 用户输入 | 不解析 OpenAI JSON，不直接执行；启动帮助不进入模型上下文 |
@@ -75,6 +74,8 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 | `src/ima` | 腾讯 ima 知识库只读发现、搜索与原文读取 | 独立 Client ID/API Key → 有界知识库结果 | 强制直连且不使用代理；不提供任何写接口，不泄露长期凭据、临时 header 或签名 URL |
 
 公共 trait 允许测试以 mock 替换网络、执行、确认和 root 探测。依赖方向保持 `UI → Agent → abstractions`，security 与 shell 彼此通过调用参数协作，无循环依赖。
+
+模型可见工具由 Registry 显式注册，ima 按本地 `Capability` 条件暴露；参数类型通过 `schemars::JsonSchema` 派生定义。`Tool::prepare` 解析参数并构造预览与待执行动作；工具元数据声明风险下限，剪贴板、媒体和便签按实际参数升高单次风险。Agent 统一根据本地风险决定确认/强确认，再调用 `PreparedExecution::execute`。补丁和下载在确认前只准备 diff 或数据，截图、HTTP POST、输入注入与设备控制必须先显示预览；输入注入执行前重新校验当前 UI bounds。Shell 命令继续逐次经过原安全分类、编辑重评估、Root 与 PTY 回收路径。音频缺参问答与分析缓存、截图附件以及 Web 会话审批沿用既有行为。`define_tool!` 和构建期 `#[tool(...)]` 均只生成适配器，注册和权限仍需显式决定。
 
 Web 前端源码和 npm lockfile 保存在 `web/`；Cargo 的 `build.rs` 先把源码复制到 `OUT_DIR`，在副本中执行 `npm ci` 和 `npm run build`，再由 `rust-embed` 把产物编入单一可执行文件。构建需要 Node.js/npm，生成目录不进入版本控制或发布源码包；Android 运行时不依赖 Node.js。TUR 构建使用 Termux 提供的主机 Node 工具。
 
