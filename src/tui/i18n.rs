@@ -4,6 +4,7 @@ const OPEN_SOURCE_SUPPORT: &str = "⭐ 这个项目完全开源、单二进制�
 const DONATION_SUPPORT: &str = "❤️ 如果 nl2sh 帮你少敲了几条 adb 命令、省下了调试 Android 设备的时间，欢迎请我喝杯咖啡 ☕  点击赞赏 -> https://suqishuo.cn/uploads/wechatpay.png";
 pub(crate) const BUDDHA_ART_PREFIX: &str = "\u{1e}BUDDHA:";
 pub(crate) const WELCOME_TRAIN_ANCHOR: &str = "\u{1e}WELCOME_TRAIN";
+pub(crate) const WEB_WELCOME_PREFIX: &str = "\u{1e}WEB_WELCOME:";
 const BUDDHA_ART: &str = r#"\\ \\ \\ \\ \\ \\ \\ \\ || || || || || || // // // // // // // //
 \\ \\ \\ \\ \\ \\ \\        _ooOoo_          // // // // // // //
 \\ \\ \\ \\ \\ \\          o8888888o            // // // // // //
@@ -69,15 +70,12 @@ pub(crate) fn startup_history(
             format!("{hint} Controls: Ctrl+C cancels or clears input; Ctrl+Q quits safely"),
         ],
     };
-    if let Some(url) = crate::web_ui::welcome_url() {
-        history.insert(1, match language {
-            UiLanguage::ZhCn => format!("{hint} Web 界面及配置：{url}（同一网络中的设备可访问；无需登录）"),
-            UiLanguage::En => format!("{hint} Web interface and settings: {url} (available on the same network; no login)"),
-        });
-    }
     history.extend(support_history(show_buddha_ascii_art));
     if show_train_ascii_art {
         history.push(WELCOME_TRAIN_ANCHOR.into());
+    }
+    if let Some(url) = crate::web_ui::welcome_url() {
+        history.push(format!("{WEB_WELCOME_PREFIX}{url}"));
     }
     history
 }

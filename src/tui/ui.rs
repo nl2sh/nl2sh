@@ -717,6 +717,8 @@ fn conversation_lines(app: &App, width: usize, theme: Theme) -> Vec<Line<'_>> {
             if let Some(frame) = app.welcome_train_frame {
                 lines.extend(welcome_train_lines(frame, width, theme));
             }
+        } else if let Some(url) = entry.strip_prefix(super::i18n::WEB_WELCOME_PREFIX) {
+            lines.extend(web_welcome_lines(url, app.language, app.ascii, theme));
         } else if let Some(encoded) = entry.strip_prefix(super::output::TOOL_RESULT_PREFIX) {
             let (prefix, details) = encoded.split_once('\n').unwrap_or((encoded, ""));
             if app.tool_results_expanded {
@@ -750,6 +752,45 @@ fn conversation_lines(app: &App, width: usize, theme: Theme) -> Vec<Line<'_>> {
         }
     }
     lines
+}
+
+fn web_welcome_lines(
+    url: &str,
+    language: UiLanguage,
+    ascii: bool,
+    theme: Theme,
+) -> Vec<Line<'static>> {
+    let (label, action, note) = match language {
+        UiLanguage::ZhCn => (
+            "Web 页面",
+            "在浏览器中打开，配置模型并开始对话",
+            "同一网络中的设备可访问 · 无需登录",
+        ),
+        UiLanguage::En => (
+            "Web interface",
+            "Open in a browser to configure and chat",
+            "Available on the same network · no login",
+        ),
+    };
+    let badge = if ascii { " [WEB] " } else { " 🌐 WEB " };
+    vec![
+        Line::default(),
+        Line::from(vec![
+            Span::styled(badge, theme.bold(theme.background).bg(theme.accent)),
+            Span::styled(
+                format!(" {label} · {action} "),
+                theme.bold(theme.text_primary).bg(theme.background_alt),
+            ),
+        ]),
+        Line::styled(
+            format!("   {url}"),
+            theme.bold(theme.cyan).bg(theme.background_alt),
+        ),
+        Line::styled(
+            format!("   {note}"),
+            theme.style(theme.text_secondary).bg(theme.background_alt),
+        ),
+    ]
 }
 
 fn streaming_agent_lines(
@@ -1345,6 +1386,23 @@ mod tests {
         assert_eq!(agent.style.fg, Some(theme.text_primary));
         assert_eq!(tool.spans[1].style.fg, Some(theme.text_primary));
         assert_ne!(tool.spans[0].style.fg, tool.spans[1].style.fg);
+    }
+
+    #[test]
+    fn web_welcome_highlights_address_and_wraps_on_narrow_screens() {
+        let theme = Theme::for_mode(super::super::theme::ColorMode::Ansi256);
+        let url = "http://192.168.123.123:9999/";
+        let lines = web_welcome_lines(url, UiLanguage::ZhCn, true, theme);
+        assert_eq!(lines[1].spans[0].style.bg, Some(theme.accent));
+        assert_eq!(lines[2].style.fg, Some(theme.cyan));
+        assert!(lines[2].to_string().contains(url));
+        let wrapped = wrap_rendered_lines(lines, 24);
+        assert!(wrapped
+            .iter()
+            .all(|line| UnicodeWidthStr::width(line.to_string().as_str()) <= 24));
+        assert!(wrapped
+            .iter()
+            .any(|line| line.to_string().contains("[WEB]")));
     }
 
     #[test]
