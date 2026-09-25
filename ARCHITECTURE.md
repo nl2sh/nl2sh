@@ -30,7 +30,7 @@ Android Runtime
 
 TUI 中以 `!` 开头的输入是显式本地命令：去掉前缀后不请求 Provider，而是直接进入同一 `Security → Confirmation → Execution` 边界，并在当前会话界面显示有界实时输出和退出状态。该输入与结果不加入模型上下文；修改、危险、Root 和用户编辑后的命令仍按完整规则重新分类及确认。交互式命令继续通过既有 PTY 挂起、恢复和清屏过滤路径执行。
 
-每个 Agent 任务开始时，统一 runtime 模块根据 `TERMUX_VERSION` 或标准 Termux `PREFIX` 区分直接 Android shell 与 Termux，并由执行器向 system prompt 附加一次低敏感摘要，仅包含环境类型、API level、ABI、shell、当前 UID 与 root/su 能力；探测失败时省略对应字段且不阻断任务。直接 Android shell 使用 `/system/bin/sh`/toybox 的一等保守基线；Termux 兼容模式使用 `$PREFIX/bin/sh`、XDG 路径和包管理基线，但不假定可选包已经安装。摘要只用于命令兼容性提示，不包含型号、序列号、Android ID、IP、账号或应用列表，也不参与安全分类、确认或提权决策。
+每个 Agent 任务开始时，统一 runtime 模块根据 `TERMUX_VERSION` 或标准 Termux `PREFIX` 区分直接 Android shell 与 Termux，并由执行器向 system prompt 附加一次低敏感摘要，仅包含环境类型、API level、设备 ABI、进程架构、shell、当前 UID 与 root/su 能力；探测失败时省略对应字段且不阻断任务。直接 Android shell 使用 `/system/bin/sh`/toybox 的一等保守基线；Termux 兼容模式使用 `$PREFIX/bin/sh`、XDG 路径和包管理基线，但不假定可选包已经安装。摘要只用于命令兼容性提示，不包含型号、序列号、Android ID、IP、账号或应用列表，也不参与安全分类、确认或提权决策。
 
 TUI 在命令运行期间展示有界实时输出，工具轮完成后移除对应临时行并以默认折叠项保存有界结果，F2 只改变显示展开状态。执行捕获、实时 UI、日志事件/文件和模型 Tool Result 分别应用配置上限；截断保留头尾并插入显式标记，模型不会把不完整结果误认为完整。最终回答提示要求按用户语言总结，多项结构化对比优先使用 Markdown 表格。
 
@@ -41,6 +41,8 @@ TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Them
 内置 Web 页面复用 `UI_DESIGN.md` 的 TrueColor 语义色板，通过 `web/src/style.css` 的 CSS 变量集中供页面及 Markdown 使用；浏览器不需要终端的 ANSI fallback。Web/TUI 的视觉调整均不进入安全或执行边界。
 
 Web 会话状态由 Agent Runner 经流式显示 sink 报告模型请求和工具调用阶段，审批入口单独报告等待阶段；会话快照通过 SSE 刷新阶段及起始时间，浏览器本地每秒更新当前阶段时长。状态与轮次、步骤、工具、Token 统计显示在消息输入框下方，不参与执行或审批决策。
+
+TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标记渲染高辨识度地址和访问说明；该标记仅用于本地显示，不进入模型上下文、审计或 Web 会话持久化。
 
 网络、解析或执行错误沿 `anyhow::Result` 返回 UI。LLM 重试只覆盖传输错误、429 和 5xx，并使用有上限的指数退避；401 等配置错误立即返回。Ctrl+C 可取消 HTTP 请求、响应读取和退避。执行超时先给进程组 SIGTERM，短暂等待后给 SIGKILL；Ctrl+C 先给 SIGINT 再升级并回收子进程。Agent TUI 以异步任务驱动 LLM、确认和捕获式命令，保持同一 ratatui frame 并持续刷新历史；只有必须直接占用终端的全屏交互命令才临时离开 alternate screen。交互命令结束后恢复 alternate screen 与鼠标捕获，并清除 ratatui 的旧差分缓存以完整重绘框架。
 
@@ -54,7 +56,7 @@ Web 会话状态由 Agent Runner 经流式显示 sink 报告模型请求和工�
 | `src/history` | `HistoryLog`、JSON Lines 事件与安全创建 | 交互事件 → 可刷新诊断日志 | 不记录 provider 凭据，不参与安全决策 |
 | `src/tools/file/domain` | `FileToolExecutor`、结构化读取/搜索/补丁 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
 | `src/tools/audio` | WAV/Raw PCM DSP 与 Jev/通用 LLM 质量判断 | 音频 → Feature JSON、`needs_input` 或评分 | Raw PCM 元数据不得猜测；Jev 已配置时失败不回退；不上传原始音频 |
-| `src/tools/android` | 固定参数诊断、UI bounds 输入、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；输入在确认前和执行前重读 UI 树；写入必须确认 |
+| `src/tools/android` | 固定参数诊断、只读环境盘点、UI bounds 输入、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；输入在确认前和执行前重读 UI 树；写入必须确认 |
 | `src/tools/memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
@@ -83,7 +85,7 @@ Web 前端源码和 npm lockfile 保存在 `web/`；Cargo 的 `build.rs` 先把�
 
 Web 配置页通过 `/api/config/validate` 使用 Rust `Config` 解析及运行校验 TOML，通过 `/api/config/render` 将分组字段草稿写回 TOML；两种模式保存时都复用 `/api/config` 的校验与原子写入。分组模式覆盖普通字段，高级 `security_rules` 在文件模式编辑；新的 Web 任务在启动时重新加载配置，运行中的任务持有其启动时快照。
 
-Web 会话侧栏支持删除单个会话或全部会话：删除同时移除内存条目与私有会话快照，只针对合法的会话文件名；运行中、等待审批或终端仍连接的会话拒绝删除。会话列表、恢复、启动任务和删除共享注册表同步，防止删除后立即被迟到的恢复或任务重新写回。
+Web 会话侧栏支持直接删除单个会话或确认后删除全部会话：删除同时移除内存条目与私有会话快照，只针对合法的会话文件名；运行中、等待审批或终端仍连接的会话拒绝删除。会话列表、恢复、启动任务和删除共享注册表同步，防止删除后立即被迟到的恢复或任务重新写回。
 
 ## Agent 执行流程
 
@@ -98,6 +100,8 @@ Agent 文件操作优先使用 `read_file`、`list_dir`、`search_text` 和 `app
 同一 Agent 任务内完成的音频分析按原始路径保存结构化结果；质量判断优先按路径引用该结果，避免模型复制、删减或改写 DSP 字段。只有完整的 `status=ok` 分析能够进入缓存，缓存不跨任务持久化。
 
 TUI 输入中的 `@路径` 提供本地文件/目录候选，支持相对路径、绝对路径、`~/`、`./` 与 `../`，Up/Down 选择并以 Enter 或 Tab 补全；Right 保持普通光标右移。提交时按“最长已存在路径前缀”解析，因此 `@test.txt写的是什么内容` 不要求路径后有空格；解析结果只向 Agent 附加绝对路径，实际内容仍由有界结构化文件工具读取。路径解析不会执行文件内容，也不会改变 shell 安全分类、确认或 root 策略。
+
+`inspect_android_environment` 通过固定的静默只读探测返回 Android 版本、设备支持的 ABI、命令可用性、内存与 `/data` 容量；设备 ABI 以 `ro.product.cpu.abi` 为准，进程架构不能替代安装目标 ABI。`android_connectivity` 仅回传有界 ICMP/路由证据与默认网络摘要；ICMP 成功不等于 HTTPS 下载成功。两者只提供证据，不批准安装或降低 shell 命令风险。
 
 Web 输入框通过有界只读接口复用同一文件候选逻辑，按光标位置补全当前 `@路径`；发送时沿用同一引用解析提示。右上角工具目录由当前配置和显式工具注册表生成，仅返回名称与简介并在浏览器本地搜索，不授予额外工具能力。
 

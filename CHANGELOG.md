@@ -2,9 +2,17 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Classify quoted output and read-only mount listings without false mutation prompts while preserving confirmation for real redirection and mount changes.
+- Summarize Android connectivity evidence instead of returning the full connectivity dump; distinguish ICMP reachability from HTTPS access and report device ABI separately from process architecture.
+- Highlight the browser URL in a dedicated TUI startup entry at the end of the welcome content, with narrow-screen wrapping.
+
 ### Added
 
-- Added single-session and delete-all controls to the Web session sidebar, with confirmation and active-session protection.
+- Added the project logo to the Web sidebar and a GitHub Star link to the top bar.
+- Added a bounded read-only Android environment tool for OS, device ABI, command availability, memory, and data storage.
+- Added single-session and delete-all controls to the Web session sidebar, with confirmation for delete-all and active-session protection.
 - Added grouped key/value editing and raw TOML editing to the Web configuration page, with live configuration validation and automatic use of saved settings by subsequent Web tasks.
 
 ## [1.0.2] - 2026-09-24

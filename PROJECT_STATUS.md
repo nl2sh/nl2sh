@@ -4,7 +4,14 @@ Last Updated: 2026-09-25
 
 ## Recent Changes
 
-- Web 会话侧栏新增单条删除和删除全部按钮，操作前确认，同时清理内存条目与私有快照；运行中、等待审批或终端仍连接时拒绝删除。会话列表、恢复与任务启动同删除路径同步，避免迟到写回。删除范围不含其他状态文件，安全审批、Android 和 PTY 执行路径不变。
+- 新增 `inspect_android_environment` 固定只读工具，返回 Android 版本、设备 ABI、常见命令可用性、内存与数据分区容量；运行摘要区分设备 ABI 与进程架构，Agent 在建议设备端程序时以设备 ABI 为准。`android_connectivity` 改为有界 ICMP、路由及默认网络摘要，并明确不代表 HTTPS 已验证。
+- 安全分类修正引号内输出箭头与只读 `mount` 列表的误报；真实重定向、命令替换中的写入与挂载修改仍需确认。Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 通过；Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi` 通过。
+- Web 会话侧栏左上角显示项目 logo，顶栏右上角增加可跳转仓库首页的 GitHub Star 链接；窄屏布局保留入口。仅调整浏览器静态资源和样式，不改变安全确认、Android 或 PTY 路径。
+- Web 页头验证：`npm run build`、`npm test`、`cargo fmt --all -- --check`、`cargo check` 与 `cargo test` 在 Linux 目标通过。
+- TUI 启动欢迎内容末尾突出显示 Web 访问地址，使用独立入口、主题语义色和窄屏换行；仅改变本地显示，不影响模型上下文、审计、安全确认、Android 或 PTY 路径。
+- Web 欢迎入口验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check` 与 `cargo test` 通过；新增测试覆盖 ANSI 256 强调样式与窄屏换行。
+- Web 会话侧栏新增单条删除和删除全部按钮；单条直接删除，删除全部前确认，同时清理内存条目与私有快照；运行中、等待审批或终端仍连接时拒绝删除。会话列表、恢复与任务启动同删除路径同步，避免迟到写回。删除范围不含其他状态文件，安全审批、Android 和 PTY 执行路径不变。
+- 单条删除交互调整后，Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、`npm run build` 与 `npm test` 通过。
 - Web 会话删除验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、`npm test` 与 `npm run build` 通过；HTTP 回归覆盖单条和全部删除、内存与磁盘同步、其他状态文件保留及运行中拒绝删除。
 - Web 配置页增加与 TUI 对齐的功能分组字段编辑和 TOML 文件编辑切换；浏览器输入后调用同一 Rust 配置解析及运行校验，显示错误并禁止保存无效配置。保存仍原子写入，后续 Web 任务自动读取新配置；当前 TUI 会话重启后读取。
 - Web 配置编辑验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`npm run build` 与 `npm test` 在 Linux 目标通过；HTTP 回归覆盖无效 TOML、默认配置解析、字段回写与保存后重新加载。
