@@ -81,6 +81,8 @@ Web 会话状态由 Agent Runner 经流式显示 sink 报告模型请求和工�
 
 Web 前端源码和 npm lockfile 保存在 `web/`；Cargo 的 `build.rs` 先把源码复制到 `OUT_DIR`，在副本中执行 `npm ci` 和 `npm run build`，再由 `rust-embed` 把产物编入单一可执行文件。构建需要 Node.js/npm，生成目录不进入版本控制或发布源码包；Android 运行时不依赖 Node.js。TUR 构建使用 Termux 提供的主机 Node 工具。
 
+Web 配置页通过 `/api/config/validate` 使用 Rust `Config` 解析及运行校验 TOML，通过 `/api/config/render` 将分组字段草稿写回 TOML；两种模式保存时都复用 `/api/config` 的校验与原子写入。分组模式覆盖普通字段，高级 `security_rules` 在文件模式编辑；新的 Web 任务在启动时重新加载配置，运行中的任务持有其启动时快照。
+
 ## Agent 执行流程
 
 只读操作在 balanced/risk_only 下自动执行；普通修改必须确认；Dangerous/Critical 需要二次确认。root 只是执行属性，不改变分类。审批界面提供固定编号与快捷键，可仅允许本次、拒绝、编辑或选择执行模式；对非 Root、非强确认且最高为 Mutating 的命令，还可在当前 Agent 任务内记住完整命令的精确许可。该许可不持久化、不按前缀匹配，Runner 会在每次复用前重新检查当前评估仍满足条件。拒绝、失败或超时都会生成明确的失败 Tool Result。

@@ -422,6 +422,8 @@ fn router(state: Arc<Shared>) -> Router {
     Router::new()
         .route("/api/state", get(get_state))
         .route("/api/config", get(get_config).post(save_config))
+        .route("/api/config/validate", post(validate_config))
+        .route("/api/config/render", post(render_config))
         .route("/api/quick-settings", get(get_quick_settings).post(save_quick_settings))
         .route("/api/models", get(get_models))
         .route("/api/tools", get(get_tools))
@@ -671,7 +673,60 @@ async fn save_config(State(state): State<Arc<Shared>>, body: String) -> ApiResul
         config::save_config(&path, &cfg)
     })
     .await??;
-    Ok("配置已保存；后续 Web 任务使用新配置，当前 TUI 会话重启后生效。".into())
+    Ok("配置已保存；后续 Web 任务自动使用新配置，当前 TUI 会话重启后生效。".into())
+}
+
+#[derive(Serialize)]
+struct ConfigPreview {
+    valid: bool,
+    error: Option<String>,
+    config: Option<Config>,
+}
+
+async fn validate_config(body: String) -> Json<ConfigPreview> {
+    let result = tokio::task::spawn_blocking(move || -> Result<Config> {
+        let cfg: Config = toml::from_str(&body).context("invalid TOML configuration")?;
+        cfg.validate_runtime()?;
+        Ok(cfg)
+    })
+    .await;
+    let result = result.unwrap_or_else(|error| Err(error.into()));
+    match result {
+        Ok(config) => Json(ConfigPreview {
+            valid: true,
+            error: None,
+            config: Some(config),
+        }),
+        Err(error) => Json(ConfigPreview {
+            valid: false,
+            error: Some(format!("{error:#}")),
+            config: None,
+        }),
+    }
+}
+
+#[derive(Serialize)]
+struct RenderedConfig {
+    toml: String,
+    valid: bool,
+    error: Option<String>,
+}
+
+async fn render_config(Json(config): Json<Config>) -> ApiResult<Json<RenderedConfig>> {
+    tokio::task::spawn_blocking(move || -> Result<Json<RenderedConfig>> {
+        let toml = toml::to_string_pretty(&config).context("cannot render configuration")?;
+        let error = config
+            .validate_runtime()
+            .err()
+            .map(|error| format!("{error:#}"));
+        Ok(Json(RenderedConfig {
+            toml,
+            valid: error.is_none(),
+            error,
+        }))
+    })
+    .await?
+    .map_err(Into::into)
 }
 
 async fn load_config(path: PathBuf) -> Result<Config> {
@@ -1608,6 +1663,61 @@ mod http_tests {
     use futures_util::{SinkExt, StreamExt};
     use std::io::Read;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn config_editor_validates_renders_and_applies_saved_settings() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("config.toml");
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
+        let server = start_with_listener(path.clone(), listener).await?;
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let port = url::Url::parse(server.url())?
+            .port()
+            .context("web URL lacks port")?;
+        let base = format!("http://127.0.0.1:{port}");
+        let invalid: serde_json::Value = client
+            .post(format!("{base}/api/config/validate"))
+            .body("model = [")
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert_eq!(invalid["valid"], false);
+        let original = client
+            .get(format!("{base}/api/config"))
+            .send()
+            .await?
+            .text()
+            .await?;
+        let preview: serde_json::Value = client
+            .post(format!("{base}/api/config/validate"))
+            .body(original)
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert_eq!(preview["valid"], true);
+        let mut config = preview["config"].clone();
+        config["model"] = serde_json::json!("web-editor-test");
+        let rendered = client
+            .post(format!("{base}/api/config/render"))
+            .json(&config)
+            .send()
+            .await?;
+        assert!(rendered.status().is_success());
+        let rendered: serde_json::Value = rendered.json().await?;
+        assert_eq!(rendered["valid"], true);
+        let rendered = rendered["toml"].as_str().context("missing rendered TOML")?;
+        assert!(rendered.contains("model = \"web-editor-test\""));
+        let saved = client
+            .post(format!("{base}/api/config"))
+            .body(rendered.to_owned())
+            .send()
+            .await?;
+        assert!(saved.status().is_success());
+        assert_eq!(load_config(path).await?.model, "web-editor-test");
+        Ok(())
+    }
 
     #[tokio::test]
     async fn serves_browser_page_and_state_over_http() -> Result<()> {

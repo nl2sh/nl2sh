@@ -1,0 +1,40 @@
+import {useEffect,useRef,useState} from 'preact/hooks';
+import {api} from './api';
+
+type ConfigValue=string|number|boolean|null|unknown[];
+type ConfigData=Record<string,ConfigValue>;
+type Preview={valid:boolean;error:string|null;config:ConfigData|null};
+type Group={name:string;fields:string[]};
+const groups:Group[]=[
+  {name:'服务',fields:['endpoint','api_key','api_type']},
+  {name:'模型与智能体',fields:['model','model_context_window','model_max_output_tokens','agent_mode','max_context_turns','max_agent_steps','max_tool_calls','max_task_execution_time_secs','hard_max_agent_steps','replan_after_stalled_steps','abort_after_stalled_steps','max_same_action_retries','llm_retry_count','llm_retry_base_delay_ms','llm_request_timeout_secs']},
+  {name:'执行与安全',fields:['execute_confirm_policy','security_level','execute_user_mode','execute_timeout_secs','interactive_execute_timeout_secs','enable_pty']},
+  {name:'界面与日志',fields:['ui_language','ascii_symbols','show_buddha_ascii_art','show_train_ascii_art','history_log_file','ui_live_output_max_bytes','tool_output_max_bytes','model_tool_output_max_bytes','history_log_event_max_bytes','history_log_max_bytes']},
+  {name:'网络',fields:['proxy_enabled','proxy_type','proxy_address','proxy_username','proxy_password','proxy_bypass']},
+  {name:'知识库与音频',fields:['ima_enabled','ima_client_id','ima_api_key','ima_knowledge_base_id','jev_api_key','jev_endpoint','jev_model']},
+  {name:'其他',fields:['skipped_update_version']},
+];
+const labels:Record<string,string>={endpoint:'API 地址',api_key:'API Key',api_type:'协议',model:'模型',model_context_window:'上下文窗口',model_max_output_tokens:'最大输出 Token',agent_mode:'Agent 模式',max_context_turns:'最大轮次',max_agent_steps:'最大步骤',max_tool_calls:'最大工具调用',max_task_execution_time_secs:'任务最长运行秒数',hard_max_agent_steps:'步骤硬上限',replan_after_stalled_steps:'停滞后重新规划',abort_after_stalled_steps:'停滞后停止',max_same_action_retries:'相同动作重试上限',llm_retry_count:'模型请求重试次数',llm_retry_base_delay_ms:'重试初始延迟毫秒',llm_request_timeout_secs:'模型请求超时秒',execute_confirm_policy:'确认策略',security_level:'安全级别',execute_user_mode:'执行用户',execute_timeout_secs:'命令超时秒',interactive_execute_timeout_secs:'交互超时秒（0 为关闭）',enable_pty:'启用 PTY',ui_language:'界面语言',ascii_symbols:'ASCII 符号',show_buddha_ascii_art:'佛像 ASCII Art',show_train_ascii_art:'小火车 ASCII Art',history_log_file:'审计日志文件',ui_live_output_max_bytes:'实时输出上限 bytes',tool_output_max_bytes:'工具输出上限 bytes',model_tool_output_max_bytes:'模型工具结果上限 bytes',history_log_event_max_bytes:'单条日志上限 bytes',history_log_max_bytes:'日志文件上限 bytes',proxy_enabled:'启用代理',proxy_type:'代理类型',proxy_address:'代理地址 host:port',proxy_username:'代理用户名',proxy_password:'代理密码',proxy_bypass:'代理绕过列表',ima_enabled:'启用 ima 只读连接',ima_client_id:'ima Client ID',ima_api_key:'ima API Key',ima_knowledge_base_id:'默认知识库 ID',jev_api_key:'Jev API Key',jev_endpoint:'Jev 地址',jev_model:'Jev 模型',skipped_update_version:'跳过更新版本'};
+const choices:Record<string,string[]>={api_type:['auto','chat_completions','responses'],agent_mode:['fast','normal','deep'],execute_confirm_policy:['always','risk_only','never'],security_level:['strict','balanced','unsafe'],execute_user_mode:['auto','normal','root'],ui_language:['zh_cn','en'],proxy_type:['http','socks5','socks5h']};
+const secretFields=new Set(['api_key','proxy_password','ima_client_id','ima_api_key','jev_api_key']);
+const optionalNumbers=new Set(['model_context_window','model_max_output_tokens']);
+const optionalStrings=new Set(['ima_knowledge_base_id','skipped_update_version']);
+
+export function ConfigEditor({initial,onSaved}:{initial:string;onSaved:()=>Promise<void>}){
+  const[mode,setMode]=useState<'fields'|'file'>('fields');
+  const[raw,setRaw]=useState(initial);
+  const[config,setConfig]=useState<ConfigData|null>(null);
+  const[error,setError]=useState('');
+  const[checking,setChecking]=useState(true);
+  const[message,setMessage]=useState('');
+  const[openGroup,setOpenGroup]=useState(groups[0].name);
+  const revision=useRef(0);
+  useEffect(()=>{let active=true;api.validateConfig(initial).then(preview=>{if(active){setConfig(preview.config);setError(preview.error||'');setChecking(false)}}).catch(e=>{if(active){setError(String(e));setChecking(false)}});return()=>{active=false}},[initial]);
+  const editRaw=(next:string)=>{setRaw(next);setChecking(true);setMessage('');const current=++revision.current;setTimeout(()=>{if(current!==revision.current)return;api.validateConfig(next).then((preview:Preview)=>{if(current!==revision.current)return;setConfig(preview.config);setError(preview.error||'');setChecking(false)}).catch(e=>{if(current!==revision.current)return;setConfig(null);setError(String(e));setChecking(false)})},250)};
+  const editField=(key:string,value:ConfigValue)=>{if(!config)return;const next={...config,[key]:value};setConfig(next);setChecking(true);setMessage('');const current=++revision.current;api.renderConfig(next).then(result=>{if(current!==revision.current)return;setRaw(result.toml);setError(result.error||'');setChecking(false)}).catch(e=>{if(current!==revision.current)return;setError(String(e));setChecking(false)})};
+  const save=async()=>{if(checking||error)return;try{setChecking(true);setMessage(await api.saveConfig(raw));await onSaved()}catch(e){setError(String(e))}finally{setChecking(false)}};
+  const switchMode=(next:'fields'|'file')=>{if(next==='fields'&&!config)return;setMode(next)};
+  return <section class="config"><div class="config-header"><div><h2>配置</h2><p>按功能编辑，或直接编辑 TOML 配置文件。</p></div><div class="config-modes" role="group" aria-label="配置编辑模式"><button class={mode==='fields'?'active':''} onClick={()=>switchMode('fields')} disabled={!config||checking}>字段编辑</button><button class={mode==='file'?'active':''} onClick={()=>switchMode('file')}>配置文件</button></div></div>
+    {mode==='fields'&&config?<div class="config-workspace"><nav class="config-groups" aria-label="配置分类">{groups.map(group=><button key={group.name} class={openGroup===group.name?'active':''} onClick={()=>setOpenGroup(group.name)}>{group.name}</button>)}<button class={openGroup==='advanced'?'active':''} onClick={()=>setOpenGroup('advanced')}>高级规则</button></nav><div class="config-fields">{openGroup==='advanced'?<><h3>高级规则</h3><p>自定义安全规则请在“配置文件”模式编辑 <code>[[security_rules]]</code>。</p><p>当前规则：{Array.isArray(config.security_rules)?config.security_rules.length:0} 条</p></>:groups.filter(group=>group.name===openGroup).map(group=><div key={group.name}><h3>{group.name}</h3>{group.fields.filter(key=>key in config).map(key=>{const value=config[key];const options=choices[key];return <label class="config-row" key={key}><span><strong>{labels[key]||key}</strong><small>{key}</small></span>{options?<select value={String(value)} onChange={e=>editField(key,e.currentTarget.value)}>{options.map(option=><option value={option}>{option}</option>)}</select>:typeof value==='boolean'?<input type="checkbox" checked={value} onChange={e=>editField(key,e.currentTarget.checked)}/>:typeof value==='number'||optionalNumbers.has(key)?<input type="number" min="0" step="1" value={value===null?'':String(value)} placeholder={optionalNumbers.has(key)?'未设置':''} onInput={e=>{const text=e.currentTarget.value;if(text===''&&optionalNumbers.has(key))editField(key,null);else if(text!==''&&Number.isSafeInteger(Number(text)))editField(key,Number(text))}}/>:<input type={secretFields.has(key)?'password':'text'} autocomplete="off" value={value===null?'':String(value)} placeholder={optionalStrings.has(key)?'未设置':''} onInput={e=>editField(key,e.currentTarget.value===''&&optionalStrings.has(key)?null:e.currentTarget.value)}/>}</label>})}</div>)}</div></div>:mode==='file'?<textarea class="config-source" aria-label="TOML 配置文件" spellcheck={false} value={raw} onInput={e=>editRaw(e.currentTarget.value)}/>:<p>配置解析完成后可使用字段编辑。</p>}
+    <div class="config-footer"><span role="status" class={error?'bad':checking?'':'valid'}>{checking?'正在检查配置…':error?`配置无效：${error}`:'✓ 配置格式与设置有效'}</span><button disabled={checking||!!error} onClick={save}>保存配置</button></div>{message&&<p class="config-message" role="status">{message}</p>}</section>;
+}

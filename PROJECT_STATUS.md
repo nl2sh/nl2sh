@@ -4,6 +4,8 @@ Last Updated: 2026-09-24
 
 ## Recent Changes
 
+- Web 配置页增加与 TUI 对齐的功能分组字段编辑和 TOML 文件编辑切换；浏览器输入后调用同一 Rust 配置解析及运行校验，显示错误并禁止保存无效配置。保存仍原子写入，后续 Web 任务自动读取新配置；当前 TUI 会话重启后读取。
+- Web 配置编辑验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`npm run build` 与 `npm test` 在 Linux 目标通过；HTTP 回归覆盖无效 TOML、默认配置解析、字段回写与保存后重新加载。
 - 准备发布 `v1.0.2`：版本号和 changelog 已从 Unreleased 收敛到 2026-09-24 的补丁版本；tag 推送继续通过既有工作流构建双 ABI Android、自更新裸二进制、Termux `.deb`、签名 APT 仓库及 GitHub Release。
 - Web 工具调用改为逐项实时显示：Agent display sink 在每个工具开始与完成时携带 `call_id` 发布事件，浏览器立即显示调用卡片并按 ID 回填成功或失败结果；任务结束仍以完整 transcript 持久化会话，但当前消息列表不再重复追加同一工具轮。此变更不改变工具串行执行、安全确认、Root、Android 或 PTY 边界。
 - Web 会话输入框下方显示空闲、模型思考、工具执行和等待审批/补充信息状态，并每秒更新当前状态时长；轮次、步骤、工具、Token 与 Root 统计也移至输入框下方。状态由现有 Agent 执行事件驱动，不改变安全确认、Android 执行或 PTY 路径。

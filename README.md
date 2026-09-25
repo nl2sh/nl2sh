@@ -231,6 +231,8 @@ RUST_TARGET=armv7-linux-androideabi ./android-build-run.sh
 
 ## 配置
 
+Web 配置页可按“服务、模型与智能体、执行与安全、界面与日志、网络、知识库与音频”等分类编辑字段，也可切换到完整 TOML 文件编辑。编辑时会实时检查格式和运行配置；只有有效配置可以保存。保存后新的 Web 任务自动使用新配置，已运行的任务继续使用启动时的配置；当前 TUI 会话重启后读取新配置。自定义 `[[security_rules]]` 请在配置文件模式编辑。
+
 直接 Android 部署的默认配置位于解析符号链接后的可执行文件目录，名称为 `config.toml`；Termux APT 安装使用上文的 XDG 配置与状态目录。配置不存在时直接进入 TUI，使用 `/config` 打开统一设置面板；旧的逐行配置向导和 `--init` 已移除。配置完成前普通任务不会发送给模型。配置以 `0600` 权限创建，也可传入 `--config /path/config.toml`，或设置 `NL2SH_CONFIG`。
 
 ```bash

@@ -114,3 +114,36 @@ button:disabled { opacity: .45; }
   .top nav { display: flex; width: 100%; margin-left: 0; overflow-x: auto; }
   .top nav button { flex: none; }
 }
+
+.config { gap: .8rem; }
+.config-header, .config-footer { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.config-header h2 { margin: 0; color: var(--accent); font-size: 1.15rem; }
+.config-header p { margin: .25rem 0 0; color: var(--text-secondary); font-size: .85rem; }
+.config-modes { display: flex; flex: none; gap: .35rem; }
+.config-modes button.active, .config-groups button.active { border-color: var(--border-focus); color: var(--accent); background: var(--background); }
+.config-workspace { display: grid; grid-template-columns: 190px minmax(0,1fr); flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.config-groups { display: flex; flex-direction: column; gap: .25rem; padding: .7rem; overflow: auto; background: var(--background-alt); border-right: 1px solid var(--border); }
+.config-groups button { text-align: left; border-color: transparent; background: transparent; }
+.config-fields { min-width: 0; overflow: auto; padding: 1rem 1.3rem; }
+.config-fields h3 { margin: 0 0 .7rem; color: var(--cyan); }
+.config-fields p { color: var(--text-secondary); }
+.config-row { display: grid; grid-template-columns: minmax(150px, 40%) minmax(0,1fr); align-items: center; gap: 1rem; padding: .65rem 0; border-bottom: 1px solid var(--border); }
+.config-row span { min-width: 0; }
+.config-row strong, .config-row small { display: block; }
+.config-row strong { font-weight: 500; }
+.config-row small { margin-top: .12rem; color: var(--text-muted); font: 11px/1.4 ui-monospace, monospace; overflow-wrap: anywhere; }
+.config-row input:not([type=checkbox]), .config-row select { width: 100%; min-width: 0; padding: .5rem .6rem; background: var(--background-alt); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; }
+.config-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+.config-source { min-height: 0; resize: none; }
+.config-footer { min-height: 2.5rem; font-size: .85rem; }
+.config-footer .valid { color: var(--success); }
+.config-footer span { min-width: 0; overflow-wrap: anywhere; }
+.config-message { margin: 0; color: var(--success); font-size: .85rem; }
+@media (max-width: 720px) {
+  .config-header { align-items: flex-start; flex-direction: column; }
+  .config-workspace { grid-template-columns: 1fr; grid-template-rows: auto minmax(0,1fr); }
+  .config-groups { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--border); }
+  .config-groups button { white-space: nowrap; }
+  .config-fields { padding: .8rem; }
+  .config-row { grid-template-columns: 1fr; gap: .4rem; }
+}
