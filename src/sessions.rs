@@ -216,6 +216,34 @@ impl SessionStore {
         fs::remove_file(self.path(name)).with_context(|| format!("cannot delete session {name}"))
     }
 
+    /// Deletes every saved snapshot with a valid session filename.
+    pub fn delete_all(&self) -> Result<usize> {
+        let mut deleted = 0;
+        for entry in fs::read_dir(&self.directory).context("cannot list sessions")? {
+            let entry = entry.context("cannot read session entry")?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(name) = path.file_stem().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if validate_name(name).is_err() {
+                continue;
+            }
+            if !entry
+                .file_type()
+                .context("cannot inspect session entry")?
+                .is_file()
+            {
+                continue;
+            }
+            fs::remove_file(&path).with_context(|| format!("cannot delete session {name}"))?;
+            deleted += 1;
+        }
+        Ok(deleted)
+    }
+
     fn path(&self, name: &str) -> PathBuf {
         self.directory.join(format!("{name}.json"))
     }

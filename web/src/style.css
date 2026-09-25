@@ -26,9 +26,14 @@ aside { background: var(--background-alt); border-right: 1px solid var(--border)
 aside header, .top { height: 60px; display: flex; align-items: center; gap: .7rem; padding: .7rem 1rem; border-bottom: 1px solid var(--border); }
 aside header button { margin-left: auto; }
 .sessions { padding: .5rem; overflow: auto; }
-.sessions > button { display: block; width: 100%; text-align: left; padding: .7rem; margin: .2rem 0; border: 1px solid transparent; background: transparent; color: var(--text-primary); border-radius: 8px; }
-.sessions > button.active { background: var(--background); border-color: var(--border-focus); }
-.sessions > button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .tools summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.session-list-actions { display: flex; align-items: center; justify-content: space-between; gap: .4rem; padding: .5rem .75rem; color: var(--text-secondary); font-size: .8rem; border-bottom: 1px solid var(--border); }
+.session-list-actions button { padding: .3rem .45rem; font-size: .8rem; }
+.session-item { display: flex; align-items: center; margin: .2rem 0; border: 1px solid transparent; border-radius: 8px; }
+.session-item.active { background: var(--background); border-color: var(--border-focus); }
+.session-select { display: block; flex: 1; min-width: 0; text-align: left; padding: .7rem; border: 0; background: transparent; color: var(--text-primary); }
+.session-delete { flex: none; margin-right: .35rem; padding: .25rem .4rem; color: var(--text-secondary); border-color: transparent; background: transparent; }
+.session-delete:hover:not(:disabled) { color: var(--error); border-color: var(--error); }
+.session-item button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .tools summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
 .sessions span, .sessions small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sessions small { color: var(--text-secondary); margin-top: .25rem; }
 .sessions i { display: inline-block; width: .5rem; height: .5rem; background: var(--text-muted); border-radius: 50%; margin-right: .4rem; }
@@ -108,7 +113,8 @@ button:disabled { opacity: .45; }
   .shell { grid-template-columns: 115px 1fr; }
   .controls { height: 82px; flex-wrap: wrap; }
   .session-status { align-items: flex-start; flex-direction: column; }
-  .sessions > button { padding: .55rem; }
+  .session-select { padding: .55rem; }
+  .session-list-actions { flex-wrap: wrap; }
   .top { height: auto; padding: .5rem; flex-wrap: wrap; }
   .top h1 { max-width: 120px; }
   .top nav { display: flex; width: 100%; margin-left: 0; overflow-x: auto; }

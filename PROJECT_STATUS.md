@@ -1,9 +1,11 @@
 # Project Status
 
-Last Updated: 2026-09-24
+Last Updated: 2026-09-25
 
 ## Recent Changes
 
+- Web 会话侧栏新增单条删除和删除全部按钮，操作前确认，同时清理内存条目与私有快照；运行中、等待审批或终端仍连接时拒绝删除。会话列表、恢复与任务启动同删除路径同步，避免迟到写回。删除范围不含其他状态文件，安全审批、Android 和 PTY 执行路径不变。
+- Web 会话删除验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、`npm test` 与 `npm run build` 通过；HTTP 回归覆盖单条和全部删除、内存与磁盘同步、其他状态文件保留及运行中拒绝删除。
 - Web 配置页增加与 TUI 对齐的功能分组字段编辑和 TOML 文件编辑切换；浏览器输入后调用同一 Rust 配置解析及运行校验，显示错误并禁止保存无效配置。保存仍原子写入，后续 Web 任务自动读取新配置；当前 TUI 会话重启后读取。
 - Web 配置编辑验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`npm run build` 与 `npm test` 在 Linux 目标通过；HTTP 回归覆盖无效 TOML、默认配置解析、字段回写与保存后重新加载。
 - 准备发布 `v1.0.2`：版本号和 changelog 已从 Unreleased 收敛到 2026-09-24 的补丁版本；tag 推送继续通过既有工作流构建双 ABI Android、自更新裸二进制、Termux `.deb`、签名 APT 仓库及 GitHub Release。

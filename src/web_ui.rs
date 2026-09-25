@@ -35,7 +35,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex, OnceLock,
     },
 };
@@ -86,6 +86,7 @@ struct Shared {
 struct WebSession {
     inner: Mutex<SessionState>,
     events: broadcast::Sender<String>,
+    terminal_clients: AtomicUsize,
 }
 
 struct SessionState {
@@ -142,7 +143,16 @@ fn web_session(inner: SessionState) -> Arc<WebSession> {
     Arc::new(WebSession {
         inner: Mutex::new(inner),
         events,
+        terminal_clients: AtomicUsize::new(0),
     })
+}
+
+struct TerminalClientGuard(Arc<WebSession>);
+
+impl Drop for TerminalClientGuard {
+    fn drop(&mut self) {
+        self.0.terminal_clients.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 fn notify(session: &WebSession, event: &str) {
@@ -431,6 +441,8 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/sessions", get(get_sessions))
         .route("/api/sessions/new", post(new_session))
         .route("/api/sessions/load", post(load_session))
+        .route("/api/sessions/delete", post(delete_session))
+        .route("/api/sessions/delete-all", post(delete_all_sessions))
         .route("/api/sessions/export", get(export_session))
         .route("/api/message", post(post_message))
         .route("/api/decision", post(post_decision))
@@ -837,109 +849,176 @@ async fn new_session(State(state): State<Arc<Shared>>) -> ApiResult<Json<Session
 }
 
 async fn get_sessions(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<SessionSummary>>> {
-    let runtime: Vec<_> = state
-        .sessions
-        .lock()
-        .map_err(|_| anyhow!("web session registry lock poisoned"))?
-        .values()
-        .filter_map(|s| {
-            s.inner.lock().ok().map(|i| SessionSummary {
-                id: i.id.clone(),
-                title: i.title.clone(),
-                turns: i.turns.len(),
-                busy: i.busy,
-                pending: i.pending.is_some(),
-                updated: i.updated,
+    tokio::task::spawn_blocking(move || -> ApiResult<Json<Vec<SessionSummary>>> {
+        let sessions = state
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("web session registry lock poisoned"))?;
+        let mut all: Vec<_> = sessions
+            .values()
+            .filter_map(|session| {
+                session.inner.lock().ok().map(|inner| SessionSummary {
+                    id: inner.id.clone(),
+                    title: inner.title.clone(),
+                    turns: inner.turns.len(),
+                    busy: inner.busy,
+                    pending: inner.pending.is_some(),
+                    updated: inner.updated,
+                })
             })
-        })
-        .collect();
-    let path = state.path.clone();
-    let stored = tokio::task::spawn_blocking(move || SessionStore::open(&path)?.list()).await??;
-    let mut all = runtime;
-    for saved in stored {
-        if !all.iter().any(|s| s.id == saved.name) {
-            all.push(SessionSummary {
-                id: saved.name,
-                title: saved.title,
-                turns: saved.turns,
-                busy: false,
-                pending: false,
-                updated: saved.updated_unix_secs,
-            })
+            .collect();
+        let stored = SessionStore::open(&state.path)?.list()?;
+        for saved in stored {
+            if !all.iter().any(|session| session.id == saved.name) {
+                all.push(SessionSummary {
+                    id: saved.name,
+                    title: saved.title,
+                    turns: saved.turns,
+                    busy: false,
+                    pending: false,
+                    updated: saved.updated_unix_secs,
+                });
+            }
         }
-    }
-    all.sort_by(|a, b| b.updated.cmp(&a.updated).then_with(|| b.id.cmp(&a.id)));
-    Ok(Json(all))
+        all.sort_by(|a, b| b.updated.cmp(&a.updated).then_with(|| b.id.cmp(&a.id)));
+        Ok(Json(all))
+    })
+    .await?
 }
 
 async fn load_session(
     State(state): State<Arc<Shared>>,
     Json(selection): Json<SessionSelection>,
 ) -> ApiResult<Json<SessionSummary>> {
-    if let Ok(existing) = session(&state, &selection.name) {
-        let i = existing
-            .inner
+    tokio::task::spawn_blocking(move || -> ApiResult<Json<SessionSummary>> {
+        let mut sessions = state
+            .sessions
             .lock()
-            .map_err(|_| anyhow!("web session lock poisoned"))?;
-        return Ok(Json(SessionSummary {
-            id: i.id.clone(),
-            title: i.title.clone(),
-            turns: i.turns.len(),
-            busy: i.busy,
-            pending: i.pending.is_some(),
-            updated: i.updated,
-        }));
-    }
-    let path = state.path.clone();
-    let name = selection.name;
-    let (turns, info) = tokio::task::spawn_blocking(move || -> Result<_> {
-        let cfg = config::load_or_default_unvalidated(&path)?;
-        let store = SessionStore::open(&path)?;
+            .map_err(|_| anyhow!("web session registry lock poisoned"))?;
+        if let Some(existing) = sessions.get(&selection.name) {
+            let inner = existing
+                .inner
+                .lock()
+                .map_err(|_| anyhow!("web session lock poisoned"))?;
+            return Ok(Json(SessionSummary {
+                id: inner.id.clone(),
+                title: inner.title.clone(),
+                turns: inner.turns.len(),
+                busy: inner.busy,
+                pending: inner.pending.is_some(),
+                updated: inner.updated,
+            }));
+        }
+        let cfg = config::load_or_default_unvalidated(&state.path)?;
+        let store = SessionStore::open(&state.path)?;
         let info = store
             .list()?
             .into_iter()
-            .find(|i| i.name == name)
+            .find(|item| item.name == selection.name)
             .context("saved session not found")?;
         let turns = store.load(
-            &name,
+            &selection.name,
             cfg.max_context_turns,
             cfg.model_tool_output_max_bytes,
         )?;
-        Ok((turns, info))
+        let current = web_session(SessionState {
+            id: info.name.clone(),
+            title: info.title.clone(),
+            history: render_turns(&turns),
+            turns,
+            busy: false,
+            pending: None,
+            reply: None,
+            title_generated: true,
+            updated: info.updated_unix_secs,
+            steps: 0,
+            tool_calls: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            final_input_tokens: None,
+            activity: "idle",
+            activity_detail: None,
+            activity_since_ms: unix_millis(),
+        });
+        sessions.insert(info.name.clone(), current);
+        Ok(Json(SessionSummary {
+            id: info.name,
+            title: info.title,
+            turns: info.turns,
+            busy: false,
+            pending: false,
+            updated: info.updated_unix_secs,
+        }))
     })
-    .await??;
-    let current = web_session(SessionState {
-        id: info.name.clone(),
-        title: info.title.clone(),
-        history: render_turns(&turns),
-        turns,
-        busy: false,
-        pending: None,
-        reply: None,
-        title_generated: true,
-        updated: info.updated_unix_secs,
-        steps: 0,
-        tool_calls: 0,
-        input_tokens: 0,
-        output_tokens: 0,
-        final_input_tokens: None,
-        activity: "idle",
-        activity_detail: None,
-        activity_since_ms: unix_millis(),
-    });
-    state
-        .sessions
-        .lock()
-        .map_err(|_| anyhow!("web session registry lock poisoned"))?
-        .insert(info.name.clone(), current);
-    Ok(Json(SessionSummary {
-        id: info.name,
-        title: info.title,
-        turns: info.turns,
-        busy: false,
-        pending: false,
-        updated: info.updated_unix_secs,
-    }))
+    .await?
+}
+
+async fn delete_session(
+    State(state): State<Arc<Shared>>,
+    Json(selection): Json<SessionSelection>,
+) -> ApiResult<String> {
+    let path = state.path.clone();
+    tokio::task::spawn_blocking(move || -> ApiResult<String> {
+        let mut sessions = state
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("web session registry lock poisoned"))?;
+        if let Some(current) = sessions.get(&selection.name) {
+            let inner = current
+                .inner
+                .lock()
+                .map_err(|_| anyhow!("web session lock poisoned"))?;
+            if inner.busy
+                || inner.pending.is_some()
+                || current.terminal_clients.load(Ordering::Relaxed) > 0
+            {
+                return Err(ApiError::conflict(
+                    "cannot delete a running, pending, or terminal-connected session",
+                ));
+            }
+        }
+        let store = SessionStore::open(&path)?;
+        match store.delete(&selection.name) {
+            Ok(()) => {}
+            Err(error)
+                if sessions.contains_key(&selection.name)
+                    && error
+                        .downcast_ref::<std::io::Error>()
+                        .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) => {}
+            Err(error) => return Err(error.into()),
+        }
+        sessions.remove(&selection.name);
+        Ok("会话已删除".into())
+    })
+    .await?
+}
+
+async fn delete_all_sessions(State(state): State<Arc<Shared>>) -> ApiResult<String> {
+    let path = state.path.clone();
+    tokio::task::spawn_blocking(move || -> ApiResult<String> {
+        let mut sessions = state
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("web session registry lock poisoned"))?;
+        for current in sessions.values() {
+            let inner = current
+                .inner
+                .lock()
+                .map_err(|_| anyhow!("web session lock poisoned"))?;
+            if inner.busy
+                || inner.pending.is_some()
+                || current.terminal_clients.load(Ordering::Relaxed) > 0
+            {
+                return Err(ApiError::conflict(
+                    "cannot delete all sessions while one is running, pending, or terminal-connected",
+                ));
+            }
+        }
+        SessionStore::open(&path)?.delete_all()?;
+        sessions.clear();
+        Ok("所有会话已删除".into())
+    })
+    .await?
 }
 
 async fn post_message(
@@ -950,7 +1029,14 @@ async fn post_message(
     if text.is_empty() || text.len() > 16 * 1024 {
         return Err(ApiError::bad(anyhow!("message must contain 1–16384 bytes")));
     }
-    let current = session(&state, &message.session_id)?;
+    let sessions = state
+        .sessions
+        .lock()
+        .map_err(|_| anyhow!("web session registry lock poisoned"))?;
+    let current = sessions
+        .get(&message.session_id)
+        .cloned()
+        .context("web session not found")?;
     let mut inner = current
         .inner
         .lock()
@@ -963,6 +1049,7 @@ async fn post_message(
     inner.updated = unix_seconds();
     push(&mut inner, format!("> {text}"));
     drop(inner);
+    drop(sessions);
     notify(&current, "state");
     tokio::spawn(run_message(state, current, text));
     Ok((StatusCode::ACCEPTED, "任务已开始".into()))
@@ -1038,6 +1125,8 @@ async fn terminal_upgrade(
     Ok(ws.on_upgrade(move |socket| terminal_socket(socket, state, current)))
 }
 async fn terminal_socket(mut socket: WebSocket, state: Arc<Shared>, current: Arc<WebSession>) {
+    current.terminal_clients.fetch_add(1, Ordering::Relaxed);
+    let _terminal_client = TerminalClientGuard(current.clone());
     while let Some(Ok(message)) = socket.recv().await {
         let WsMessage::Text(text) = message else {
             continue;
@@ -1716,6 +1805,111 @@ mod http_tests {
             .await?;
         assert!(saved.status().is_success());
         assert_eq!(load_config(path).await?.model, "web-editor-test");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn deletes_single_and_all_web_sessions_without_touching_other_state() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("config.toml");
+        let store = SessionStore::open(&path)?;
+        store.save("saved-one", &[], 1024)?;
+        store.save("saved-two", &[], 1024)?;
+        let state_directory = config::state_dir(&path)?;
+        std::fs::write(state_directory.join("keep.txt"), b"keep")?;
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
+        let server = start_with_listener(path, listener).await?;
+        let port = url::Url::parse(server.url())?
+            .port()
+            .context("web URL lacks port")?;
+        let base = format!("http://127.0.0.1:{port}");
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let created: serde_json::Value = client
+            .post(format!("{base}/api/sessions/new"))
+            .send()
+            .await?
+            .json()
+            .await?;
+        let created_id = created["id"].as_str().context("missing session id")?;
+        assert!(client
+            .post(format!("{base}/api/sessions/delete"))
+            .json(&serde_json::json!({"name": "saved-one"}))
+            .send()
+            .await?
+            .status()
+            .is_success());
+        assert!(store
+            .list()?
+            .iter()
+            .all(|session| session.name != "saved-one"));
+        assert!(client
+            .post(format!("{base}/api/sessions/delete"))
+            .json(&serde_json::json!({"name": created_id}))
+            .send()
+            .await?
+            .status()
+            .is_success());
+        assert_eq!(
+            client
+                .get(format!("{base}/api/state?id={created_id}"))
+                .send()
+                .await?
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert!(client
+            .post(format!("{base}/api/sessions/delete-all"))
+            .send()
+            .await?
+            .status()
+            .is_success());
+        let remaining: serde_json::Value = client
+            .get(format!("{base}/api/sessions"))
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert_eq!(remaining.as_array().map(Vec::len), Some(0));
+        assert!(store.list()?.is_empty());
+        assert_eq!(std::fs::read(state_directory.join("keep.txt"))?, b"keep");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn refuses_to_delete_running_sessions() -> Result<()> {
+        let dir = tempdir()?;
+        let state = Arc::new(Shared {
+            path: dir.path().join("config.toml"),
+            sessions: Mutex::new(BTreeMap::from([(
+                "web-test".into(),
+                web_session(SessionState {
+                    id: "web-test".into(),
+                    ..SessionState::empty()
+                }),
+            )])),
+        });
+        let current = session(&state, "web-test")?;
+        current.inner.lock().map_err(|_| anyhow!("poisoned"))?.busy = true;
+        assert!(matches!(
+            delete_session(
+                State(state.clone()),
+                Json(SessionSelection {
+                    name: "web-test".into()
+                })
+            )
+            .await,
+            Err(ApiError {
+                status: StatusCode::CONFLICT,
+                ..
+            })
+        ));
+        assert!(matches!(
+            delete_all_sessions(State(state)).await,
+            Err(ApiError {
+                status: StatusCode::CONFLICT,
+                ..
+            })
+        ));
         Ok(())
     }
 

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added single-session and delete-all controls to the Web session sidebar, with confirmation and active-session protection.
 - Added grouped key/value editing and raw TOML editing to the Web configuration page, with live configuration validation and automatic use of saved settings by subsequent Web tasks.
 
 ## [1.0.2] - 2026-09-24
