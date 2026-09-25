@@ -11,6 +11,7 @@ use super::{
             self as android_tools, AndroidInputArgs, ClipboardArgs, ConnectivityArgs,
             MediaControlArgs, MediaQueryArgs, PackageLimitArgs,
         },
+        environment,
     },
     audio::{
         domain::{AnalyzeAudioArgs, AudioAnalysisResult},
@@ -59,6 +60,7 @@ static METADATA: &[ToolMetadata] = &[
     meta!("analyze_audio", "Analyze a local WAV or raw PCM file using deterministic DSP. Missing raw PCM metadata is requested from the user, never guessed.", Audio, ReadOnly),
     meta!("judge_audio_quality", "Judge audio quality using the completed analysis cached in this task; cached features are authoritative.", Audio, ReadOnly),
     meta!("inspect_android_app", "Inspect bounded read-only evidence for an Android package or the foreground package.", Android, ReadOnly),
+    meta!("inspect_android_environment", "Inspect Android version, device-supported ABI, available commands, memory, and data storage with bounded read-only probes.", Android, ReadOnly),
     meta!("list_android_apps", "List bounded installed Android applications with package, APK path, and UID.", Android, ReadOnly),
     meta!("top_android_apps", "Return a bounded Android process snapshot sorted by resident memory.", Android, ReadOnly),
     meta!("android_dumpsys", "Run one bounded, validated read-only Android dumpsys service query.", Android, ReadOnly),
@@ -128,9 +130,10 @@ impl Tool for ExtendedTool {
             | "android_netstats"
             | "android_storage"
             | "android_permission_audit" => definition::<PackageLimitArgs>(name, description),
-            "android_thermal_power" | "android_wifi_eth" | "android_doze" => {
-                definition::<EmptyArgs>(name, description)
-            }
+            "inspect_android_environment"
+            | "android_thermal_power"
+            | "android_wifi_eth"
+            | "android_doze" => definition::<EmptyArgs>(name, description),
             "android_clipboard" => definition::<ClipboardArgs>(name, description),
             "android_media_control" => definition::<MediaControlArgs>(name, description),
             "android_media_query" => definition::<MediaQueryArgs>(name, description),
@@ -147,6 +150,10 @@ impl Tool for ExtendedTool {
             "analyze_audio" => ExtendedAction::AnalyzeAudio(parse_args(name, arguments)?),
             "judge_audio_quality" => ExtendedAction::JudgeAudio(parse_args(name, arguments)?),
             "inspect_android_app" => ExtendedAction::InspectApp(parse_args(name, arguments)?),
+            "inspect_android_environment" => {
+                let _: EmptyArgs = parse_args(name, arguments)?;
+                ExtendedAction::InspectEnvironment
+            }
             "list_android_apps" => ExtendedAction::ListApps(parse_args(name, arguments)?),
             "top_android_apps" => ExtendedAction::TopApps(parse_args(name, arguments)?),
             "android_dumpsys" => ExtendedAction::Dumpsys(parse_args(name, arguments)?),
@@ -265,6 +272,7 @@ enum ExtendedAction {
     AnalyzeAudio(AnalyzeAudioArgs),
     JudgeAudio(JudgeAudioQualityArgs),
     InspectApp(InspectAndroidAppArgs),
+    InspectEnvironment,
     ListApps(ListAndroidAppsArgs),
     TopApps(TopAndroidAppsArgs),
     Dumpsys(AndroidDumpsysArgs),
@@ -379,6 +387,7 @@ impl PreparedExecution for ExtendedAction {
             Self::InspectApp(args) => {
                 android_diagnostics::inspect_android_app(executor(ctx)?, &args).await?
             }
+            Self::InspectEnvironment => environment::inspect_environment(executor(ctx)?).await?,
             Self::ListApps(args) => {
                 android_diagnostics::list_android_apps(executor(ctx)?, &args).await?
             }

@@ -347,7 +347,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 35);
+        assert_eq!(names.len(), 36);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()
@@ -356,6 +356,7 @@ mod tests {
             "execute_shell_command",
             "apply_patch",
             "analyze_audio",
+            "inspect_android_environment",
             "android_clipboard",
             "agent_memory",
             "inspect_tls",

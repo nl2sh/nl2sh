@@ -42,13 +42,101 @@ pub fn has_mutation(command: &str) -> bool {
 }
 
 fn has_mutating_redirection(command: &str) -> bool {
-    command.match_indices('>').any(|(index, _)| {
+    let positions = if shell_reparses_arguments(command) {
+        command.match_indices('>').map(|(index, _)| index).collect()
+    } else {
+        redirection_positions(command)
+    };
+    positions.into_iter().any(|index| {
         let mut target = command[index + 1..].trim_start();
         if let Some(rest) = target.strip_prefix('>') {
             target = rest.trim_start();
         }
         !is_discard_target(target) && !is_fd_duplication(target)
     })
+}
+
+fn shell_reparses_arguments(command: &str) -> bool {
+    let value = command.to_ascii_lowercase();
+    [
+        " -c ", " -lc ", " -e ", "eval ", "system(", "| sh", "| bash", "| su",
+    ]
+    .iter()
+    .any(|marker| value.contains(marker))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Quote {
+    None,
+    Single,
+    Double,
+}
+
+fn redirection_positions(command: &str) -> Vec<usize> {
+    let mut positions = Vec::new();
+    let mut quote = Quote::None;
+    let mut substitutions: Vec<(Quote, usize)> = Vec::new();
+    let mut backtick_return = None;
+    let mut chars = command.char_indices().peekable();
+    while let Some((index, character)) = chars.next() {
+        if character == '\\' && quote != Quote::Single {
+            chars.next();
+            continue;
+        }
+        match quote {
+            Quote::Single => {
+                if character == '\'' {
+                    quote = Quote::None;
+                }
+            }
+            Quote::Double => match character {
+                '"' => quote = Quote::None,
+                '$' if chars.peek().is_some_and(|(_, next)| *next == '(') => {
+                    chars.next();
+                    substitutions.push((Quote::Double, 1));
+                    quote = Quote::None;
+                }
+                '`' => {
+                    backtick_return = Some(Quote::Double);
+                    quote = Quote::None;
+                }
+                _ => {}
+            },
+            Quote::None => match character {
+                '\'' => quote = Quote::Single,
+                '"' => quote = Quote::Double,
+                '`' => {
+                    if let Some(previous) = backtick_return.take() {
+                        quote = previous;
+                    } else {
+                        backtick_return = Some(Quote::None);
+                    }
+                }
+                '$' if chars.peek().is_some_and(|(_, next)| *next == '(') => {
+                    chars.next();
+                    substitutions.push((Quote::None, 1));
+                }
+                '(' => {
+                    if let Some((_, depth)) = substitutions.last_mut() {
+                        *depth += 1;
+                    }
+                }
+                ')' => {
+                    if let Some((_, depth)) = substitutions.last_mut() {
+                        *depth -= 1;
+                        if *depth == 0 {
+                            if let Some((previous, _)) = substitutions.pop() {
+                                quote = previous;
+                            }
+                        }
+                    }
+                }
+                '>' => positions.push(index),
+                _ => {}
+            },
+        }
+    }
+    positions
 }
 
 fn is_discard_target(target: &str) -> bool {

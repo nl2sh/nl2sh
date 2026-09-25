@@ -91,6 +91,37 @@ fn read_only_android_package_version_queries_do_not_require_confirmation() {
 }
 
 #[test]
+fn quoted_output_and_mount_listing_stay_read_only_without_hiding_writes() {
+    let cfg = Config::default();
+    for command in [
+        "echo \"OK tool -> /system/bin/tool\"",
+        "for t in toybox curl; do if command -v $t >/dev/null 2>&1; then echo \"OK $t -> $(command -v $t)\"; else echo \"MISS $t\"; fi; done",
+        "mount | grep -E '/system|/vendor' | head",
+        "mount 2>/dev/null",
+    ] {
+        let assessment = assess(command, &cfg);
+        assert_eq!(assessment.risk_level, RiskLevel::ReadOnly, "{command}");
+        assert!(!assessment.requires_confirmation, "{command}");
+    }
+    for command in [
+        "echo x > /data/local/tmp/output",
+        "echo \"safe -> text\" > /data/local/tmp/output",
+        "echo x->/data/local/tmp/output",
+        "echo \"$(echo x > /data/local/tmp/output)\"",
+        "echo \"`echo x > /data/local/tmp/output`\"",
+        "sh -c 'echo x > /data/local/tmp/output'",
+        "eval 'echo x > /data/local/tmp/output'",
+        "echo 'echo x > /data/local/tmp/output' | sh",
+        "mount -t tmpfs tmpfs /mnt",
+        "sh -c 'mount -t tmpfs tmpfs /mnt'",
+    ] {
+        let assessment = assess(command, &cfg);
+        assert!(assessment.risk_level >= RiskLevel::Mutating, "{command}");
+        assert!(assessment.requires_confirmation, "{command}");
+    }
+}
+
+#[test]
 fn mutating_commands_inside_substitutions_still_require_confirmation() {
     let cfg = Config::default();
     for command in [

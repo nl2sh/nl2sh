@@ -19,7 +19,7 @@ pub fn builtins() -> Vec<(
         ("remount-rw", r"(?i)\bmount\b[^\n;&|]*-o\s+[^\n;&|]*remount[^\n;&|]*rw", RiskLevel::Dangerous, "read-write remount"),
         ("device-redirect", r"(?i)(?:>\s*|tee\s+)/dev/(?:sd\w*|block/)" , RiskLevel::Critical, "device write redirection"),
         ("android-state-change", r"(?i)\b(?:settings\s+(?:put|delete)|(?:pm|cmd\s+package)\s+(?:install|uninstall|clear|enable|disable|grant|revoke)|am\s+(?:start|force-stop|kill)|svc\s+)" , RiskLevel::Mutating, "Android service or package state change"),
-        ("mount-change", r"(?i)(?:^|[;&|])\s*mount\s+\S+" , RiskLevel::Mutating, "mount operation with arguments"),
+        ("mount-change", r"(?i)\bmount\s+(?:-[^\s|;&]+|/[^\s|;&]+|[a-z][^\s|;&]*)" , RiskLevel::Mutating, "mount operation with arguments"),
         ("explicit-elevation", r"(?i)(?:^|[;&|`]|\$\()\s*su(?:\s|$)" , RiskLevel::Mutating, "explicit privilege elevation"),
     ].into_iter().map(|(id,p,r,m)|(id,Regex::new(p),r,m)).collect()
 }

@@ -328,17 +328,75 @@ pub async fn connectivity(
     {
         bail!("invalid connectivity host")
     }
-    aggregate(
-        executor,
-        "connectivity",
-        &[
-            ("dns", &format!("ping -c 1 -W 2 {host}")),
-            ("ping", &format!("ping -c 3 -W 2 {host}")),
-            ("routes", "ip route show"),
-            ("connectivity", "dumpsys connectivity"),
-        ],
-    )
-    .await
+    let dns = readonly(executor, &format!("ping -c 1 -W 2 {host}")).await?;
+    let ping = readonly(executor, &format!("ping -c 3 -W 2 {host}")).await?;
+    let routes = readonly(executor, "ip route show").await?;
+    let connectivity = readonly(executor, "dumpsys connectivity").await?;
+    serde_json::to_string_pretty(&json!({
+        "kind": "connectivity",
+        "host": host,
+        "https_checked": false,
+        "sections": {
+            "dns": compact_result(&dns, 800),
+            "ping": compact_result(&ping, 1200),
+            "routes": compact_result(&routes, 1200),
+            "connectivity": connectivity_summary(&connectivity),
+        },
+    }))
+    .context("cannot encode Android connectivity result")
+}
+
+fn compact_result(result: &ExecutionResult, max_chars: usize) -> Value {
+    let limit = |text: &str| -> String {
+        let mut value = text.chars().take(max_chars).collect::<String>();
+        if text.chars().count() > max_chars {
+            value.push_str("\n[TRUNCATED]");
+        }
+        value
+    };
+    json!({
+        "status": status(result),
+        "exit_code": result.exit_code,
+        "stdout": limit(&result.stdout),
+        "stderr": limit(&result.stderr),
+    })
+}
+
+fn connectivity_summary(result: &ExecutionResult) -> Value {
+    let active = result
+        .stdout
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("Active default network: "))
+        .and_then(|value| value.split_whitespace().next());
+    let network = active
+        .and_then(|id| {
+            result
+                .stdout
+                .lines()
+                .find(|line| line.contains(&format!("NetworkAgentInfo{{network{{{id}}}")))
+        })
+        .or_else(|| {
+            result
+                .stdout
+                .lines()
+                .find(|line| line.contains("NetworkAgentInfo{network{"))
+        });
+    let extract = |start: &str, end: &str| {
+        network
+            .and_then(|line| line.split_once(start))
+            .and_then(|(_, tail)| tail.split_once(end))
+            .map(|(value, _)| value.chars().take(160).collect::<String>())
+    };
+    json!({
+        "status": status(result),
+        "exit_code": result.exit_code,
+        "active_default_network": active,
+        "transport": extract("Transports: ", " Capabilities:"),
+        "interface": extract("InterfaceName: ", " "),
+        "link_addresses": extract("LinkAddresses: [", "]"),
+        "dns_addresses": extract("DnsAddresses: [", "]"),
+        "stderr": result.stderr.chars().take(300).collect::<String>(),
+    })
 }
 
 async fn aggregate(
@@ -458,5 +516,22 @@ mod tests {
     }
     fn permission_package(value: &str) -> Result<()> {
         optional_package(Some(value))
+    }
+
+    #[test]
+    fn connectivity_summary_keeps_active_network_without_raw_dump() {
+        let result = ExecutionResult {
+            stdout: format!("Active default network: 100\nNetworkAgentInfo{{network{{100}} lp{{{{InterfaceName: eth0 LinkAddresses: [192.0.2.2/24] DnsAddresses: [/192.0.2.1]}}}} nc{{[ Transports: ETHERNET Capabilities: INTERNET]}}}}\n{}", "unrelated\n".repeat(10_000)),
+            stderr: String::new(),
+            exit_code: Some(0),
+            timed_out: false,
+            interrupted: false,
+        };
+        let summary = connectivity_summary(&result);
+        assert_eq!(summary["active_default_network"], "100");
+        assert_eq!(summary["transport"], "ETHERNET");
+        assert_eq!(summary["interface"], "eth0");
+        assert_eq!(summary["link_addresses"], "192.0.2.2/24");
+        assert!(summary.to_string().len() < 1_000);
     }
 }

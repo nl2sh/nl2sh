@@ -1,3 +1,4 @@
 //! Structured Android diagnostics and actions.
 pub mod diagnostics;
 pub mod domain;
+pub mod environment;

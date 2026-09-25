@@ -201,6 +201,7 @@ impl CommandExecutor for ShellExecutor {
             let uid = self.probe.uid();
             let su_available = self.probe.su_available();
             let api_level = android_api_level().await;
+            let device_abi = android_property("ro.product.cpu.abi").await;
             let environment = android_runtime();
             let shell = match environment {
                 AndroidRuntime::AndroidShell => "/system/bin/sh".to_owned(),
@@ -217,7 +218,7 @@ impl CommandExecutor for ShellExecutor {
                         AndroidRuntime::Termux => "termux",
                     }
                 ),
-                format!("abi={}", std::env::consts::ARCH),
+                format!("process_arch={}", std::env::consts::ARCH),
                 format!("shell={shell}"),
                 format!("uid={uid}"),
                 format!("root={}", uid == 0),
@@ -225,6 +226,9 @@ impl CommandExecutor for ShellExecutor {
             ];
             if let Some(api_level) = api_level {
                 fields.insert(1, format!("api={api_level}"));
+            }
+            if let Some(device_abi) = device_abi {
+                fields.insert(1, format!("device_abi={device_abi}"));
             }
             Ok(Some(fields.join(" ")))
         }
@@ -257,10 +261,17 @@ impl CommandExecutor for ShellExecutor {
 
 #[cfg(target_os = "android")]
 async fn android_api_level() -> Option<String> {
+    android_property("ro.build.version.sdk")
+        .await
+        .filter(|value| value.chars().all(|character| character.is_ascii_digit()))
+}
+
+#[cfg(target_os = "android")]
+async fn android_property(name: &str) -> Option<String> {
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(1),
         tokio::process::Command::new("/system/bin/getprop")
-            .arg("ro.build.version.sdk")
+            .arg(name)
             .output(),
     )
     .await
@@ -271,8 +282,12 @@ async fn android_api_level() -> Option<String> {
     }
     let value = String::from_utf8(output.stdout).ok()?;
     let value = value.trim();
-    (!value.is_empty() && value.chars().all(|character| character.is_ascii_digit()))
-        .then(|| value.to_owned())
+    (!value.is_empty()
+        && value.len() <= 64
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        }))
+    .then(|| value.to_owned())
 }
 
 struct TuiActivityGuard(Option<Arc<AtomicBool>>);
