@@ -4,6 +4,7 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- Web 顶栏的菜单项独立横向滚动，GitHub Star 与其右侧的展开/收起按钮保持可见；按钮改用 `<`/`>` 字符并保留可访问名称。对话输入框增加提问及 `@` 文件选择提示；“能做什么”弹窗固定搜索与分类筛选区，由工具示例列表独立滚动。这些改动只涉及浏览器展示，不改变会话、文件引用、安全审批、Android 或 PTY 路径。
 - 项目介绍与计划按当前模块同步：Android 单文件程序包含 TUI、Web 多会话和结构化工具；可选主机侧 A2A/MCP 网关支持设备盘点与 Agent 咨询，拒绝所有需要人工确认的操作。公开发布版本为 1.0.2；TUR 配方 PR #2804 已合并。
 - TUI 完整 Agent 首轮保存后复用 Web 的无工具短标题生成器，`/sessions` 显示标题；后续自动保存、恢复与重命名保留标题。标题生成失败不阻断回答或会话保存，本地命令不触发生成。
 - Web 会话摘要增加独立创建时间，侧栏轮数或运行状态后显示相对时间；满一天后显示本地日期和时刻。旧快照从系统生成的会话 ID 推算创建时间，后续保存和重命名保持不变。
@@ -238,6 +239,7 @@ Last Updated: 2026-09-26
 
 ## Verification Performed
 
+- Web 导航、输入与工具目录调整：`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 在 Linux 目标通过；菜单按钮保留动态可访问名称与 `aria-expanded` 状态。
 - 文档同步验证：Linux 目标 `git diff --check`、`cargo fmt --all -- --check`、`cargo check` 与 `cargo test` 通过；默认测试 1 项显式凭据 ima smoke 按设计忽略。
 - GitHub 公开发布与上游记录核对：`v1.0.2` Release 已发布，TUR PR #2804 于 2026-09-15 合并。
 - `v1.0.2` 发布门禁：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`cargo build --release`、前端测试/生产构建、Release workflow 静态检查和发布相关 Bash 语法检查通过；NDK r28c/API 26 的 AArch64 与 ARMv7 release 交叉编译通过，分别验证为使用 `/system/bin/linker64` 的 64 位 PIE 和 `/system/bin/linker` 的 32 位 PIE。
