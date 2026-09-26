@@ -1,5 +1,5 @@
 export const examples=[
-  {title:'查看手机存储',description:'看看还剩多少空间',prompt:'查看这台 Android 设备的存储空间，说明总量、已用和剩余空间。只查看，不修改。'},
+  {title:'查看手机存储',description:'看看还剩多少空间',prompt:'查看这台 Android 设备的存储空间，说明总量、已用和剩余空间。只查看，不修改。使用图表展示。'},
   {title:'查看系统信息',description:'了解系统版本和内存',prompt:'查看这台 Android 设备的系统版本、CPU 架构和内存情况。只查看，不修改。'},
   {title:'查看应用',description:'列出已安装应用',prompt:'列出这台 Android 设备已安装的应用及版本信息。只查看，不修改。'},
 ];

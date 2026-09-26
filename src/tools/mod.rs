@@ -28,6 +28,7 @@ macro_rules! define_tool {
 
 pub mod android;
 pub mod audio;
+pub mod chart;
 mod extended;
 pub mod file;
 mod ima;
@@ -47,6 +48,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use chart::ChartTool;
 use file::{ApplyPatchTool, ListDirTool, ReadFileTool, SearchTextTool};
 use ima::{ImaListTool, ImaReadTool, ImaSearchTool};
 use schemars::JsonSchema;
@@ -173,6 +175,8 @@ pub enum ToolCategory {
     Network,
     /// Private Agent state.
     Memory,
+    /// Presentation-only chart data.
+    Chart,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -300,6 +304,7 @@ impl ToolRegistry {
             Box::new(ListDirTool),
             Box::new(SearchTextTool),
             Box::new(ApplyPatchTool),
+            Box::new(ChartTool),
             Box::new(ImaListTool),
             Box::new(ImaSearchTool),
             Box::new(ImaReadTool),
@@ -347,7 +352,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 36);
+        assert_eq!(names.len(), 37);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()

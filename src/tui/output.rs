@@ -112,6 +112,16 @@ pub(super) fn append_transcript(
                 }
             }
             for result in &round.results {
+                let chart = round
+                    .calls
+                    .iter()
+                    .any(|call| call.id == result.call_id && call.name == "create_chart");
+                let displayed = if chart && result.success {
+                    crate::tools::chart::text_fallback(&result.output)
+                        .unwrap_or_else(|| result.output.clone())
+                } else {
+                    result.output.clone()
+                };
                 log.record(
                     if result.success {
                         "tool_result"
@@ -131,7 +141,7 @@ pub(super) fn append_transcript(
                 } else {
                     "❌"
                 };
-                visible.push(encode_tool_result(prefix, &result.output));
+                visible.push(encode_tool_result(prefix, &displayed));
             }
         }
     }

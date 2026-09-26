@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Ask the Web storage example to display total, used, and remaining space in a chart while keeping the task read-only.
 - Remove temporary `[OUT]` and `[ERR]` lines from Web conversations once the matching tool result is available, so completed output appears only in its collapsible card.
 - Render Web safety terminal command results as separate stdout, stderr, and exit-status lines, with wrapped long text on narrow screens.
 - Improve Web layouts across desktop, tablet, and narrow mobile widths: wrap the tablet header, move sessions into a horizontal strip on mobile, expand conversation and configuration space, and keep quick-start and approval actions visible on short screens.
@@ -16,6 +17,7 @@
 
 ### Added
 
+- Add a bounded read-only chart tool for statistical results. Web conversations render bar, line, and pie charts with a data table and restore them from saved sessions; TUI displays the values as text.
 - Add a Web quick-start flow for provider setup and model-list connection checking, read-only first-task examples, automatic session creation on first send, actionable error hints, and a beginner guide. The Web server continues to listen on every IPv4 interface without login.
 - Added the project logo to the Web sidebar and a GitHub Star link to the top bar.
 - Added a bounded read-only Android environment tool for OS, device ABI, command availability, memory, and data storage.

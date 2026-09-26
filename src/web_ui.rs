@@ -1761,6 +1761,37 @@ mod tests {
     }
 
     #[test]
+    fn restored_chart_keeps_matching_call_and_structured_result() {
+        let chart = serde_json::json!({
+            "chart_type": "bar",
+            "title": "Storage",
+            "source": "android_storage result",
+            "unit": "GiB",
+            "labels": ["apps", "media"],
+            "values": [2.5, 4.0]
+        })
+        .to_string();
+        let round = ToolRound {
+            calls: vec![ToolCall {
+                id: "chart-1".into(),
+                name: "create_chart".into(),
+                arguments: serde_json::json!({}),
+            }],
+            results: vec![ToolResult {
+                call_id: "chart-1".into(),
+                output: chart.clone(),
+                success: true,
+                attachments: Vec::new(),
+            }],
+        };
+        let entries = web_entries(&render_turns(&[vec![ConversationItem::Tools(round)]]));
+        assert_eq!(entries[0].kind, "tool_call");
+        assert_eq!(entries[0].text, "create_chart");
+        assert_eq!(entries[1].kind, "tool_result");
+        assert_eq!(entries[1].text, chart);
+    }
+
+    #[test]
     fn tool_round_results_follow_their_matching_calls_in_live_and_restored_history() {
         let round = ToolRound {
             calls: vec![

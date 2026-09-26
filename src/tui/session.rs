@@ -2607,13 +2607,21 @@ fn append_restored_history(
                     for (index, result) in round.results.iter().enumerate() {
                         let name = round
                             .calls
-                            .get(index)
+                            .iter()
+                            .find(|call| call.id == result.call_id)
+                            .or_else(|| round.calls.get(index))
                             .map_or("tool", |call| call.name.as_str());
+                        let output = if name == "create_chart" && result.success {
+                            crate::tools::chart::text_fallback(&result.output)
+                                .unwrap_or_else(|| result.output.clone())
+                        } else {
+                            result.output.clone()
+                        };
                         visible.push(format!(
                             "{} {}\n{}",
                             if ascii { "[TOOL]" } else { "🔧" },
                             name,
-                            result.output
+                            output
                         ));
                     }
                 }
@@ -3283,6 +3291,35 @@ impl ConfirmationUi {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restored_chart_uses_text_values() -> Result<()> {
+        let history = Arc::new(Mutex::new(Vec::new()));
+        let chart = serde_json::json!({
+            "chart_type": "bar", "title": "存储", "source": "android_storage result",
+            "unit": "GiB", "labels": ["应用"], "values": [2.5]
+        });
+        let round = crate::llm::ToolRound {
+            calls: vec![crate::llm::ToolCall {
+                id: "chart-1".into(),
+                name: "create_chart".into(),
+                arguments: serde_json::json!({}),
+            }],
+            results: vec![crate::llm::ToolResult {
+                call_id: "chart-1".into(),
+                output: chart.to_string(),
+                success: true,
+                attachments: Vec::new(),
+            }],
+        };
+        append_restored_history(&history, &[vec![ConversationItem::Tools(round)]], false)?;
+        let visible = history
+            .lock()
+            .map_err(|_| anyhow::anyhow!("lock poisoned"))?;
+        assert!(visible[0].contains("应用: 2.5 GiB"));
+        assert!(!visible[0].contains("chart_type"));
+        Ok(())
+    }
 
     #[test]
     fn balance_format_contains_only_display_values() {

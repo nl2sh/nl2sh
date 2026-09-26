@@ -4,6 +4,10 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- Web“查看手机存储”示例输入明确要求以图表展示设备存储总量、已用和剩余空间，并保持只读、不修改的任务约束。
+- Web 存储示例文案验证：`npm test --prefix web`、`npm run build --prefix web`、`cargo fmt --all -- --check` 和 `git diff --check` 通过。
+- 新增只读 `create_chart` 工具，对标题、来源、标签及非负有限数值设限；Web 对话直接显示柱状、折线或饼图和可展开数据表，已保存会话可从 Tool Result 恢复图表，TUI 显示文字数值。图表仅呈现模型提供的统计数据，不改变数据获取、安全确认、Root 或 PTY 路径。
+- 图表功能验证：Linux 主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，Web `npm test --prefix web` 与 `npm run build --prefix web`，以及配置 NDK 编译器后的 Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 通过；新增回归覆盖数值边界、无效结果拒绝及 Web/TUI 会话恢复。
 - Web 会话中 `[OUT]`/`[ERR]` 仅在工具运行时显示；工具结果回填折叠卡片后清理对应实时输出，任务结束时也清理残留临时行，避免同一命令结果在卡片外重复出现。只改变 Web 会话展示历史，不影响 Tool Result、审批、安全分类、Android 或 PTY 执行路径。
 - Web 临时输出清理验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、Web `npm test --prefix web` 与 `git diff --check` 通过；Rust 回归确认实时 `stdout`/`stderr` 在工具运行时可见，结果回填后只保留工具卡片。
 - Web 安全终端解析 WebSocket 返回的命令结果，将 `stdout`、`stderr` 和退出状态分段显示，JSON 中的转义换行恢复为实际换行；窄屏长文本可折行，普通错误消息仍按原文显示。只改变浏览器呈现，不改变命令安全分类、审批、执行、Android 或 PTY 路径。
