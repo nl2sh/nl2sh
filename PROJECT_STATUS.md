@@ -4,6 +4,8 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- A2A 网关中英文 Windows 安装说明补充镜像源缺少 `hatchling` 时的一次性官方 PyPI 重试命令及 pip 配置排查方法；不改动 Python 包构建后端或全局 pip 配置。
+- A2A 网关中英文说明补齐 Windows PowerShell 命令：原生 Windows 启动网关、运行测试、安装 Codex MCP 适配层、通过 SSH 隧道连接、设置令牌与配置 `.exe` 入口；显式说明构建部署检查点需在具备 Android 构建工具链的 WSL 环境运行。
 - A2A→MCP 中英文文档补齐 Codex 所在机器的逐步安装方法：复制尚未推送的网关模块、创建独立 Python 3.11+ 虚拟环境、安装 wheel、建立 SSH 隧道或 HTTPS 连接、传入令牌、配置 Codex stdio MCP 并调用设备盘点验证。全新 Python 3.11 虚拟环境按文档执行 `pip install .` 成功，入口程序和包导入检查通过。
 - 新增独立 stdio MCP 适配层，供 Codex 通过 A2A 1.0 网关调用设备盘点、工具目录、Agent 咨询和任务查询；续问保留 `context_id`，结果保留失败工具信息。适配层验证 Agent Card 同来源，远程仅允许 HTTPS；不直接连接 adb 或开放写入审批。Python 包补齐 wheel 文件选择，英文和中文文档均增加另一台机器的 Codex 配置方法。
 - MCP 适配层验证：Python 的 5 项网关/适配测试通过，覆盖 MCP 工具发现、MCP → A2A 调用、同上下文续问、持久任务查询、错误令牌及 Agent Card 跨来源拒绝；stdio MCP 客户端经连接设备的 A2A 网关获取环境、37 个工具和真实模型回复。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 与 `git diff --check` 通过。
