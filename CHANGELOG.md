@@ -4,12 +4,18 @@
 
 ### Changed
 
+- Render Web safety terminal command results as separate stdout, stderr, and exit-status lines, with wrapped long text on narrow screens.
+- Improve Web layouts across desktop, tablet, and narrow mobile widths: wrap the tablet header, move sessions into a horizontal strip on mobile, expand conversation and configuration space, and keep quick-start and approval actions visible on short screens.
+- Put DeepSeek first in Web Quick Start with `deepseek-flash` prefilled and include all built-in provider choices plus Custom. OpenAI uses its official endpoint; Custom keeps the editable Base URL.
+- Make the Web default view focus on conversation and task progress, with tools, terminal, quick runtime controls, and detailed metrics under Advanced. Web approval now presents the local risk assessment and complete operation before approval, while edited operations are reclassified.
+- Ask the Agent to report completed work, evidence, failed or unverified steps, and device changes supported by tool results.
 - Classify quoted output and read-only mount listings without false mutation prompts while preserving confirmation for real redirection and mount changes.
 - Summarize Android connectivity evidence instead of returning the full connectivity dump; distinguish ICMP reachability from HTTPS access and report device ABI separately from process architecture.
 - Highlight the browser URL in a dedicated TUI startup entry at the end of the welcome content, with narrow-screen wrapping.
 
 ### Added
 
+- Add a Web quick-start flow for provider setup and model-list connection checking, read-only first-task examples, automatic session creation on first send, actionable error hints, and a beginner guide. The Web server continues to listen on every IPv4 interface without login.
 - Added the project logo to the Web sidebar and a GitHub Star link to the top bar.
 - Added a bounded read-only Android environment tool for OS, device ABI, command availability, memory, and data storage.
 - Added single-session and delete-all controls to the Web session sidebar, with confirmation for delete-all and active-session protection.

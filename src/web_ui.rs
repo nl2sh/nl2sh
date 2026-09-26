@@ -281,6 +281,7 @@ struct SessionSelection {
 struct QuickSettings {
     endpoint: String,
     model: String,
+    provider_ready: bool,
     confirm_policy: ConfirmPolicy,
     max_context_turns: usize,
     max_agent_steps: usize,
@@ -755,6 +756,7 @@ async fn get_quick_settings(State(state): State<Arc<Shared>>) -> ApiResult<Json<
     Ok(Json(QuickSettings {
         endpoint: cfg.endpoint.clone(),
         model: cfg.model.clone(),
+        provider_ready: cfg.provider_is_configured(),
         confirm_policy: cfg.execute_confirm_policy,
         max_context_turns: cfg.max_context_turns,
         max_agent_steps: cfg.max_agent_steps.min(cfg.hard_max_agent_steps),
@@ -1512,6 +1514,30 @@ impl TextDeltaSink for WebTextSink {
 struct WebConfirmer {
     session: Arc<WebSession>,
 }
+
+fn approval_explanation(assessment: &SecurityAssessment) -> String {
+    if let Some(rule) = assessment.matched_rules.first() {
+        return match rule.id.as_str() {
+            "delete-system" | "delete-system-split-flags" => "检测到递归删除关键目录".into(),
+            "filesystem-format" => "检测到格式化文件系统".into(),
+            "block-write" | "device-redirect" => "检测到直接写入设备".into(),
+            "root-permissions" => "检测到递归修改根目录权限".into(),
+            "fork-bomb" => "检测到可能耗尽设备资源的命令".into(),
+            "power" => "检测到关机、重启或擦除操作".into(),
+            "fastboot-erase" => "检测到擦除分区".into(),
+            "remount-rw" | "mount-change" => "检测到修改挂载状态".into(),
+            "android-state-change" => "检测到修改应用或系统服务状态".into(),
+            "explicit-elevation" => "检测到显式申请更高权限".into(),
+            _ => format!("本地安全规则：{}", rule.message),
+        };
+    }
+    match assessment.risk_level {
+        crate::security::RiskLevel::ReadOnly => "当前确认策略要求批准这项只读操作".into(),
+        crate::security::RiskLevel::Mutating => "检测到可能写入或改变设备状态的操作".into(),
+        _ => "本地安全检查将这项操作标记为高风险".into(),
+    }
+}
+
 #[async_trait]
 impl Confirmer for WebConfirmer {
     async fn confirm(
@@ -1522,7 +1548,7 @@ impl Confirmer for WebConfirmer {
         let pending = Pending::Approval {
             command: command.to_owned(),
             risk: format!("{:?}", assessment.risk_level),
-            explanation: assessment.explanation.clone(),
+            explanation: approval_explanation(assessment),
             root: assessment.requires_root,
             strong: assessment.requires_double_confirmation,
         };
@@ -1579,6 +1605,13 @@ mod tests {
     use crate::llm::{ToolCall, ToolResult};
     use std::io::Read;
     use tempfile::tempdir;
+
+    #[test]
+    fn approval_explanation_uses_local_rule_evidence() {
+        let assessment = crate::security::assess("rm -rf /", &Config::default());
+        assert_eq!(assessment.risk_level, crate::security::RiskLevel::Critical);
+        assert_eq!(approval_explanation(&assessment), "检测到递归删除关键目录");
+    }
 
     fn state(path: PathBuf) -> Arc<Shared> {
         let mut inner = SessionState::empty();
@@ -1764,6 +1797,15 @@ mod http_tests {
             .port()
             .context("web URL lacks port")?;
         let base = format!("http://127.0.0.1:{port}");
+        let initial_quick: serde_json::Value = client
+            .get(format!("{base}/api/quick-settings"))
+            .send()
+            .await?
+            .json()
+            .await?;
+        if std::env::var_os("NL2SH_API_KEY").is_none() {
+            assert_eq!(initial_quick["provider_ready"], false);
+        }
         let invalid: serde_json::Value = client
             .post(format!("{base}/api/config/validate"))
             .body("model = [")
@@ -1788,6 +1830,7 @@ mod http_tests {
         assert_eq!(preview["valid"], true);
         let mut config = preview["config"].clone();
         config["model"] = serde_json::json!("web-editor-test");
+        config["api_key"] = serde_json::json!("test-key");
         let rendered = client
             .post(format!("{base}/api/config/render"))
             .json(&config)
@@ -1805,6 +1848,16 @@ mod http_tests {
             .await?;
         assert!(saved.status().is_success());
         assert_eq!(load_config(path).await?.model, "web-editor-test");
+        let ready_quick: serde_json::Value = client
+            .get(format!("{base}/api/quick-settings"))
+            .send()
+            .await?
+            .json()
+            .await?;
+        if std::env::var_os("NL2SH_API_KEY").is_none() {
+            assert_eq!(ready_quick["provider_ready"], true);
+        }
+        assert!(ready_quick.get("api_key").is_none());
         Ok(())
     }
 

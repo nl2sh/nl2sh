@@ -46,7 +46,9 @@ pub(crate) fn startup_history(
     let hint = if ascii { "[HINT]" } else { "💡" };
     let mut history = match language {
         UiLanguage::ZhCn => vec![
-            format!("{agent} 欢迎使用 nl2sh，请直接描述要完成的 Android Shell 任务。"),
+            format!("{agent} 欢迎使用 nl2sh。直接说想查看或完成什么，不需要输入命令。"),
+            format!("{hint} 第一次使用：若下方显示 Web 地址，在浏览器点“快速开始”；也可输入 /config。"),
+            format!("{hint} 不确定是否安全时，先说“只查看，不修改”；遇到确认窗口可选择拒绝。"),
             format!("{hint} 常用示例：查看已安装应用及版本信息"),
             format!("{hint} 常用示例：查看系统版本、CPU、内存和存储空间"),
             format!("{hint} 常用示例：查找占用空间最大的十个文件"),
@@ -58,7 +60,9 @@ pub(crate) fn startup_history(
             format!("{hint} 操作说明：Ctrl+C 取消任务或清空输入；Ctrl+Q 安全退出"),
         ],
         UiLanguage::En => vec![
-            format!("{agent} Welcome to nl2sh. Describe an Android shell task to begin."),
+            format!("{agent} Welcome to nl2sh. Describe what you want in everyday words; no command is needed."),
+            format!("{hint} First use: if a Web address appears below, choose Quick Start there, or enter /config."),
+            format!("{hint} To inspect safely, ask to view only. You can reject any approval."),
             format!("{hint} Example: show installed applications and version information"),
             format!("{hint} Example: show Android version, CPU, memory, and storage"),
             format!("{hint} Example: find the ten largest files"),

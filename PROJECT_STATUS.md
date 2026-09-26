@@ -1,9 +1,17 @@
 # Project Status
 
-Last Updated: 2026-09-25
+Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- Web 安全终端解析 WebSocket 返回的命令结果，将 `stdout`、`stderr` 和退出状态分段显示，JSON 中的转义换行恢复为实际换行；窄屏长文本可折行，普通错误消息仍按原文显示。只改变浏览器呈现，不改变命令安全分类、审批、执行、Android 或 PTY 路径。
+- Web 安全终端换行验证：Web `npm test`、`npm run build`，Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 通过；Playwright 在 320px 视口用模拟 WebSocket 响应验证实际换行和无横向溢出。
+- Web 响应式布局经 Playwright 在 1920×1080、1280×800、768×900、390×844 和 320×568 视口检查：中等宽度顶栏可完整换行，窄屏会话列表改为顶部横向滚动，对话输入、配置分类与字段使用可用宽度；快速开始缩短说明，高级快捷设置改为横向滚动，短屏快速开始与审批的操作按钮保持可见。仅改变浏览器静态页面，不影响 Web 默认 IPv4 监听、免登录、安全确认、Android 或 PTY 路径。
+- Web 布局验证：对已连接 Android Web 服务使用 Playwright 检查对话、快速开始和配置的五种视口，高级功能、工具目录、终端弹窗及模拟待审批状态的三种视口；无页面级溢出或脚本异常，模拟审批未向设备提交命令。`npm run build`、`npm test`、`cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 在 Linux 目标通过。
+- Web 快速开始首选 DeepSeek，预填 `deepseek-flash`；补齐 OpenRouter、OpenAI、Moonshot/Kimi、SiliconFlow、Ollama 与自定义服务。OpenAI 使用固定官方地址并要求 API Key；Ollama 和自定义服务可在下一步编辑 Base URL；切换服务时清空上一服务的 API Key。仅调整前端引导与文案，Web 仍默认监听所有 IPv4 接口且无需登录。
+- 快速开始预设验证：Web `npm run build`、`npm test`，Linux 目标 `cargo fmt --all -- --check`、`cargo check` 和 `cargo test` 通过；预设测试覆盖服务列表、DeepSeek 首选与默认模型、现有配置保留、OpenAI 固定地址及其密钥要求，以及自定义服务的地址编辑能力。Playwright 检查 OpenAI 下一步只显示模型和 API Key，自定义服务仍显示 Base URL。
+- 新手体验分阶段接入：Web 首次缺少 Provider 凭据时打开快速开始，支持服务选择、配置原子保存与只读模型列表检查；空白对话提供只读示例，首次发送自动创建会话。普通视图突出对话和任务状态，高级功能可展开；常见错误附下一步提示与配置入口。Web 审批显示本地规则依据、中文风险、完整待执行内容和强确认提示；编辑后仍经过原审批链。TUI 欢迎内容补充自然语言与拒绝说明，Agent 最终回答要求说明证据和未验证部分；新增跨 Termux/电脑连接路径的新手指南。Web 默认监听所有 IPv4 接口且无需登录的行为保持不变。
+- 新手体验验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，Web `npm run build`、`npm test`，以及配置 NDK clang/llvm-ar 后的 Android API 26 AArch64 `cargo check --target aarch64-linux-android` 通过；新增本地安全规则说明回归。
 - 新增 `inspect_android_environment` 固定只读工具，返回 Android 版本、设备 ABI、常见命令可用性、内存与数据分区容量；运行摘要区分设备 ABI 与进程架构，Agent 在建议设备端程序时以设备 ABI 为准。`android_connectivity` 改为有界 ICMP、路由及默认网络摘要，并明确不代表 HTTPS 已验证。
 - 安全分类修正引号内输出箭头与只读 `mount` 列表的误报；真实重定向、命令替换中的写入与挂载修改仍需确认。Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 通过；Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi` 通过。
 - Web 会话侧栏左上角显示项目 logo，顶栏右上角增加可跳转仓库首页的 GitHub Star 链接；窄屏布局保留入口。仅调整浏览器静态资源和样式，不改变安全确认、Android 或 PTY 路径。
