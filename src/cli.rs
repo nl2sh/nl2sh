@@ -12,10 +12,28 @@ pub enum ApiTypeArg {
     ChatCompletions,
     Responses,
 }
-#[derive(Debug, Clone, Copy, Subcommand)]
+#[derive(Debug, Clone, Subcommand)]
 pub enum Command {
     /// Check for and install the latest compatible GitHub Release.
     Update,
+    /// Machine-readable, non-interactive interface for a trusted local bridge.
+    Bridge {
+        #[command(subcommand)]
+        command: BridgeCommand,
+    },
+}
+#[derive(Debug, Clone, Subcommand)]
+pub enum BridgeCommand {
+    /// Return bounded, read-only Android environment facts.
+    Inspect,
+    /// Return the configured model-facing tool catalog.
+    Tools,
+    /// Run the Agent with a bounded base64url JSON request and stored history.
+    Ask {
+        /// Base64url without padding, containing {session,message} JSON.
+        #[arg(long)]
+        payload_base64: String,
+    },
 }
 impl From<ApiTypeArg> for nl2sh::config::ApiType {
     fn from(value: ApiTypeArg) -> Self {

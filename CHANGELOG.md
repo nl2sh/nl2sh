@@ -1,5 +1,8 @@
 # Changelog
 
+- Add a stdio MCP adapter that discovers the A2A gateway, authenticates requests, and exposes device inspection, tool listing, consultation, and task lookup to coding agents.
+- Add an optional host-side A2A 1.0 gateway with Agent Card discovery, authenticated JSON-RPC tasks, persistent context, and a narrow Android bridge. Add explicit build/deploy checkpoints and reject unattended device modifications through the existing confirmation boundary.
+
 ## [Unreleased]
 
 ### Changed

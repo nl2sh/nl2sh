@@ -1,0 +1,21 @@
+[project]
+name = "nl2sh-a2a-gateway"
+version = "0.1.0"
+description = "Host-side A2A gateway for an Android nl2sh agent"
+requires-python = ">=3.11"
+dependencies = [
+  "a2a-sdk[http-server,sqlite]>=1.1.5,<1.2",
+  "mcp>=2,<3",
+  "uvicorn>=0.30,<1",
+]
+
+[project.scripts]
+nl2sh-a2a = "nl2sh_a2a.__main__:main"
+nl2sh-a2a-mcp = "nl2sh_a2a.mcp_adapter:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nl2sh_a2a"]

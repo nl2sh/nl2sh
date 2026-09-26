@@ -26,6 +26,10 @@ Root / su Layer
 Android Runtime
 ```
 
+可选 `a2a_gateway/` 是主机侧独立 Python 模块：A2A 1.0 Agent Card/JSON-RPC、Bearer 认证和 SQLite Task Store → 固定设备序列号的 `adb exec-out` → Android 单文件程序的 `bridge inspect|tools|ask`。`src/bridge` 只提供有界 JSON 输入输出和设备会话续接；Agent 决策、工具注册、安全分类与执行仍在 Rust 核心。A2A `contextId` 映射到私有设备会话；主机侧按会话串行处理消息。桥接确认器拒绝所有需要人工确认的操作，并把失败工具结果反馈给调用方。构建、交叉编译和候选部署是主机侧显式工作流，不作为远程 A2A 技能暴露；候选文件不会覆盖现有设备程序。网关默认仅监听 loopback，远程访问需 HTTPS 反向代理。
+
+同一 Python 包的可选 stdio MCP 适配层在编码 Agent 所在机器运行：MCP 工具 → Agent Card 同来源校验 → 带 Bearer 鉴权的 A2A JSON-RPC → 网关。它公开环境盘点、工具目录、咨询和任务查询，返回 A2A 任务与设备结果；不直接连接 adb，也不增加写入批准入口。
+
 用户输入先成为内部对话消息。Provider 把统一请求映射为 Chat Completions 或 Responses JSON；Tool Call 被转换回内部类型。Agent 只能把 shell tool 交给安全引擎，确认完成后才能调用执行器。stdout、stderr、退出码、超时和错误被编码为 Tool Result，下一轮模型只能依据这些真实结果回答。
 
 TUI 中以 `!` 开头的输入是显式本地命令：去掉前缀后不请求 Provider，而是直接进入同一 `Security → Confirmation → Execution` 边界，并在当前会话界面显示有界实时输出和退出状态。该输入与结果不加入模型上下文；修改、危险、Root 和用户编辑后的命令仍按完整规则重新分类及确认。交互式命令继续通过既有 PTY 挂起、恢复和清屏过滤路径执行。
@@ -76,6 +80,8 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/tools/ui` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
+| `src/bridge` | 固定环境盘点、工具目录和有界 JSON Agent 调用 | `bridge` CLI → JSON / 私有会话 | 只调用现有 Runner；无人值守确认一律拒绝；不开放任意 adb 命令 |
+| `a2a_gateway` | 主机侧 A2A Agent Card、JSON-RPC、鉴权、Task Store、adb 传输、stdio MCP 适配及显式构建部署 | MCP → A2A 消息 → Android bridge 结果 | 不在设备运行；不直接执行模型输出；部署仅到独立候选路径 |
 | `src/tools` | `Tool`、显式 `ToolRegistry`、风险/能力元数据、派生 schema 与 `PreparedToolCall` | 模型调用 → 预备动作 → 审批后有界结果 | 只用本地元数据定风险；修改预览必须在统一确认入口批准后执行 |
 | `crates/nl2sh-tool-macros` | 编译期 `#[tool]` 生成适配器与元数据 | 注解函数 → Rust Tool 实现 | 只在构建主机运行；不自动注册或授予执行权限 |
 | `src/security` | normalize、side-effect 分类、内置/自定义规则、`SecurityAssessment` | 原始命令 → 风险和确认要求 | 不依赖 TUI、LLM 或执行器 |

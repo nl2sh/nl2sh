@@ -1,7 +1,7 @@
 mod cli;
 use anyhow::{Context, Result};
 use clap::Parser;
-use cli::{Cli, Command, Mode};
+use cli::{BridgeCommand, Cli, Command, Mode};
 use nl2sh::{
     agent::{
         android_shell_constraints, AgentRunner, ConfirmationDecision, Confirmer, StdioConfirmer,
@@ -20,6 +20,16 @@ async fn main() -> Result<()> {
         Some(p) => p.clone(),
         None => config::default_config_path()?,
     };
+    if let Some(Command::Bridge { command }) = &cli.command {
+        let operation = match command {
+            BridgeCommand::Inspect => nl2sh::bridge::BridgeOperation::Inspect,
+            BridgeCommand::Tools => nl2sh::bridge::BridgeOperation::Tools,
+            BridgeCommand::Ask { payload_base64 } => nl2sh::bridge::BridgeOperation::Ask {
+                payload_base64: payload_base64.clone(),
+            },
+        };
+        return nl2sh::bridge::run(operation, &path).await;
+    }
     let mut cfg = load_runtime_config(&path, &cli)?;
     if matches!(cli.command, Some(Command::Update)) {
         return run_update(&cfg).await;

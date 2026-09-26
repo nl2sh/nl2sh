@@ -4,6 +4,12 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- A2A→MCP 中英文文档补齐 Codex 所在机器的逐步安装方法：复制尚未推送的网关模块、创建独立 Python 3.11+ 虚拟环境、安装 wheel、建立 SSH 隧道或 HTTPS 连接、传入令牌、配置 Codex stdio MCP 并调用设备盘点验证。全新 Python 3.11 虚拟环境按文档执行 `pip install .` 成功，入口程序和包导入检查通过。
+- 新增独立 stdio MCP 适配层，供 Codex 通过 A2A 1.0 网关调用设备盘点、工具目录、Agent 咨询和任务查询；续问保留 `context_id`，结果保留失败工具信息。适配层验证 Agent Card 同来源，远程仅允许 HTTPS；不直接连接 adb 或开放写入审批。Python 包补齐 wheel 文件选择，英文和中文文档均增加另一台机器的 Codex 配置方法。
+- MCP 适配层验证：Python 的 5 项网关/适配测试通过，覆盖 MCP 工具发现、MCP → A2A 调用、同上下文续问、持久任务查询、错误令牌及 Agent Card 跨来源拒绝；stdio MCP 客户端经连接设备的 A2A 网关获取环境、37 个工具和真实模型回复。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 与 `git diff --check` 通过。
+- A2A 网关保留英文 README，另提供逐项对应的简体中文文档；两种语言可从文档顶部互相跳转。
+- 新增独立主机侧 A2A 1.0 网关：Agent Card 发现、Bearer 鉴权、JSON-RPC Task、SQLite 持久化、多轮上下文续接及固定设备的 adb 传输；Android 单文件程序仅增加有界 `bridge inspect|tools|ask` 入口，复用现有 Agent、工具、安全分类和私有会话。远程桥接将宽松配置提升至至少 balanced/risk-only，所有待确认操作均拒绝，并返回失败工具结果。主机侧显式工作流完成检查、测试、按 ABI 交叉编译、摘要核验及独立候选路径部署，不替换现有程序。
+- A2A 网关验证：`python3 -m unittest discover -s a2a_gateway/tests -v` 的协议测试通过；`python3 -m nl2sh_a2a.workflow prepare` 执行 `cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 和 Android ARMv7 release 交叉编译通过，`deploy` 在连接设备上验证候选程序版本。设备端 A2A 链路验证 Agent Card、未认证请求 401、环境盘点、37 个工具发现、同上下文两轮续接、持久 Task 查询、真实模型回复；宽松配置下的修改探针被拒绝，目标文件未创建。
 - Web“查看手机存储”示例输入明确要求以图表展示设备存储总量、已用和剩余空间，并保持只读、不修改的任务约束。
 - Web 存储示例文案验证：`npm test --prefix web`、`npm run build --prefix web`、`cargo fmt --all -- --check` 和 `git diff --check` 通过。
 - 新增只读 `create_chart` 工具，对标题、来源、标签及非负有限数值设限；Web 对话直接显示柱状、折线或饼图和可展开数据表，已保存会话可从 Tool Result 恢复图表，TUI 显示文字数值。图表仅呈现模型提供的统计数据，不改变数据获取、安全确认、Root 或 PTY 路径。

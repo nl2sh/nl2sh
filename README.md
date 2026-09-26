@@ -8,6 +8,8 @@ Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环�
 
 “类 Hermes”指的是自主 Agent 的产品形态和 Tool Calling 交互方式；nl2sh 专注 Android shell，不声称与 Hermes 的 API、插件或全部功能兼容。
 
+可选的主机侧 [A2A 网关](a2a_gateway/README.md) 让其他 Agent 发现并调用连接设备上的 nl2sh，支持环境盘点、工具目录、多轮咨询与独立候选版本的构建部署验证。设备端仍是单个 Rust 可执行文件；无人值守的 A2A 调用不能批准修改或危险操作。
+
 ## 特性与安全边界
 
 - 默认使用多轮 Agent Tool Calling；也支持只生成单条命令的 Command 模式。
