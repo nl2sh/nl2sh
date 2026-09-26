@@ -4,6 +4,8 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- Web 会话中 `[OUT]`/`[ERR]` 仅在工具运行时显示；工具结果回填折叠卡片后清理对应实时输出，任务结束时也清理残留临时行，避免同一命令结果在卡片外重复出现。只改变 Web 会话展示历史，不影响 Tool Result、审批、安全分类、Android 或 PTY 执行路径。
+- Web 临时输出清理验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、Web `npm test --prefix web` 与 `git diff --check` 通过；Rust 回归确认实时 `stdout`/`stderr` 在工具运行时可见，结果回填后只保留工具卡片。
 - Web 安全终端解析 WebSocket 返回的命令结果，将 `stdout`、`stderr` 和退出状态分段显示，JSON 中的转义换行恢复为实际换行；窄屏长文本可折行，普通错误消息仍按原文显示。只改变浏览器呈现，不改变命令安全分类、审批、执行、Android 或 PTY 路径。
 - Web 安全终端换行验证：Web `npm test`、`npm run build`，Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 通过；Playwright 在 320px 视口用模拟 WebSocket 响应验证实际换行和无横向溢出。
 - Web 响应式布局经 Playwright 在 1920×1080、1280×800、768×900、390×844 和 320×568 视口检查：中等宽度顶栏可完整换行，窄屏会话列表改为顶部横向滚动，对话输入、配置分类与字段使用可用宽度；快速开始缩短说明，高级快捷设置改为横向滚动，短屏快速开始与审批的操作按钮保持可见。仅改变浏览器静态页面，不影响 Web 默认 IPv4 监听、免登录、安全确认、Android 或 PTY 路径。

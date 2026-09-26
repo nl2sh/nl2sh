@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Remove temporary `[OUT]` and `[ERR]` lines from Web conversations once the matching tool result is available, so completed output appears only in its collapsible card.
 - Render Web safety terminal command results as separate stdout, stderr, and exit-status lines, with wrapped long text on narrow screens.
 - Improve Web layouts across desktop, tablet, and narrow mobile widths: wrap the tablet header, move sessions into a horizontal strip on mobile, expand conversation and configuration space, and keep quick-start and approval actions visible on short screens.
 - Put DeepSeek first in Web Quick Start with `deepseek-flash` prefilled and include all built-in provider choices plus Custom. OpenAI uses its official endpoint; Custom keeps the editable Base URL.

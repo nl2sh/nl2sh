@@ -1241,9 +1241,16 @@ fn push(inner: &mut SessionState, line: String) {
     }
 }
 
+fn clear_live_tool_output(inner: &mut SessionState) {
+    inner
+        .history
+        .retain(|line| !line.starts_with("[OUT]") && !line.starts_with("[ERR]"));
+}
+
 async fn run_message(state: Arc<Shared>, current: Arc<WebSession>, text: String) {
     let result = run_agent(state.clone(), current.clone(), text).await;
     if let Ok(mut inner) = current.inner.lock() {
+        clear_live_tool_output(&mut inner);
         if let Err(error) = result {
             push(&mut inner, format!("❌ {error:#}"));
         }
@@ -1486,6 +1493,7 @@ impl TextDeltaSink for WebTextSink {
 
     fn tool_finished(&self, call_id: &str, output: &str, success: bool) {
         if let Ok(mut inner) = self.session.inner.lock() {
+            clear_live_tool_output(&mut inner);
             let result = format!(
                 "{}{}",
                 if success {
@@ -1703,6 +1711,49 @@ mod tests {
                 WebEntry {
                     kind: "tool_result",
                     text: "second result".into(),
+                },
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn live_shell_output_disappears_when_tool_result_is_ready() -> Result<()> {
+        let state = state(PathBuf::from("unused.toml"));
+        let current = session(&state, "web-test")?;
+        let sink = WebTextSink {
+            session: current.clone(),
+        };
+        let output = WebOutput {
+            session: current.clone(),
+        };
+
+        sink.tool_started("shell", "execute_shell_command");
+        output.stdout("14");
+        output.stderr("warning");
+        {
+            let inner = current.inner.lock().map_err(|_| anyhow!("lock poisoned"))?;
+            assert_eq!(
+                web_entries(&inner.history)
+                    .iter()
+                    .filter(|entry| entry.kind == "tool_output")
+                    .count(),
+                2
+            );
+        }
+
+        sink.tool_finished("shell", "stdout:\n14\nstderr:\nwarning", true);
+        let inner = current.inner.lock().map_err(|_| anyhow!("lock poisoned"))?;
+        assert_eq!(
+            web_entries(&inner.history),
+            vec![
+                WebEntry {
+                    kind: "tool_call",
+                    text: "execute_shell_command".into(),
+                },
+                WebEntry {
+                    kind: "tool_result",
+                    text: "stdout:\n14\nstderr:\nwarning".into(),
                 },
             ]
         );
