@@ -4,6 +4,7 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- 项目介绍与计划按当前模块同步：Android 单文件程序包含 TUI、Web 多会话和结构化工具；可选主机侧 A2A/MCP 网关支持设备盘点与 Agent 咨询，拒绝所有需要人工确认的操作。公开发布版本为 1.0.2；TUR 配方 PR #2804 已合并。
 - TUI 完整 Agent 首轮保存后复用 Web 的无工具短标题生成器，`/sessions` 显示标题；后续自动保存、恢复与重命名保留标题。标题生成失败不阻断回答或会话保存，本地命令不触发生成。
 - Web 会话摘要增加独立创建时间，侧栏轮数或运行状态后显示相对时间；满一天后显示本地日期和时刻。旧快照从系统生成的会话 ID 推算创建时间，后续保存和重命名保持不变。
 - 会话标题与创建时间验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`，Web `npm run build --prefix web`、`npm test --prefix web`，Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 及 `git diff --check` 通过；TUI 伪终端回归确认真实首轮回复后自动标题写入私有快照，存储回归确认旧快照时间恢复、续存与重命名保留创建时间。
@@ -146,12 +147,12 @@ Last Updated: 2026-09-26
 
 ## Current Phase
 
-Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR 上游配方仍在等待 CI/Review。
+1.0.2 已发布；TUI、Web 多会话、结构化工具和可选 A2A/MCP 网关均已实现。TUR 上游配方已合并，后续工作集中在兼容性与体验改进。
 
 ## Overall Status
 
 - Product positioning: 以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent；核心程序以单个可执行文件交付，提供多轮 Tool Calling 和丰富 TUI，不声称与 Hermes API 或插件兼容。
-- Build status: 1.0.1 的 stable Rust 检查、Clippy 与 AArch64 API 26 包管理版 release 交叉编译通过。
+- Build status: 1.0.2 的 stable Rust 检查、Clippy 与 Android API 26 双 ABI release 交叉编译通过。
 - Test status: 全量 `cargo test --all-targets` 通过；显式凭据 ima live smoke 按设计忽略。
 - Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
@@ -210,14 +211,14 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 - 命令审批改为固定 `1-6` 列表，支持方向键/Enter 与 `y/n/a/e/i/t` 别名；可在当前 Agent 任务内记住完全相同的普通命令，但 Root、Dangerous、Critical 和强确认命令始终禁用该选项，且许可不持久化、不做前缀匹配。
 - 审批区域使用完整风险色边框和统一 `background_alt` 面板背景；阶段切换保持稳定最小高度并清空整个面板，避免列表字符残留到强确认或编辑画面。
 - 审批面板锚定在输入区正上方的左下角；初始审批忽略孤立 Esc 和大写 CSI 尾字符，避免 adb 将方向键拆分后误触拒绝或 always 导致弹窗消失。
-- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.1。
+- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.2。
 - 实时 TUI、捕获式工具结果、发给模型的 Tool Result、JSONL 单事件和单文件均有可配置上限；截断会插入明确标记。
 - TUI 输出与历史生命周期已从 session 控制器拆为独立模块，同时保留新的审批菜单和任务级精确命令许可。
 - 真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵已完成，覆盖提权与确认链、超时回收，以及全屏程序退出后的终端恢复和 TUI 重绘。
 
 ## In Progress
 
-- TUR PR #2804 已提交并完成首轮 review 修改；分支已 rebase 到包含重复 `bazel` 配方修复的上游 `master`，新一轮 Actions 等待 TUR maintainer 批准运行，批准后继续跟进四架构 CI 与 review。
+- 持续验证不同 Android 设备、终端和窄屏布局下的交互与终端恢复。
 
 ## Pending / Known Issues
 
@@ -237,6 +238,8 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 
 ## Verification Performed
 
+- 文档同步验证：Linux 目标 `git diff --check`、`cargo fmt --all -- --check`、`cargo check` 与 `cargo test` 通过；默认测试 1 项显式凭据 ima smoke 按设计忽略。
+- GitHub 公开发布与上游记录核对：`v1.0.2` Release 已发布，TUR PR #2804 于 2026-09-15 合并。
 - `v1.0.2` 发布门禁：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`cargo build --release`、前端测试/生产构建、Release workflow 静态检查和发布相关 Bash 语法检查通过；NDK r28c/API 26 的 AArch64 与 ARMv7 release 交叉编译通过，分别验证为使用 `/system/bin/linker64` 的 64 位 PIE 和 `/system/bin/linker` 的 32 位 PIE。
 - Web 工具调用实时显示：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --all-targets`、`cargo clippy --all-targets -- -D warnings` 和 `cargo test --all-targets` 通过；回归覆盖工具开始即进入消息列表、完成结果按 `call_id` 配对、乱序完成映射及 Runner 开始/完成事件顺序。全量测试为 129 项有效库测试、3 项主程序测试、20 项 Agent loop 测试及其余集成/PTY/TUI 测试通过，1 项显式凭据 ima live smoke 按设计忽略。
 - Web 输入区状态与统计布局：主机目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，以及前端 `npm test --prefix web`、`npm run build --prefix web`、`git diff --check` 通过。
@@ -319,4 +322,4 @@ Android 交互闭环与结构化运维工具已实现并进入验证；1.0.1 TUR
 ## Next Steps
 
 1. 根据真机结果继续优化窄屏布局和全屏交互程序切换。
-2. 跟进 TUR PR #2804 的四架构 CI 与 Review。
+2. 持续核对发布说明与新增模块文档，验证不同 Android 设备和 Termux 终端。

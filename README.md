@@ -4,17 +4,18 @@
 
 <h1 align="center">nl2sh</h1>
 
-Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环境、同时兼容 Termux 的类 Hermes AI Agent。直接 Android 部署以单个可执行文件交付，无需 Termux 或设备端运行时依赖；Termux 用户可选择包管理安装。丰富的 TUI 用于多轮对话、实时命令输出、安全确认、历史浏览和配置。它把自然语言交给 OpenAI 兼容模型，通过 Tool Calling 生成命令，在本地安全分类和确认之后执行，并把真实结果返回模型。
+Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环境、同时兼容 Termux 的类 Hermes AI Agent。直接 Android 部署以单个可执行文件交付，无需 Termux 或设备端运行时依赖；Termux 用户可选择包管理安装。它提供丰富的 TUI 和内置 Web 多会话界面，用于对话、实时结果、安全确认、历史恢复和配置。自然语言任务由多轮 Tool Calling 连接 OpenAI 兼容模型与本地工具；需要执行的操作先经过本地安全分类和确认，再把真实结果返回模型。
 
 “类 Hermes”指的是自主 Agent 的产品形态和 Tool Calling 交互方式；nl2sh 专注 Android shell，不声称与 Hermes 的 API、插件或全部功能兼容。
 
-可选的主机侧 [A2A 网关](a2a_gateway/README.md) 让其他 Agent 发现并调用连接设备上的 nl2sh，支持环境盘点、工具目录、多轮咨询与独立候选版本的构建部署验证。设备端仍是单个 Rust 可执行文件；无人值守的 A2A 调用不能批准修改或危险操作。
+可选的主机侧 [A2A 网关](a2a_gateway/README.md) 和 stdio MCP 适配层让其他 Agent 发现并调用连接设备上的 nl2sh，支持环境盘点、工具目录、多轮咨询与任务查询。构建和独立候选版本部署是主机侧显式工作流，不作为远程 Agent 技能。设备端仍是单个 Rust 可执行文件；无人值守的 A2A/MCP 调用不能批准修改或危险操作。
 
 ## 特性与安全边界
 
 - 默认使用多轮 Agent Tool Calling；也支持只生成单条命令的 Command 模式。
 - 核心程序是单文件 Android 可执行程序，可直接推送到设备运行。
 - 丰富 TUI 支持 LLM 文本流式渐变输出、实时状态与命令输出、内嵌确认、历史滚动、工具结果折叠、Markdown 渲染、中英文界面和热重配置。
+- 内置 Web 支持多个独立 Agent 会话、流式结果、图表、审批与配置；进行中任务保存脱敏检查点，重启后可查看中断诊断，不自动续跑。
 - 内置 `read_file`、`list_dir`、`search_text`、`apply_patch` 结构化文件工具；允许绝对路径、父目录和符号链接，资源大小仍受限，补丁先展示 diff 并确认。
 - 内置 `analyze_audio` 对 WAV/Raw PCM 做纯 Rust 确定性 DSP 分析；WAV 以真实 header 为准，无头 PCM 缺少可靠元数据时弹出结构化问答窗口，可直接选择常用值或输入自定义采样率、声道数和采样格式，不会把猜测当事实。
 - 内置 `judge_audio_quality` 对 Feature JSON 做多维音质判断；配置 Jev Key 时使用 Jev，否则使用当前通用 LLM，原始 WAV 不上传给判断模型。
@@ -150,7 +151,7 @@ $env:ANDROID_NDK_HOME = "C:\Android\Sdk\ndk\28.2.13676358"
 
 ### Termux APT 安装
 
-推荐通过 Termux User Repository（TUR）安装。TUR 合并 `tur/nl2sh/build.sh` 配方后可使用：
+推荐通过 Termux User Repository（TUR）安装。`tur/nl2sh/build.sh` 配方已合并，可使用：
 
 ```bash
 pkg install tur-repo

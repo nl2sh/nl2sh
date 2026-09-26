@@ -1,8 +1,5 @@
 # Changelog
 
-- Add a stdio MCP adapter that discovers the A2A gateway, authenticates requests, and exposes device inspection, tool listing, consultation, and task lookup to coding agents.
-- Add an optional host-side A2A 1.0 gateway with Agent Card discovery, authenticated JSON-RPC tasks, persistent context, and a narrow Android bridge. Add explicit build/deploy checkpoints and reject unattended device modifications through the existing confirmation boundary.
-
 ## [Unreleased]
 
 ### Changed
@@ -23,6 +20,8 @@
 
 ### Added
 
+- Add a stdio MCP adapter that discovers the A2A gateway, authenticates requests, and exposes device inspection, tool listing, consultation, and task lookup to coding agents.
+- Add an optional host-side A2A 1.0 gateway with Agent Card discovery, authenticated JSON-RPC tasks, persistent context, and a narrow Android bridge. Add explicit build/deploy checkpoints and reject unattended device modifications through the existing confirmation boundary.
 - Added a Web task stop control, a model-free read-only device overview, example prompts in the tool catalog, and keyboard focus management for modal dialogs.
 - Add a bounded read-only chart tool for statistical results. Web conversations render bar, line, and pie charts with a data table and restore them from saved sessions; TUI displays the values as text.
 - Add a Web quick-start flow for provider setup and model-list connection checking, read-only first-task examples, automatic session creation on first send, actionable error hints, and a beginner guide. The Web server continues to listen on every IPv4 interface without login.
