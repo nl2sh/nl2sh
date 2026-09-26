@@ -4,6 +4,8 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- Web 体验增加会话级任务停止、真实模型请求连接测试、无需模型的只读设备概览、中文分类工具目录及示例提问、按工具结果生成的完整/部分/失败摘要，并补齐弹窗键盘焦点管理。停止任务复用进程组信号和等待回收；待确认操作被拒绝，其他工具在当前操作结束后停止，安全分类与审批链保持不变。
+- Web 体验验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test --lib`、`cargo clippy --all-targets -- -D warnings`、`npm test --prefix web`、`npm run build --prefix web` 与 Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 通过；回归覆盖捕获式进程组取消、待审批取消、真实模型短请求、无模型设备概览及工具结果摘要。
 - A2A 网关中英文 Windows 安装说明补充镜像源缺少 `hatchling` 时的一次性官方 PyPI 重试命令及 pip 配置排查方法；不改动 Python 包构建后端或全局 pip 配置。
 - A2A 网关中英文说明补齐 Windows PowerShell 命令：原生 Windows 启动网关、运行测试、安装 Codex MCP 适配层、通过 SSH 隧道连接、设置令牌与配置 `.exe` 入口；显式说明构建部署检查点需在具备 Android 构建工具链的 WSL 环境运行。
 - A2A→MCP 中英文文档补齐 Codex 所在机器的逐步安装方法：复制尚未推送的网关模块、创建独立 Python 3.11+ 虚拟环境、安装 wheel、建立 SSH 隧道或 HTTPS 连接、传入令牌、配置 Codex stdio MCP 并调用设备盘点验证。全新 Python 3.11 虚拟环境按文档执行 `pip install .` 成功，入口程序和包导入检查通过。

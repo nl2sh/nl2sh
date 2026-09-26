@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use std::ffi::OsString;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use tokio::sync::watch;
 #[derive(Clone)]
 /// Fully resolved process invocation used by PTY and pipeline backends.
 pub struct ExecutionRequest {
@@ -28,6 +29,8 @@ pub struct ExecutionRequest {
     pub tui_active: bool,
     /// Shared flag telling the TUI not to draw while a fullscreen child owns the terminal.
     pub tui_suspended: Option<Arc<AtomicBool>>,
+    /// Optional request-scoped cancellation signal for captured execution.
+    pub cancel: Option<watch::Receiver<bool>>,
 }
 #[derive(Debug, Clone)]
 /// Captured outcome of a shell command.
@@ -102,6 +105,7 @@ pub struct ShellExecutor {
     output: Arc<dyn OutputSink>,
     tui_active: bool,
     tui_suspended: Option<Arc<AtomicBool>>,
+    cancel: Option<watch::Receiver<bool>>,
 }
 impl ShellExecutor {
     /// Creates an executor with system root detection and no live output sink.
@@ -112,6 +116,7 @@ impl ShellExecutor {
             output: Arc::new(NullOutput),
             tui_active: false,
             tui_suspended: None,
+            cancel: None,
         }
     }
     /// Creates an executor with a mockable root probe.
@@ -122,11 +127,18 @@ impl ShellExecutor {
             output: Arc::new(NullOutput),
             tui_active: false,
             tui_suspended: None,
+            cancel: None,
         }
     }
     /// Replaces the incremental output destination.
     pub fn with_output(mut self, output: Arc<dyn OutputSink>) -> Self {
         self.output = output;
+        self
+    }
+
+    /// Installs a request-scoped cancellation signal for captured commands.
+    pub fn with_cancel(mut self, cancel: watch::Receiver<bool>) -> Self {
+        self.cancel = Some(cancel);
         self
     }
 
@@ -184,6 +196,7 @@ impl ShellExecutor {
             capture_max_bytes: self.config.tool_output_max_bytes,
             tui_active: self.tui_active,
             tui_suspended: self.tui_suspended.clone(),
+            cancel: self.cancel.clone(),
         };
         let _activity = TuiActivityGuard::new(req.interactive, req.tui_suspended.clone());
         if req.use_pty {

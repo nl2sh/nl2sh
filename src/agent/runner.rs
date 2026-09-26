@@ -51,6 +51,7 @@ impl std::error::Error for AgentRunFailure {
         self.source.source()
     }
 }
+use tokio::sync::watch;
 use tokio::time::timeout;
 /// Dependencies for one bounded Agent tool loop.
 pub struct AgentRunner<'a> {
@@ -95,7 +96,7 @@ impl AgentRunner<'_> {
         input: &str,
         history: &[Vec<ConversationItem>],
     ) -> Result<AgentOutcome> {
-        self.run_inner(input, history, None).await
+        self.run_inner(input, history, None, None).await
     }
 
     async fn run_inner(
@@ -103,6 +104,7 @@ impl AgentRunner<'_> {
         input: &str,
         history: &[Vec<ConversationItem>],
         text_sink: Option<&dyn TextDeltaSink>,
+        cancel: Option<watch::Receiver<bool>>,
     ) -> Result<AgentOutcome> {
         let mut system = system_prompt(
             self.executor
@@ -150,6 +152,13 @@ impl AgentRunner<'_> {
             .min(super::SYSTEM_HARD_MAX_AGENT_STEPS);
         let mut stopped_by = None;
         for step in 1..=effective_steps {
+            if cancel.as_ref().is_some_and(|signal| *signal.borrow()) {
+                return Err(AgentRunFailure {
+                    source: anyhow::anyhow!("task cancelled by user"),
+                    transcript,
+                }
+                .into());
+            }
             if runtime.active_time()
                 >= Duration::from_secs(self.config.max_task_execution_time_secs)
             {
@@ -178,14 +187,21 @@ impl AgentRunner<'_> {
             }
             let remaining = Duration::from_secs(self.config.max_task_execution_time_secs)
                 .saturating_sub(runtime.active_time());
-            let response = timeout(remaining, async {
-                if let Some(sink) = text_sink {
-                    self.llm.complete_stream(request, sink).await
-                } else {
-                    self.llm.complete(request).await
+            let response = tokio::select! {
+                response = timeout(remaining, async {
+                    if let Some(sink) = text_sink {
+                        self.llm.complete_stream(request, sink).await
+                    } else {
+                        self.llm.complete(request).await
+                    }
+                }) => response,
+                _ = wait_cancel(cancel.clone()) => {
+                    return Err(AgentRunFailure {
+                        source: anyhow::anyhow!("task cancelled by user"),
+                        transcript,
+                    }.into());
                 }
-            })
-            .await;
+            };
             let response = match response {
                 Ok(Ok(response)) => response,
                 Ok(Err(source)) => {
@@ -233,6 +249,9 @@ impl AgentRunner<'_> {
             let mut round_calls = Vec::new();
             let mut step_made_progress = false;
             'tool_calls: for call in calls.iter().cloned() {
+                if cancel.as_ref().is_some_and(|signal| *signal.borrow()) {
+                    break 'tool_calls;
+                }
                 if runtime.tool_calls_used >= self.config.max_tool_calls {
                     stopped_by = Some(LimitType::ToolCalls);
                     break 'tool_calls;
@@ -417,6 +436,17 @@ impl AgentRunner<'_> {
                 }
                 let mut result = match execution {
                     Ok(x) if x.interrupted => {
+                        if cancel.as_ref().is_some_and(|signal| *signal.borrow()) {
+                            let result = self.tool_error_result(
+                                &call.id,
+                                format!(
+                                    "executed_command={command}\nstatus=cancelled interrupted=true\nstdout:\n{}\nstderr:\n{}",
+                                    x.stdout, x.stderr
+                                ),
+                            );
+                            push_tool_result(&mut results, result, text_sink);
+                            break 'tool_calls;
+                        }
                         bail!("agent interrupted during command execution")
                     }
                     Ok(x) => {
@@ -622,7 +652,32 @@ impl AgentRunner<'_> {
         history: Vec<Vec<ConversationItem>>,
         text_sink: &dyn TextDeltaSink,
     ) -> Result<AgentOutcome> {
-        self.run_inner(&input, &history, Some(text_sink)).await
+        self.run_inner(&input, &history, Some(text_sink), None)
+            .await
+    }
+
+    /// Streams a UI task while honoring a request-scoped cancellation signal.
+    pub async fn run_with_history_streaming_cancellable(
+        &self,
+        input: String,
+        history: Vec<Vec<ConversationItem>>,
+        text_sink: &dyn TextDeltaSink,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<AgentOutcome> {
+        self.run_inner(&input, &history, Some(text_sink), Some(cancel))
+            .await
+    }
+}
+
+async fn wait_cancel(mut signal: Option<watch::Receiver<bool>>) {
+    let Some(ref mut receiver) = signal else {
+        std::future::pending::<()>().await;
+        return;
+    };
+    while !*receiver.borrow() {
+        if receiver.changed().await.is_err() {
+            return;
+        }
     }
 }
 

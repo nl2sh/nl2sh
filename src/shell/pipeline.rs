@@ -5,9 +5,13 @@ use std::process::Stdio;
 use tokio::{
     io::{AsyncReadExt, BufReader},
     process::Command,
+    sync::watch,
     time::Duration,
 };
 pub async fn execute(req: ExecutionRequest) -> Result<ExecutionResult> {
+    if req.cancel.as_ref().is_some_and(|cancel| *cancel.borrow()) {
+        anyhow::bail!("command cancelled before execution");
+    }
     let mut cmd = Command::new(&req.program);
     cmd.args(&req.args)
         .stdin(if req.interactive {
@@ -35,23 +39,26 @@ pub async fn execute(req: ExecutionRequest) -> Result<ExecutionResult> {
         Status(std::process::ExitStatus),
         Timeout,
         Interrupted,
+        Cancelled,
     }
     let end = if req.timeout_secs == 0 {
         tokio::select! {
             status = child.wait() => End::Status(status?),
             signal = tokio::signal::ctrl_c() => { signal?; End::Interrupted }
+            _ = cancelled(req.cancel.clone()) => End::Cancelled,
         }
     } else {
         tokio::select! {
             status = child.wait() => End::Status(status?),
             _ = tokio::time::sleep(Duration::from_secs(req.timeout_secs)) => End::Timeout,
             signal = tokio::signal::ctrl_c() => { signal?; End::Interrupted }
+            _ = cancelled(req.cancel.clone()) => End::Cancelled,
         }
     };
     let (timed, interrupted, status) = match end {
         End::Status(status) => (false, false, Some(status)),
-        End::Timeout | End::Interrupted => {
-            let interrupted = matches!(end, End::Interrupted);
+        End::Timeout | End::Interrupted | End::Cancelled => {
+            let interrupted = matches!(end, End::Interrupted | End::Cancelled);
             if interrupted {
                 process::signal_group(pid, nix::sys::signal::Signal::SIGINT);
                 tokio::time::sleep(Duration::from_millis(250)).await;
@@ -80,6 +87,17 @@ pub async fn execute(req: ExecutionRequest) -> Result<ExecutionResult> {
         interrupted,
     })
 }
+async fn cancelled(mut signal: Option<watch::Receiver<bool>>) {
+    let Some(ref mut receiver) = signal else {
+        std::future::pending::<()>().await;
+        return;
+    };
+    while !*receiver.borrow() {
+        if receiver.changed().await.is_err() {
+            return;
+        }
+    }
+}
 async fn read<R: tokio::io::AsyncRead + Unpin>(
     r: R,
     e: bool,
@@ -104,4 +122,35 @@ async fn read<R: tokio::io::AsyncRead + Unpin>(
         }
     }
     captured.finish()
+}
+
+#[cfg(all(test, not(target_os = "android")))]
+mod tests {
+    use super::*;
+    use crate::shell::NullOutput;
+    use std::{ffi::OsString, sync::Arc};
+
+    #[tokio::test]
+    async fn cancellation_reaps_captured_process_group() -> Result<()> {
+        let (sender, receiver) = watch::channel(false);
+        let request = ExecutionRequest {
+            program: OsString::from("/bin/sh"),
+            args: vec![OsString::from("-c"), OsString::from("sleep 30")],
+            timeout_secs: 30,
+            use_pty: false,
+            interactive: false,
+            output: Arc::new(NullOutput),
+            capture_max_bytes: 1024,
+            tui_active: false,
+            tui_suspended: None,
+            cancel: Some(receiver),
+        };
+        let task = tokio::spawn(execute(request));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        sender.send_replace(true);
+        let result = tokio::time::timeout(Duration::from_secs(5), task).await???;
+        assert!(result.interrupted);
+        assert!(!result.timed_out);
+        Ok(())
+    }
 }

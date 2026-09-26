@@ -63,6 +63,7 @@ button:disabled { opacity: .45; }
 .activity i { flex: none; width: .5rem; height: .5rem; border-radius: 50%; background: var(--text-muted); }
 .activity.thinking i, .activity.tool i { background: var(--accent); }
 .activity.waiting i { background: var(--warning); }
+.activity.cancelling i { background: var(--warning); }
 .session-metrics { white-space: normal; overflow-wrap: anywhere; }
 .chat, .config { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 1rem; }
 .history { flex: 1; overflow: auto; background: var(--background); border: 1px solid var(--border); border-radius: 9px; padding: 1rem; }
@@ -77,6 +78,10 @@ button:disabled { opacity: .45; }
 .tools summary { cursor: pointer; padding: .6rem; color: var(--cyan); }
 .tools pre { margin: 0; border-top: 1px solid var(--border); white-space: pre-wrap; color: var(--text-primary); }
 .tools pre.bad { color: var(--error); }
+.task-evidence { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin: .4rem .55rem .8rem; padding: .55rem .75rem; border-left: 3px solid var(--accent); background: var(--background-alt); font-size: .85rem; }
+.task-evidence p, .task-evidence details { width: 100%; margin: 0; }
+.task-evidence span { color: var(--text-secondary); }
+.stop-task { align-self: flex-start; margin-top: .45rem; color: var(--warning); border-color: var(--warning); }
 .composer { display: flex; gap: .6rem; margin-top: .7rem; }
 .composer textarea { flex: 1; min-width: 0; }
 .composer button { flex: none; min-width: 64px; white-space: nowrap; }
@@ -91,6 +96,11 @@ button:disabled { opacity: .45; }
 .catalog-list { overflow-y: auto; }
 .catalog-list article { padding: .7rem 0; border-top: 1px solid var(--border); }
 .catalog-list strong { color: var(--cyan); }
+.catalog-list small { display: block; margin-top: .25rem; color: var(--text-muted); }
+.catalog-list button { margin-top: .45rem; }
+.catalog-categories { display: flex; gap: .35rem; overflow-x: auto; margin-top: .7rem; }
+.catalog-categories button { white-space: nowrap; }
+.catalog-categories button[aria-pressed="true"] { border-color: var(--border-focus); color: var(--accent); }
 .catalog-list p { margin: .35rem 0 0; color: var(--text-secondary); white-space: pre-wrap; }
 .composer textarea, .composer input, .config textarea, .modal textarea, .modal input { width: 100%; background: var(--background-alt); color: var(--text-primary); border: 1px solid var(--border); border-radius: 7px; padding: .7rem; }
 .composer textarea { min-height: 68px; }
@@ -116,6 +126,13 @@ button:disabled { opacity: .45; }
 .approval summary { cursor: pointer; color: var(--accent); }
 .approval textarea { min-height: 100px; }
 .welcome-cards { max-width: 720px; margin: 1rem auto; }
+.device-overview { margin-bottom: 1.2rem; padding: .8rem; border: 1px solid var(--border); border-radius: 9px; background: var(--background-alt); }
+.overview-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.overview-heading h2 { margin: 0; }
+.device-overview dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .6rem; margin: 0; }
+.device-overview dl div { padding: .45rem; background: var(--background); border-radius: 6px; }
+.device-overview dt { color: var(--text-secondary); font-size: .8rem; }
+.device-overview dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
 .welcome-cards h2 { color: var(--accent); font-size: 1.25rem; }
 .welcome-cards p { color: var(--text-secondary); }
 .example-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .6rem; }
@@ -241,6 +258,7 @@ button:disabled { opacity: .45; }
 }
 
 @media (max-width: 480px) {
+  .device-overview dl { grid-template-columns: 1fr; }
   .controls { flex-wrap: nowrap; }
   .controls label { flex: none; white-space: nowrap; }
   .controls input, .controls select { max-width: 135px; }

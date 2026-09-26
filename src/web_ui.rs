@@ -1,17 +1,17 @@
 //! Small embedded HTTP interface. All Agent actions use the same runner and confirmer as the TUI.
 use crate::{
     agent::{AgentRunner, ConfirmationDecision, Confirmer, QuestionAnswers, UserQuestion},
-    config::{self, Config, ConfirmPolicy},
+    config::{self, Config, ConfirmPolicy, ExecuteUserMode},
     file_references::{augment_file_references, file_suggestions},
     llm::{
-        build_client, ConversationItem, ConversationMessage, LlmRequest, Role, TextDeltaSink,
-        ToolRound,
+        build_client, ConversationItem, ConversationMessage, LlmClient, LlmRequest, Role,
+        TextDeltaSink, ToolRound,
     },
     provider_metadata::build_metadata_client,
     security::SecurityAssessment,
     sessions::SessionStore,
     shell::{CommandExecutor, ExecutionResult, OutputSink, ShellExecutor, SystemRootProbe},
-    tools::builtin_tools,
+    tools::{android::environment::inspect_environment, Capability, ToolRegistry},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -41,7 +41,7 @@ use std::{
 };
 use tokio::{
     net::TcpListener,
-    sync::{broadcast, oneshot},
+    sync::{broadcast, oneshot, watch},
 };
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -86,6 +86,7 @@ struct Shared {
 struct WebSession {
     inner: Mutex<SessionState>,
     events: broadcast::Sender<String>,
+    cancel: watch::Sender<bool>,
     terminal_clients: AtomicUsize,
 }
 
@@ -140,9 +141,11 @@ impl SessionState {
 
 fn web_session(inner: SessionState) -> Arc<WebSession> {
     let (events, _) = broadcast::channel(128);
+    let (cancel, _) = watch::channel(false);
     Arc::new(WebSession {
         inner: Mutex::new(inner),
         events,
+        cancel,
         terminal_clients: AtomicUsize::new(0),
     })
 }
@@ -437,6 +440,8 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/config/render", post(render_config))
         .route("/api/quick-settings", get(get_quick_settings).post(save_quick_settings))
         .route("/api/models", get(get_models))
+        .route("/api/model-check", post(check_model))
+        .route("/api/device-overview", get(get_device_overview))
         .route("/api/tools", get(get_tools))
         .route("/api/file-suggestions", get(get_file_suggestions))
         .route("/api/sessions", get(get_sessions))
@@ -446,6 +451,7 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/sessions/delete-all", post(delete_all_sessions))
         .route("/api/sessions/export", get(export_session))
         .route("/api/message", post(post_message))
+        .route("/api/message/cancel", post(cancel_message))
         .route("/api/decision", post(post_decision))
         .route("/api/events", get(session_events))
         .route("/api/terminal/{id}", get(terminal_upgrade))
@@ -789,19 +795,80 @@ async fn get_models(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<serd
 }
 
 #[derive(Serialize)]
+struct ModelCheck {
+    ok: bool,
+}
+
+async fn check_model(State(state): State<Arc<Shared>>) -> ApiResult<Json<ModelCheck>> {
+    let cfg = load_config(state.path.clone()).await?;
+    if !cfg.provider_is_configured() {
+        return Err(ApiError::bad(anyhow!("model provider is not configured")));
+    }
+    let client = build_client(&cfg)?;
+    let request = LlmRequest {
+        model: cfg.model.clone(),
+        items: vec![ConversationItem::Message(ConversationMessage::new(
+            Role::User,
+            "Reply with OK.",
+        ))],
+        tools: Vec::new(),
+    };
+    let response =
+        tokio::time::timeout(std::time::Duration::from_secs(30), client.complete(request))
+            .await
+            .map_err(|_| anyhow!("model check timed out"))??;
+    if response
+        .text
+        .as_deref()
+        .is_none_or(|text| text.trim().is_empty())
+    {
+        return Err(ApiError::bad(anyhow!("model returned no text")));
+    }
+    Ok(Json(ModelCheck { ok: true }))
+}
+
+async fn get_device_overview(
+    State(state): State<Arc<Shared>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let path = state.path.clone();
+    let mut cfg =
+        tokio::task::spawn_blocking(move || config::load_or_default_unvalidated(&path)).await??;
+    cfg.execute_user_mode = ExecuteUserMode::Normal;
+    cfg.enable_pty = false;
+    cfg.execute_timeout_secs = cfg.execute_timeout_secs.clamp(1, 15);
+    let executor = ShellExecutor::new(cfg);
+    let details = inspect_environment(&executor).await?;
+    Ok(Json(serde_json::from_str(&details)?))
+}
+
+#[derive(Serialize)]
 struct ToolSummary {
     name: String,
     description: String,
+    category: String,
+    risk: String,
 }
 
 async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolSummary>>> {
     let cfg = load_config(state.path.clone()).await?;
+    let capabilities = if cfg.ima_enabled {
+        vec![Capability::Ima]
+    } else {
+        Vec::new()
+    };
+    let registry = ToolRegistry::builtin(&capabilities);
     Ok(Json(
-        builtin_tools(cfg.ima_enabled)
+        registry
+            .definitions()
             .into_iter()
-            .map(|tool| ToolSummary {
-                name: tool.name,
-                description: tool.description,
+            .filter_map(|tool| {
+                let metadata = registry.get(&tool.name)?.metadata();
+                Some(ToolSummary {
+                    name: tool.name,
+                    description: tool.description,
+                    category: format!("{:?}", metadata.category),
+                    risk: format!("{:?}", metadata.risk),
+                })
             })
             .collect(),
     ))
@@ -1047,6 +1114,7 @@ async fn post_message(
         return Err(ApiError::conflict("this Agent session is already running"));
     }
     inner.busy = true;
+    current.cancel.send_replace(false);
     set_activity(&mut inner, "thinking", None);
     inner.updated = unix_seconds();
     push(&mut inner, format!("> {text}"));
@@ -1055,6 +1123,32 @@ async fn post_message(
     notify(&current, "state");
     tokio::spawn(run_message(state, current, text));
     Ok((StatusCode::ACCEPTED, "任务已开始".into()))
+}
+
+async fn cancel_message(
+    State(state): State<Arc<Shared>>,
+    Json(message): Json<SessionSelection>,
+) -> ApiResult<String> {
+    let current = session(&state, &message.name)?;
+    let mut inner = current
+        .inner
+        .lock()
+        .map_err(|_| anyhow!("web session lock poisoned"))?;
+    if !inner.busy {
+        return Err(ApiError::conflict("this Agent session is not running"));
+    }
+    current.cancel.send_replace(true);
+    if let Some(reply) = inner.reply.take() {
+        let response = match inner.pending.take() {
+            Some(Pending::Approval { .. }) => Reply::Approval(ConfirmationDecision::Reject),
+            _ => Reply::Questions(None),
+        };
+        let _ = reply.send(response);
+    }
+    set_activity(&mut inner, "cancelling", None);
+    drop(inner);
+    notify(&current, "cancelling");
+    Ok("正在取消".into())
 }
 
 async fn post_decision(
@@ -1252,7 +1346,13 @@ async fn run_message(state: Arc<Shared>, current: Arc<WebSession>, text: String)
     if let Ok(mut inner) = current.inner.lock() {
         clear_live_tool_output(&mut inner);
         if let Err(error) = result {
-            push(&mut inner, format!("❌ {error:#}"));
+            if *current.cancel.borrow() {
+                push(&mut inner, "⏹ 任务已取消".into());
+            } else {
+                push(&mut inner, format!("❌ {error:#}"));
+            }
+        } else if *current.cancel.borrow() {
+            push(&mut inner, "⏹ 停止请求已收到，已完成的结果已保留".into());
         }
         inner.busy = false;
         inner.pending = None;
@@ -1277,7 +1377,13 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
     let output = Arc::new(WebOutput {
         session: current.clone(),
     });
-    let executor = CapturedExecutor(ShellExecutor::new(cfg.clone()).with_output(output));
+    let mut execution_config = cfg.clone();
+    execution_config.enable_pty = false;
+    let executor = CapturedExecutor(
+        ShellExecutor::new(execution_config)
+            .with_output(output)
+            .with_cancel(current.cancel.subscribe()),
+    );
     let confirmer = WebConfirmer {
         session: current.clone(),
     };
@@ -1303,10 +1409,18 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
     })
     .await?;
     let result = runner
-        .run_with_history_streaming_owned(agent_text, history, &sink)
+        .run_with_history_streaming_cancellable(
+            agent_text,
+            history,
+            &sink,
+            current.cancel.subscribe(),
+        )
         .await?;
-    let generated_title = if needs_title {
-        generate_title(&llm, &cfg, &text, &result.final_text).await
+    let generated_title = if needs_title && !*current.cancel.borrow() {
+        tokio::select! {
+            title = generate_title(&llm, &cfg, &text, &result.final_text) => title,
+            _ = wait_web_cancel(current.cancel.subscribe()) => None,
+        }
     } else {
         None
     };
@@ -1358,6 +1472,14 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
     })
     .await??;
     Ok(())
+}
+
+async fn wait_web_cancel(mut receiver: watch::Receiver<bool>) {
+    while !*receiver.borrow() {
+        if receiver.changed().await.is_err() {
+            return;
+        }
+    }
 }
 
 async fn generate_title(
@@ -1456,7 +1578,9 @@ struct WebTextSink {
 impl TextDeltaSink for WebTextSink {
     fn agent_activity(&self, activity: &'static str, detail: Option<&str>) {
         if let Ok(mut inner) = self.session.inner.lock() {
-            set_activity(&mut inner, activity, detail);
+            if !*self.session.cancel.borrow() {
+                set_activity(&mut inner, activity, detail);
+            }
         }
         notify(&self.session, "activity");
     }
@@ -1591,6 +1715,17 @@ impl Confirmer for WebConfirmer {
 }
 impl WebConfirmer {
     async fn wait(&self, pending: Pending) -> Result<Reply> {
+        let is_approval = matches!(&pending, Pending::Approval { .. });
+        let cancelled_reply = || {
+            if is_approval {
+                Reply::Approval(ConfirmationDecision::Reject)
+            } else {
+                Reply::Questions(None)
+            }
+        };
+        if *self.session.cancel.borrow() {
+            return Ok(cancelled_reply());
+        }
         let (tx, rx) = oneshot::channel();
         {
             let mut inner = self
@@ -1603,16 +1738,127 @@ impl WebConfirmer {
             set_activity(&mut inner, "waiting", None);
         }
         notify(&self.session, "pending");
-        rx.await.context("browser decision was canceled")
+        tokio::select! {
+            reply = rx => reply.context("browser decision was canceled"),
+            _ = wait_web_cancel(self.session.cancel.subscribe()) => {
+                if let Ok(mut inner) = self.session.inner.lock() {
+                    inner.pending = None;
+                    inner.reply = None;
+                    set_activity(&mut inner, "cancelling", None);
+                }
+                notify(&self.session, "cancelling");
+                Ok(cancelled_reply())
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ApiType;
     use crate::llm::{ToolCall, ToolResult};
     use std::io::Read;
     use tempfile::tempdir;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+
+    #[tokio::test]
+    async fn model_check_uses_real_provider_request_without_a_session() -> Result<()> {
+        let provider = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}],
+                "usage": {}
+            })))
+            .expect(1)
+            .mount(&provider)
+            .await;
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let cfg = Config {
+            endpoint: format!("{}/v1", provider.uri()),
+            api_key: "test-key".into(),
+            model: "test-model".into(),
+            api_type: ApiType::ChatCompletions,
+            ..Config::default()
+        };
+        config::save_config(&path, &cfg)?;
+        let shared = state(path);
+        let Json(result) = check_model(State(shared.clone()))
+            .await
+            .map_err(|error| error.error)?;
+        assert!(result.ok);
+        assert_eq!(
+            shared
+                .sessions
+                .lock()
+                .map_err(|_| anyhow!("web lock poisoned"))?
+                .len(),
+            1
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn device_overview_works_without_model_configuration() -> Result<()> {
+        let directory = tempdir()?;
+        let shared = state(directory.path().join("missing-config.toml"));
+        let Json(result) = get_device_overview(State(shared))
+            .await
+            .map_err(|error| error.error)?;
+        assert_eq!(result["kind"], "android_environment");
+        assert!(result["status"] == "complete" || result["status"] == "partial");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancel_request_rejects_pending_approval_and_keeps_session_busy_until_cleanup(
+    ) -> Result<()> {
+        let directory = tempdir()?;
+        let shared = state(directory.path().join("config.toml"));
+        let current = session(&shared, "web-test")?;
+        let (reply, waiting) = oneshot::channel();
+        {
+            let mut inner = current
+                .inner
+                .lock()
+                .map_err(|_| anyhow!("web lock poisoned"))?;
+            inner.busy = true;
+            inner.pending = Some(Pending::Approval {
+                command: "touch /tmp/x".into(),
+                risk: "Mutating".into(),
+                explanation: "test".into(),
+                root: false,
+                strong: false,
+            });
+            inner.reply = Some(reply);
+        }
+        cancel_message(
+            State(shared),
+            Json(SessionSelection {
+                name: "web-test".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        assert!(*current.cancel.borrow());
+        assert!(matches!(
+            waiting.await?,
+            Reply::Approval(ConfirmationDecision::Reject)
+        ));
+        let inner = current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("web lock poisoned"))?;
+        assert!(inner.busy);
+        assert!(inner.pending.is_none());
+        assert_eq!(inner.activity, "cancelling");
+        Ok(())
+    }
 
     #[test]
     fn approval_explanation_uses_local_rule_evidence() {

@@ -7,6 +7,7 @@
 
 ### Changed
 
+- Web Quick Start now verifies an actual model reply after saving provider settings. The tool catalog groups capabilities by Chinese purpose and confirmation requirement, and completed turns summarize complete, partial, and failed tool results.
 - Ask the Web storage example to display total, used, and remaining space in a chart while keeping the task read-only.
 - Remove temporary `[OUT]` and `[ERR]` lines from Web conversations once the matching tool result is available, so completed output appears only in its collapsible card.
 - Render Web safety terminal command results as separate stdout, stderr, and exit-status lines, with wrapped long text on narrow screens.
@@ -20,6 +21,7 @@
 
 ### Added
 
+- Added a Web task stop control, a model-free read-only device overview, example prompts in the tool catalog, and keyboard focus management for modal dialogs.
 - Add a bounded read-only chart tool for statistical results. Web conversations render bar, line, and pie charts with a data table and restore them from saved sessions; TUI displays the values as text.
 - Add a Web quick-start flow for provider setup and model-list connection checking, read-only first-task examples, automatic session creation on first send, actionable error hints, and a beginner guide. The Web server continues to listen on every IPv4 interface without login.
 - Added the project logo to the Web sidebar and a GitHub Star link to the top bar.

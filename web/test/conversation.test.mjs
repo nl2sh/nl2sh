@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {conversationRows, displayToolOutput, toggleToolExpansion} from '../src/conversation.ts';
+import {conversationRows, displayToolOutput, taskEvidence, toggleToolExpansion} from '../src/conversation.ts';
 
 test('F2 toggles all tool cards while individual cards remain independent', () => {
   const cards = [{open: false}, {open: false}];
@@ -52,4 +52,21 @@ test('missing or standalone results and live output stay separate', () => {
     {kind: 'tool', call: entries[2], result: entries[3]},
     {kind: 'tool', call: null, result: entries[4]},
   ]);
+});
+
+test('task evidence separates complete, partial and failed tools within one user turn', () => {
+  const rows=conversationRows([
+    {kind:'user',text:'first'},
+    {kind:'tool_call',text:'old'},
+    {kind:'tool_result',text:'ok'},
+    {kind:'user',text:'second'},
+    {kind:'tool_call',text:'storage'},
+    {kind:'tool_result',text:'{"status":"complete"}'},
+    {kind:'tool_call',text:'network'},
+    {kind:'tool_result',text:'executed_command=foo\nstatus=partial exit=Some(1)\nstdout:\nhello'},
+    {kind:'tool_call',text:'file'},
+    {kind:'tool_error',text:'denied'},
+    {kind:'assistant',text:'some results'},
+  ]);
+  assert.deepEqual(taskEvidence(rows,rows.length-1),{completed:['storage'],partial:['network'],failed:['file'],pending:0});
 });

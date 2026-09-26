@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'preact/hooks';
 import {api} from './api';
 import {beginnerProviders,initialBeginnerProvider} from './providerPresets';
+import {useModalFocus} from './modalFocus';
 
 type ConfigData=Record<string,string|number|boolean|null|unknown[]>;
 
@@ -15,6 +16,7 @@ export function BeginnerSetup({initial,close,done}:{initial:string;close:()=>voi
   const[error,setError]=useState('');
   const[result,setResult]=useState('');
   const selected=beginnerProviders[service];
+  const dialog=useModalFocus(close);
 
   useEffect(()=>{
     let active=true;
@@ -55,18 +57,18 @@ export function BeginnerSetup({initial,close,done}:{initial:string;close:()=>voi
       await done();
       setStep(2);
       try{
-        const models=await api.models();
-        setResult(models.length?`模型列表可访问，共 ${models.length} 个模型。现在可以发送一个问题检验实际对话。`:'服务已响应，但模型列表为空。请确认模型名称，再发送一个问题检验实际对话。');
+        await api.checkModel();
+        setResult('模型已成功回复测试请求，现在可以开始对话。');
       }catch(e){
-        setResult(`配置已保存，但模型列表检查未通过：${String(e)}。请检查密钥、网络或模型服务。`);
+        setResult(`配置已保存，但模型对话检查未通过：${String(e)}。请检查密钥、网络、模型名称或服务地址。`);
       }
     }catch(e){setError(String(e))}finally{setBusy(false)}
   };
 
-  return <div class="backdrop"><div class="modal beginner" role="dialog" aria-modal="true" aria-label="快速开始">
+  return <div class="backdrop"><div ref={dialog} tabIndex={-1} class="modal beginner" role="dialog" aria-modal="true" aria-label="快速开始">
     <div class="modal-heading"><h2>快速开始</h2><button onClick={close} aria-label="关闭快速开始">关闭</button></div>
     <p class="muted">三步连接模型。设备操作仍需安全检查和确认。此页面无需登录且对同一网络开放，请只在可信网络填写密钥。</p>
-    <ol class="setup-steps"><li class={step===0?'active':''}>选服务</li><li class={step===1?'active':''}>填信息</li><li class={step===2?'active':''}>检查连接</li></ol>
+    <ol class="setup-steps"><li class={step===0?'active':''}>选服务</li><li class={step===1?'active':''}>填信息</li><li class={step===2?'active':''}>测试对话</li></ol>
     {step===0?<>
       <label>你使用哪个模型服务？<select value={service} onChange={e=>choose(Number(e.currentTarget.value))}>{beginnerProviders.map((item,index)=><option key={item.id} value={index}>{item.name}</option>)}</select></label>
       <div class="actions"><button class="primary" onClick={()=>setStep(1)}>下一步</button></div>
