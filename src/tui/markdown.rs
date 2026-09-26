@@ -9,19 +9,20 @@ pub(super) fn render(source: &str, width: usize, theme: Theme, ascii: bool) -> V
     let source_lines: Vec<&str> = source.lines().collect();
     let mut rendered = Vec::new();
     let mut index = 0;
-    let mut in_code = false;
+    let mut code_language: Option<&str> = None;
     while index < source_lines.len() {
         let line = source_lines[index];
         if line.trim_start().starts_with("```") {
-            in_code = !in_code;
+            code_language = if code_language.is_some() {
+                None
+            } else {
+                Some(line.trim_start().trim_start_matches('`').trim())
+            };
             index += 1;
             continue;
         }
-        if in_code {
-            rendered.push(Line::styled(
-                line.to_owned(),
-                theme.style(theme.text_primary).bg(theme.background_alt),
-            ));
+        if let Some(language) = code_language {
+            rendered.push(Line::from(code_spans(line, language, theme)));
             index += 1;
             continue;
         }
@@ -49,6 +50,190 @@ pub(super) fn render(source: &str, width: usize, theme: Theme, ascii: bool) -> V
         rendered.push(Line::default());
     }
     rendered
+}
+
+fn code_spans(line: &str, language: &str, theme: Theme) -> Vec<Span<'static>> {
+    let language = language.split_whitespace().next().unwrap_or("");
+    let language = match language.to_ascii_lowercase().as_str() {
+        "sh" | "shell" | "bash" | "zsh" => "shell",
+        "rs" | "rust" => "rust",
+        "py" | "python" => "python",
+        "js" | "jsx" | "javascript" | "ts" | "tsx" | "typescript" => "javascript",
+        "json" => "json",
+        _ => "",
+    };
+    let code_style = |color| theme.style(color).bg(theme.background_alt);
+    if language.is_empty() {
+        return vec![Span::styled(
+            line.to_owned(),
+            code_style(theme.text_primary),
+        )];
+    }
+    let mut spans = Vec::new();
+    let mut rest = line;
+    while !rest.is_empty() {
+        let first = rest.chars().next().unwrap_or_default();
+        if first == '#' && (language == "shell" || language == "python")
+            || rest.starts_with("//") && (language == "rust" || language == "javascript")
+        {
+            spans.push(Span::styled(rest.to_owned(), code_style(theme.text_muted)));
+            break;
+        }
+        if first == '"' || first == '\'' && language != "json" {
+            let quote = first;
+            let mut escaped = false;
+            let mut end = rest.len();
+            for (index, character) in rest.char_indices().skip(1) {
+                if escaped {
+                    escaped = false;
+                } else if character == '\\' {
+                    escaped = true;
+                } else if character == quote {
+                    end = index + character.len_utf8();
+                    break;
+                }
+            }
+            let color = if language == "json" && rest[end..].trim_start().starts_with(':') {
+                theme.cyan
+            } else {
+                theme.success
+            };
+            spans.push(Span::styled(rest[..end].to_owned(), code_style(color)));
+            rest = &rest[end..];
+            continue;
+        }
+        if first == '$' && language == "shell" {
+            let end = rest[1..]
+                .find(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+                .map_or(rest.len(), |index| index + 1);
+            spans.push(Span::styled(
+                rest[..end].to_owned(),
+                code_style(theme.accent),
+            ));
+            rest = &rest[end..];
+            continue;
+        }
+        if first.is_ascii_alphanumeric() || first == '_' {
+            let end = rest
+                .find(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+                .unwrap_or(rest.len());
+            let token = &rest[..end];
+            let color = if is_code_keyword(token, language) {
+                theme.special
+            } else if token
+                .chars()
+                .next()
+                .is_some_and(|character| character.is_ascii_digit())
+            {
+                theme.warning
+            } else {
+                theme.text_primary
+            };
+            spans.push(Span::styled(token.to_owned(), code_style(color)));
+            rest = &rest[end..];
+            continue;
+        }
+        let end = first.len_utf8();
+        spans.push(Span::styled(
+            rest[..end].to_owned(),
+            code_style(theme.text_primary),
+        ));
+        rest = &rest[end..];
+    }
+    if spans.is_empty() {
+        spans.push(Span::styled(String::new(), code_style(theme.text_primary)));
+    }
+    spans
+}
+
+fn is_code_keyword(token: &str, language: &str) -> bool {
+    match language {
+        "shell" => matches!(
+            token,
+            "if" | "then"
+                | "else"
+                | "elif"
+                | "fi"
+                | "for"
+                | "in"
+                | "do"
+                | "done"
+                | "case"
+                | "esac"
+                | "while"
+                | "function"
+        ),
+        "rust" => matches!(
+            token,
+            "fn" | "let"
+                | "mut"
+                | "pub"
+                | "use"
+                | "mod"
+                | "impl"
+                | "struct"
+                | "enum"
+                | "trait"
+                | "match"
+                | "if"
+                | "else"
+                | "for"
+                | "while"
+                | "loop"
+                | "return"
+                | "async"
+                | "await"
+                | "true"
+                | "false"
+        ),
+        "python" => matches!(
+            token,
+            "def"
+                | "class"
+                | "import"
+                | "from"
+                | "as"
+                | "if"
+                | "elif"
+                | "else"
+                | "for"
+                | "while"
+                | "in"
+                | "return"
+                | "yield"
+                | "async"
+                | "await"
+                | "True"
+                | "False"
+                | "None"
+        ),
+        "javascript" => matches!(
+            token,
+            "const"
+                | "let"
+                | "var"
+                | "function"
+                | "class"
+                | "import"
+                | "export"
+                | "from"
+                | "if"
+                | "else"
+                | "for"
+                | "while"
+                | "return"
+                | "async"
+                | "await"
+                | "true"
+                | "false"
+                | "null"
+                | "undefined"
+                | "interface"
+                | "type"
+        ),
+        "json" => matches!(token, "true" | "false" | "null"),
+        _ => false,
+    }
 }
 
 fn render_line(line: &str, theme: Theme, ascii: bool) -> Line<'static> {
@@ -499,7 +684,34 @@ mod tests {
         assert_eq!(lines[3].to_string(), "echo hello");
         assert!(lines[0].style.add_modifier.contains(Modifier::BOLD));
         assert_eq!(lines[0].style.fg, Some(theme.cyan));
-        assert_eq!(lines[3].style.fg, Some(theme.text_primary));
+        assert_eq!(lines[3].spans[0].style.fg, Some(theme.text_primary));
+        assert_eq!(lines[3].spans[0].style.bg, Some(theme.background_alt));
+    }
+
+    #[test]
+    fn highlights_fenced_code_without_changing_text_or_unknown_languages() {
+        let theme = Theme::for_mode(super::super::theme::ColorMode::TrueColor);
+        let lines = render(
+            "```rust\nlet answer = 42; // result\n```\n```unknown\n<raw>\n```",
+            80,
+            theme,
+            false,
+        );
+        assert_eq!(lines[0].to_string(), "let answer = 42; // result");
+        assert!(lines[0]
+            .spans
+            .iter()
+            .any(|span| span.content == "let" && span.style.fg == Some(theme.special)));
+        assert!(lines[0]
+            .spans
+            .iter()
+            .any(|span| span.content == "42" && span.style.fg == Some(theme.warning)));
+        assert!(lines[0]
+            .spans
+            .iter()
+            .any(|span| span.content == "// result" && span.style.fg == Some(theme.text_muted)));
+        assert_eq!(lines[1].to_string(), "<raw>");
+        assert_eq!(lines[1].spans[0].style.fg, Some(theme.text_primary));
     }
 
     #[test]

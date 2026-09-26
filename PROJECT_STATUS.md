@@ -4,6 +4,8 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- Web 模型回答与流式 Markdown 的围栏代码按声明语言高亮，使用按需注册的语法规则和现有语义色板；未知语言继续转义为纯文本。TUI 的围栏代码为 Shell、Rust、Python、JavaScript/TypeScript 和 JSON 提供轻量高亮；工具原始输出、安全审批、Android 与 PTY 路径不变。
+- 代码高亮验证：Web `npm test --prefix web`、`npm run build --prefix web`，Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 及 `git diff --check` 通过；回归覆盖已知语言、未知语言的 HTML 转义和 TUI 文本保真。
 - Web 顶栏的菜单项独立横向滚动，GitHub Star 与其右侧的展开/收起按钮保持可见；按钮改用 `<`/`>` 字符并保留可访问名称。对话输入框增加提问及 `@` 文件选择提示；“能做什么”弹窗固定搜索与分类筛选区，由工具示例列表独立滚动。这些改动只涉及浏览器展示，不改变会话、文件引用、安全审批、Android 或 PTY 路径。
 - 项目介绍与计划按当前模块同步：Android 单文件程序包含 TUI、Web 多会话和结构化工具；可选主机侧 A2A/MCP 网关支持设备盘点与 Agent 咨询，拒绝所有需要人工确认的操作。公开发布版本为 1.0.2；TUR 配方 PR #2804 已合并。
 - TUI 完整 Agent 首轮保存后复用 Web 的无工具短标题生成器，`/sessions` 显示标题；后续自动保存、恢复与重命名保留标题。标题生成失败不阻断回答或会话保存，本地命令不触发生成。

@@ -189,6 +189,12 @@ button:disabled { opacity: .45; }
 .message blockquote { margin: .7rem 0; padding: .1rem .9rem; border-left: 3px solid var(--border); color: var(--text-secondary); }
 .message pre { white-space: pre; max-width: 100%; }
 .message pre code { background: transparent; padding: 0; border-radius: 0; }
+.message pre .hljs-keyword, .message pre .hljs-selector-tag, .message pre .hljs-literal { color: var(--special); }
+.message pre .hljs-string, .message pre .hljs-addition { color: var(--success); }
+.message pre .hljs-number, .message pre .hljs-attr, .message pre .hljs-attribute { color: var(--warning); }
+.message pre .hljs-comment, .message pre .hljs-quote { color: var(--text-muted); }
+.message pre .hljs-variable, .message pre .hljs-title, .message pre .hljs-built_in { color: var(--cyan); }
+.message pre .hljs-type, .message pre .hljs-meta { color: var(--accent); }
 .message table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: .7rem 0; }
 .message th, .message td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left; vertical-align: top; }
 .message th { background: var(--background-alt); }
