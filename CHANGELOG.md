@@ -7,6 +7,8 @@
 
 ### Changed
 
+- Generate short TUI session titles after the first completed Agent turn, and show Web session creation time as relative time for the first day or a local date and time thereafter.
+- Web reconnects discard stale running state and recover saved sessions. In-progress requests now keep bounded, redacted diagnostic checkpoints; completed replies are saved before automatic titles are generated in the background.
 - Web Quick Start now verifies an actual model reply after saving provider settings. The tool catalog groups capabilities by Chinese purpose and confirmation requirement, and completed turns summarize complete, partial, and failed tool results.
 - Ask the Web storage example to display total, used, and remaining space in a chart while keeping the task read-only.
 - Remove temporary `[OUT]` and `[ERR]` lines from Web conversations once the matching tool result is available, so completed output appears only in its collapsible card.

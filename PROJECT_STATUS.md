@@ -4,6 +4,13 @@ Last Updated: 2026-09-26
 
 ## Recent Changes
 
+- TUI 完整 Agent 首轮保存后复用 Web 的无工具短标题生成器，`/sessions` 显示标题；后续自动保存、恢复与重命名保留标题。标题生成失败不阻断回答或会话保存，本地命令不触发生成。
+- Web 会话摘要增加独立创建时间，侧栏轮数或运行状态后显示相对时间；满一天后显示本地日期和时刻。旧快照从系统生成的会话 ID 推算创建时间，后续保存和重命名保持不变。
+- 会话标题与创建时间验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`，Web `npm run build --prefix web`、`npm test --prefix web`，Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 及 `git diff --check` 通过；TUI 伪终端回归确认真实首轮回复后自动标题写入私有快照，存储回归确认旧快照时间恢复、续存与重命名保留创建时间。
+- Web 左侧会话列表和上方菜单支持独立收起、展开，并在浏览器本地保留状态；收起侧栏后仍可新建会话，上方菜单收起时保留当前会话标题及展开按钮。窄屏沿用顶部会话区域布局，收起后释放对话空间。此改动仅涉及 Web 展示，不改变会话、审批、安全评估、Android 或 PTY 执行路径。
+- Web 折叠布局验证：`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 通过。
+- Web 会话恢复修复：前端在断线或旧会话消失时清除过期运行状态并选择可用会话；后端在消息接收、阶段切换、工具开始与完成、等待审批、取消与失败时保存私有脱敏检查点，重启后将未完成任务标记为中断且不自动续跑或授予审批。最终回答先保存，自动标题改为后台更新；标题任务不会复活已删除会话。
+- Web 会话恢复验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test --workspace --all-targets`、`cargo clippy --all-targets -- -D warnings`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 与 `git diff --check` 通过；回归覆盖检查点脱敏、配置更换后旧凭据脱敏、已完成 turn 与中断诊断隔离、待结果工具状态、延迟标题与删除竞争，以及断线会话回退。
 - Web 体验增加会话级任务停止、真实模型请求连接测试、无需模型的只读设备概览、中文分类工具目录及示例提问、按工具结果生成的完整/部分/失败摘要，并补齐弹窗键盘焦点管理。停止任务复用进程组信号和等待回收；待确认操作被拒绝，其他工具在当前操作结束后停止，安全分类与审批链保持不变。
 - Web 体验验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test --lib`、`cargo clippy --all-targets -- -D warnings`、`npm test --prefix web`、`npm run build --prefix web` 与 Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 通过；回归覆盖捕获式进程组取消、待审批取消、真实模型短请求、无模型设备概览及工具结果摘要。
 - A2A 网关中英文 Windows 安装说明补充镜像源缺少 `hatchling` 时的一次性官方 PyPI 重试命令及 pip 配置排查方法；不改动 Python 包构建后端或全局 pip 配置。

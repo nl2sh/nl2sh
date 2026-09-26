@@ -20,7 +20,7 @@ use tokio::{
     time::{sleep, timeout, Instant},
 };
 use wiremock::{
-    matchers::{method, path},
+    matchers::{body_string_contains, method, path},
     Mock, MockServer, ResponseTemplate,
 };
 
@@ -34,6 +34,16 @@ async fn agent_reply_remains_in_live_tui_until_ctrl_q() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
+        .and(body_string_contains("Generate a concise title"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "output": [{"type": "message", "content": [{"type": "output_text", "text": "TUI 自动标题"}]}]
+        })))
+        .with_priority(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("content-type", "text/event-stream")
@@ -42,6 +52,7 @@ async fn agent_reply_remains_in_live_tui_until_ctrl_q() -> anyhow::Result<()> {
                     "data: {\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"tui-e2e-done\"}]}]}}\n\n"
                 )),
         )
+        .with_priority(10)
         .mount(&server)
         .await;
 
@@ -60,6 +71,38 @@ async fn agent_reply_remains_in_live_tui_until_ctrl_q() -> anyhow::Result<()> {
     wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
     process.master.write_all(b"show status\r")?;
     wait_for_text(&mut process.master, "tui-e2e-done", Duration::from_secs(5)).await?;
+    let store = nl2sh::sessions::SessionStore::open(&config)?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if store
+            .list()?
+            .iter()
+            .any(|session| session.title == "TUI 自动标题")
+        {
+            break;
+        }
+        anyhow::ensure!(
+            Instant::now() < deadline,
+            "TUI session title was not generated"
+        );
+        sleep(Duration::from_millis(50)).await;
+    }
+    process.master.write_all(b"show status again\r")?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if store
+            .list()?
+            .iter()
+            .any(|session| session.turns == 2 && session.title == "TUI 自动标题")
+        {
+            break;
+        }
+        anyhow::ensure!(
+            Instant::now() < deadline,
+            "TUI title was not kept after another turn"
+        );
+        sleep(Duration::from_millis(50)).await;
+    }
     assert!(
         process.child.try_wait()?.is_none(),
         "TUI exited after one Agent response"

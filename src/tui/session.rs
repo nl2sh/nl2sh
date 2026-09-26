@@ -20,6 +20,7 @@ use crate::{
     provider_account::{build_account_client, AccountBalance},
     provider_metadata::{build_metadata_client, ModelMetadata},
     security::{assess, RiskLevel, SecurityAssessment},
+    session_title::generate_title,
     sessions::{SessionInfo, SessionStore},
     shell::{is_interactive, CommandExecutor, ExecutionResult, OutputSink, ShellExecutor},
 };
@@ -28,6 +29,7 @@ use async_trait::async_trait;
 use crossterm::event::{
     self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind,
 };
+use futures_util::FutureExt;
 use nix::{
     sys::signal::{kill, Signal},
     unistd::getpid,
@@ -52,6 +54,28 @@ type BalanceFuture = Pin<Box<dyn Future<Output = Result<Vec<AccountBalance>>> + 
 type UpdateFuture =
     Pin<Box<dyn Future<Output = Result<Option<crate::update::UpdateRelease>>> + Send>>;
 type ModelListFuture = Pin<Box<dyn Future<Output = Result<Vec<ModelMetadata>>> + Send>>;
+type TitleFuture<'a> = Pin<Box<dyn Future<Output = Option<String>> + 'a>>;
+
+fn session_secrets(config: &Config) -> Vec<String> {
+    vec![
+        config.api_key.clone(),
+        config.proxy_password.clone(),
+        config.ima_client_id.clone(),
+        config.ima_api_key.clone(),
+        config.jev_api_key.clone(),
+    ]
+}
+
+fn load_tui_session(
+    store: &SessionStore,
+    name: &str,
+    max_turns: usize,
+    tool_limit: usize,
+) -> Result<(Vec<Vec<ConversationItem>>, String)> {
+    let turns = store.load(name, max_turns, tool_limit)?;
+    let title = store.info(name)?.title;
+    Ok((turns, title))
+}
 
 enum ActiveOutcome {
     Agent(AgentOutcome),
@@ -198,6 +222,9 @@ async fn run_inner(
             .unwrap_or_else(|| std::path::Path::new("config.toml")),
     )?;
     let mut session_name = SessionStore::default_name();
+    let mut session_title = session_name.clone();
+    let mut title_requested = false;
+    let mut title_active: Option<(String, TitleFuture<'_>)> = None;
     let mut active: Option<Pin<Box<dyn Future<Output = Result<ActiveOutcome>> + '_>>> = None;
     let mut balance_active: Option<BalanceFuture> = None;
     let balance_supported = provider_configured && build_account_client(config).is_ok();
@@ -460,12 +487,53 @@ async fn run_inner(
             }
         }
 
+        let finished_title = if let Some((name, future)) = title_active.as_mut() {
+            future
+                .as_mut()
+                .now_or_never()
+                .map(|title| (name.clone(), title))
+        } else {
+            None
+        };
+        if let Some((name, title)) = finished_title {
+            title_active = None;
+            if let Some(title) = title.filter(|_| name == session_name && session_title == name) {
+                let store = session_store.clone();
+                let turns = model_history.clone();
+                let tool_limit = config.model_tool_output_max_bytes;
+                let secrets = session_secrets(config);
+                let saved = tokio::task::spawn_blocking(move || {
+                    store
+                        .save_redacted_with_title(&name, &title, &turns, tool_limit, &secrets)
+                        .map(|()| title)
+                })
+                .await
+                .context("session title worker failed")?;
+                match saved {
+                    Ok(title) => session_title = title,
+                    Err(error) => {
+                        history
+                            .lock()
+                            .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
+                            .push(format!("⚠️ session title save failed: {error:#}"));
+                    }
+                }
+            }
+        }
+
         if let Some(result) = completed {
             active = None;
             confirmation = None;
             match result {
                 Ok(ActiveOutcome::Agent(outcome)) => {
                     append_transcript(&history, &outcome, config.ascii_symbols, &log)?;
+                    let title_input = outcome.transcript.iter().find_map(|item| match item {
+                        ConversationItem::Message(message) if message.role == Role::User => {
+                            Some(message.content.clone())
+                        }
+                        _ => None,
+                    });
+                    let title_answer = outcome.final_text.clone();
                     for _ in 0..outcome.history_turns_evicted.min(model_history.len()) {
                         model_history.remove(0);
                     }
@@ -475,20 +543,16 @@ async fn run_inner(
                     }
                     let store = session_store.clone();
                     let name = session_name.clone();
+                    let title = session_title.clone();
                     let turns = model_history.clone();
                     let tool_limit = config.model_tool_output_max_bytes;
-                    let secrets = vec![
-                        config.api_key.clone(),
-                        config.proxy_password.clone(),
-                        config.ima_client_id.clone(),
-                        config.ima_api_key.clone(),
-                        config.jev_api_key.clone(),
-                    ];
+                    let secrets = session_secrets(config);
                     let save = tokio::task::spawn_blocking(move || {
-                        store.save_redacted(&name, &turns, tool_limit, &secrets)
+                        store.save_redacted_with_title(&name, &title, &turns, tool_limit, &secrets)
                     })
                     .await
                     .context("session autosave worker failed")?;
+                    let saved = save.is_ok();
                     if let Err(error) = save {
                         history
                             .lock()
@@ -501,6 +565,18 @@ async fn run_inner(
                                     "⚠️"
                                 }
                             ));
+                    }
+                    if saved && !title_requested && session_title == session_name {
+                        if let Some(input) = title_input {
+                            title_requested = true;
+                            let title_config = config.clone();
+                            title_active = Some((
+                                session_name.clone(),
+                                Box::pin(async move {
+                                    generate_title(llm, &title_config, &input, &title_answer).await
+                                }),
+                            ));
+                        }
                     }
                     let context = context_usage(
                         outcome.final_input_tokens,
@@ -596,17 +672,14 @@ async fn run_inner(
                             }
                             let store = session_store.clone();
                             let name = session_name.clone();
+                            let title = session_title.clone();
                             let turns = model_history.clone();
                             let tool_limit = config.model_tool_output_max_bytes;
-                            let secrets = vec![
-                                config.api_key.clone(),
-                                config.proxy_password.clone(),
-                                config.ima_client_id.clone(),
-                                config.ima_api_key.clone(),
-                                config.jev_api_key.clone(),
-                            ];
+                            let secrets = session_secrets(config);
                             let save = tokio::task::spawn_blocking(move || {
-                                store.save_redacted(&name, &turns, tool_limit, &secrets)
+                                store.save_redacted_with_title(
+                                    &name, &title, &turns, tool_limit, &secrets,
+                                )
                             })
                             .await
                             .context("partial session autosave worker failed")?;
@@ -775,14 +848,17 @@ async fn run_inner(
                         let max_turns = config.max_context_turns;
                         let tool_limit = config.model_tool_output_max_bytes;
                         let loaded = tokio::task::spawn_blocking(move || {
-                            store.load(&worker_name, max_turns, tool_limit)
+                            load_tui_session(&store, &worker_name, max_turns, tool_limit)
                         })
                         .await
                         .context("session load worker failed")?;
                         match loaded {
-                            Ok(turns) => {
+                            Ok((turns, title)) => {
                                 model_history = turns;
                                 session_name = name;
+                                session_title = title;
+                                title_requested = session_title != session_name;
+                                title_active = None;
                                 append_restored_history(
                                     &history,
                                     &model_history,
@@ -1128,6 +1204,9 @@ async fn run_inner(
                                 .map_err(|_| anyhow::anyhow!("TUI history lock is poisoned"))?
                                 .clear();
                             model_history.clear();
+                            session_title = session_name.clone();
+                            title_requested = false;
+                            title_active = None;
                             app.clear_session_state();
                             app.status = localized_status(
                                 config.ui_language,
@@ -1145,6 +1224,9 @@ async fn run_inner(
                             model_history.clear();
                             app.clear_session_state();
                             session_name = SessionStore::default_name();
+                            session_title = session_name.clone();
+                            title_requested = false;
+                            title_active = None;
                             app.status = localized_status(
                                 config.ui_language,
                                 "已开始新的空白会话",
@@ -1188,14 +1270,17 @@ async fn run_inner(
                                 let max_turns = config.max_context_turns;
                                 let tool_limit = config.model_tool_output_max_bytes;
                                 let loaded = tokio::task::spawn_blocking(move || {
-                                    store.load(&worker_name, max_turns, tool_limit)
+                                    load_tui_session(&store, &worker_name, max_turns, tool_limit)
                                 })
                                 .await
                                 .context("session load worker failed")?;
                                 match loaded {
-                                    Ok(turns) => {
+                                    Ok((turns, title)) => {
                                         model_history = turns;
                                         session_name = name;
+                                        session_title = title;
+                                        title_requested = session_title != session_name;
+                                        title_active = None;
                                         append_restored_history(
                                             &history,
                                             &model_history,
@@ -1224,6 +1309,10 @@ async fn run_inner(
                                 .context("session rename worker failed")??;
                                 if session_name == old {
                                     session_name = new;
+                                    if session_title == old {
+                                        session_title = session_name.clone();
+                                    }
+                                    title_active = None;
                                 }
                                 Ok(localized_status(
                                     config.ui_language,
@@ -1240,6 +1329,9 @@ async fn run_inner(
                                     .context("session delete worker failed")??;
                                 if was_current {
                                     session_name = SessionStore::default_name();
+                                    session_title = session_name.clone();
+                                    title_requested = false;
+                                    title_active = None;
                                 }
                                 Ok(localized_status(
                                     config.ui_language,
@@ -3629,12 +3721,14 @@ mod tests {
             SessionInfo {
                 name: "newest".into(),
                 title: "newest".into(),
+                created_unix_secs: 10,
                 turns: 3,
                 updated_unix_secs: 30,
             },
             SessionInfo {
                 name: "older".into(),
                 title: "older".into(),
+                created_unix_secs: 10,
                 turns: 2,
                 updated_unix_secs: 20,
             },

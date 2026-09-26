@@ -28,9 +28,14 @@
 body { margin: 0; }
 button, input, select, textarea { font: inherit; }
 .shell { height: 100vh; display: grid; grid-template-columns: 270px 1fr; }
+.shell.sidebar-collapsed { grid-template-columns: 52px minmax(0, 1fr); }
 aside { background: var(--background-alt); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
 aside header, .top { height: 60px; display: flex; align-items: center; gap: .7rem; padding: .7rem 1rem; border-bottom: 1px solid var(--border); }
-aside header button { margin-left: auto; }
+.sidebar header .new-session { margin-left: auto; white-space: nowrap; }
+.sidebar-toggle { flex: none; width: 30px; padding: .4rem 0; }
+.sidebar.collapsed header { height: auto; flex-direction: column; gap: .5rem; padding: .6rem .25rem; }
+.sidebar.collapsed header button { width: 36px; margin: 0; padding: .4rem 0; }
+.sidebar [hidden] { display: none; }
 .brand { display: flex; align-items: center; gap: .45rem; min-width: 0; }
 .brand img { display: block; width: 36px; height: 36px; object-fit: contain; flex: none; }
 .sessions { padding: .5rem; overflow: auto; }
@@ -49,6 +54,9 @@ aside header button { margin-left: auto; }
 .sessions i.pending { background: var(--warning); }
 main { min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 .top h1 { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
+.top-menu-toggle { flex: none; margin-left: auto; white-space: nowrap; }
+.top.top-nav-collapsed { min-height: 60px; }
+.top.top-nav-collapsed nav { display: none; }
 .top nav { display: flex; align-items: center; gap: .4rem; margin-left: auto; }
 .top nav button { flex: none; white-space: nowrap; }
 .github-star { display: inline-flex; align-items: center; gap: .35rem; flex: none; padding: .45rem .6rem; color: var(--text-primary); background: var(--background-alt); border: 1px solid var(--border); border-radius: 7px; text-decoration: none; }
@@ -186,7 +194,8 @@ button:disabled { opacity: .45; }
 .message a { color: var(--accent); }
 
 @media (max-width: 1000px) {
-  .shell { grid-template-columns: 220px minmax(0, 1fr); }
+  .shell { grid-template-columns: 250px minmax(0, 1fr); }
+  .sidebar .brand b { display: none; }
   .top { height: auto; min-height: 60px; flex-wrap: wrap; }
   .top nav { width: 100%; min-width: 0; margin-left: 0; overflow-x: auto; order: 1; padding-bottom: .15rem; }
   .github-star { margin-left: auto; }
@@ -196,21 +205,26 @@ button:disabled { opacity: .45; }
   .shell { display: flex; flex-direction: column; height: 100dvh; }
   aside { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 48px 48px; flex: none; border-right: 0; border-bottom: 1px solid var(--border); }
   aside header { height: 48px; min-width: 0; padding: .35rem .5rem; gap: .4rem; }
-  aside header button { margin-left: auto; padding: .35rem .5rem; font-size: .8rem; white-space: nowrap; }
+  .sidebar header button { padding: .35rem .5rem; font-size: .8rem; white-space: nowrap; }
+  .sidebar.collapsed { display: flex; }
+  .sidebar.collapsed header { height: 48px; flex-direction: row; justify-content: space-between; padding: .35rem .5rem; }
+  .sidebar.collapsed header button { width: auto; min-width: 36px; }
   .brand img { width: 30px; height: 30px; }
   .brand b { display: none; }
   .session-list-actions { min-width: 0; justify-content: flex-end; gap: .35rem; padding: .3rem .5rem; }
   .session-list-actions button { white-space: nowrap; }
   .sessions { grid-column: 1 / -1; display: flex; gap: .35rem; min-width: 0; overflow-x: auto; overflow-y: hidden; padding: .25rem .5rem; }
-  .session-item { width: 168px; flex: none; margin: 0; }
+  .session-item { width: 232px; flex: none; margin: 0; }
   .session-select { padding: .25rem .4rem; }
   .sessions small { margin-top: .05rem; }
   main { flex: 1; min-height: 0; }
   .top { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: .4rem; padding: .45rem .7rem; }
+  .top.top-nav-collapsed { grid-template-rows: auto; min-height: 48px; }
   .top h1 { max-width: none; margin: 0; }
+  .top-menu-toggle { grid-column: 2; grid-row: 1; margin: 0; padding: .35rem .5rem; }
   .top nav { grid-column: 1 / -1; grid-row: 2; width: 100%; order: initial; margin: 0; }
   .top nav button { padding: .4rem .55rem; }
-  .github-star { grid-column: 2; grid-row: 1; margin: 0; }
+  .github-star { margin-left: auto; }
   .chat, .config { padding: .7rem; }
   .history { padding: .7rem; }
   .example-list { grid-template-columns: 1fr; }

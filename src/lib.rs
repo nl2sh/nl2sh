@@ -23,6 +23,8 @@ pub mod provider_metadata;
 pub mod runtime;
 /// Local shell command classification and confirmation requirements.
 pub mod security;
+/// Shared short titles for persisted Web and TUI conversations.
+pub mod session_title;
 /// Private, bounded conversation snapshots used by `/sessions`.
 pub mod sessions;
 /// PTY/pipeline execution, process cleanup, and Android root selection.

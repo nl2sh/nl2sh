@@ -9,7 +9,8 @@ use crate::{
     },
     provider_metadata::build_metadata_client,
     security::SecurityAssessment,
-    sessions::SessionStore,
+    session_title::generate_title,
+    sessions::{SessionStore, WebCheckpoint, WebCheckpointEvent},
     shell::{CommandExecutor, ExecutionResult, OutputSink, ShellExecutor, SystemRootProbe},
     tools::{android::environment::inspect_environment, Capability, ToolRegistry},
 };
@@ -41,7 +42,7 @@ use std::{
 };
 use tokio::{
     net::TcpListener,
-    sync::{broadcast, oneshot, watch},
+    sync::{broadcast, oneshot, watch, Mutex as AsyncMutex},
 };
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -85,6 +86,7 @@ struct Shared {
 
 struct WebSession {
     inner: Mutex<SessionState>,
+    persist: AsyncMutex<()>,
     events: broadcast::Sender<String>,
     cancel: watch::Sender<bool>,
     terminal_clients: AtomicUsize,
@@ -99,6 +101,7 @@ struct SessionState {
     pending: Option<Pending>,
     reply: Option<oneshot::Sender<Reply>>,
     title_generated: bool,
+    created: u64,
     updated: u64,
     steps: usize,
     tool_calls: usize,
@@ -108,10 +111,14 @@ struct SessionState {
     activity: &'static str,
     activity_detail: Option<String>,
     activity_since_ms: u64,
+    checkpoint: Option<WebCheckpoint>,
+    checkpoint_start: Option<usize>,
+    redaction_secrets: Vec<String>,
 }
 
 impl SessionState {
     fn empty() -> Self {
+        let created = unix_seconds();
         let id = format!(
             "{}-{}",
             SessionStore::default_name(),
@@ -126,7 +133,8 @@ impl SessionState {
             pending: None,
             reply: None,
             title_generated: false,
-            updated: unix_seconds(),
+            created,
+            updated: created,
             steps: 0,
             tool_calls: 0,
             input_tokens: 0,
@@ -135,6 +143,9 @@ impl SessionState {
             activity: "idle",
             activity_detail: None,
             activity_since_ms: unix_millis(),
+            checkpoint: None,
+            checkpoint_start: None,
+            redaction_secrets: Vec::new(),
         }
     }
 }
@@ -144,6 +155,7 @@ fn web_session(inner: SessionState) -> Arc<WebSession> {
     let (cancel, _) = watch::channel(false);
     Arc::new(WebSession {
         inner: Mutex::new(inner),
+        persist: AsyncMutex::new(()),
         events,
         cancel,
         terminal_clients: AtomicUsize::new(0),
@@ -180,6 +192,77 @@ fn set_activity(inner: &mut SessionState, activity: &'static str, detail: Option
         inner.activity_detail = detail.map(str::to_owned);
         inner.activity_since_ms = unix_millis();
     }
+}
+
+fn checkpoint_event(inner: &mut SessionState, kind: &str, tool: Option<&str>) {
+    if let Some(checkpoint) = inner.checkpoint.as_mut() {
+        checkpoint.events.push(WebCheckpointEvent {
+            at: unix_seconds(),
+            kind: kind.to_owned(),
+            tool: tool.map(str::to_owned),
+        });
+        if checkpoint.events.len() > 120 {
+            checkpoint.events.remove(0);
+        }
+    }
+}
+
+fn remember_redaction_secrets(inner: &mut SessionState, cfg: &Config) {
+    for secret in [
+        &cfg.api_key,
+        &cfg.proxy_password,
+        &cfg.ima_client_id,
+        &cfg.ima_api_key,
+        &cfg.jev_api_key,
+    ] {
+        if !secret.is_empty() && !inner.redaction_secrets.contains(secret) {
+            inner.redaction_secrets.push(secret.clone());
+        }
+    }
+}
+
+async fn persist_web_session(state: &Shared, current: &WebSession) -> Result<()> {
+    let _write = current.persist.lock().await;
+    let (id, title, turns, checkpoint, prior_secrets) = {
+        let inner = current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("web session lock poisoned"))?;
+        let mut checkpoint = inner.checkpoint.clone();
+        if let Some(value) = checkpoint.as_mut() {
+            value.activity = inner.activity.into();
+            value.history = inner.history[inner.checkpoint_start.unwrap_or(0)..].to_vec();
+        }
+        (
+            inner.id.clone(),
+            inner.title.clone(),
+            inner.turns.clone(),
+            checkpoint,
+            inner.redaction_secrets.clone(),
+        )
+    };
+    let path = state.path.clone();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let cfg = config::load_or_default_unvalidated(&path)?;
+        let mut secrets = vec![
+            cfg.api_key,
+            cfg.proxy_password,
+            cfg.ima_client_id,
+            cfg.ima_api_key,
+            cfg.jev_api_key,
+        ];
+        secrets.extend(prior_secrets);
+        SessionStore::open(&path)?.save_web_state(
+            &id,
+            &title,
+            &turns,
+            cfg.model_tool_output_max_bytes,
+            &secrets,
+            checkpoint.as_ref(),
+        )
+    })
+    .await??;
+    Ok(())
 }
 
 #[derive(Clone, Serialize)]
@@ -249,6 +332,8 @@ struct ExportConversation {
     exported_unix_secs: u64,
     busy: bool,
     entries: Vec<WebEntry>,
+    checkpoint_status: Option<String>,
+    checkpoint_events: Vec<WebCheckpointEvent>,
 }
 
 #[derive(Serialize)]
@@ -258,6 +343,7 @@ struct SessionSummary {
     turns: usize,
     busy: bool,
     pending: bool,
+    created: u64,
     updated: u64,
 }
 
@@ -618,6 +704,11 @@ async fn export_session(
             exported_unix_secs: unix_seconds(),
             busy: inner.busy,
             entries: web_entries(&inner.history),
+            checkpoint_status: inner.checkpoint.as_ref().map(|value| value.status.clone()),
+            checkpoint_events: inner
+                .checkpoint
+                .as_ref()
+                .map_or_else(Vec::new, |value| value.events.clone()),
         }
     };
     let path = state.path.clone();
@@ -669,7 +760,7 @@ fn build_session_export(
     archive.start_file("nl2sh.log", options)?;
     archive.write_all(&log).context("cannot add history log")?;
     archive.start_file("README.txt", options)?;
-    archive.write_all(b"conversation.json contains the selected Web session's visible conversation at export time.\nnl2sh.log is the shared audit log and may contain events from other sessions. An empty log means no log file existed.\n")?;
+    archive.write_all(b"conversation.json contains the selected Web session's visible conversation and unfinished-task checkpoint events at export time.\nnl2sh.log is the shared audit log and may contain events from other sessions. An empty log means no log file existed.\n")?;
     Ok(archive.finish()?.into_inner())
 }
 
@@ -909,6 +1000,7 @@ async fn new_session(State(state): State<Arc<Shared>>) -> ApiResult<Json<Session
         turns: 0,
         busy: false,
         pending: false,
+        created: inner.created,
         updated: inner.updated,
     };
     let id = inner.id.clone();
@@ -932,6 +1024,7 @@ async fn get_sessions(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<Se
                     turns: inner.turns.len(),
                     busy: inner.busy,
                     pending: inner.pending.is_some(),
+                    created: inner.created,
                     updated: inner.updated,
                 })
             })
@@ -945,6 +1038,7 @@ async fn get_sessions(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<Se
                     turns: saved.turns,
                     busy: false,
                     pending: false,
+                    created: saved.created_unix_secs,
                     updated: saved.updated_unix_secs,
                 });
             }
@@ -975,6 +1069,7 @@ async fn load_session(
                 turns: inner.turns.len(),
                 busy: inner.busy,
                 pending: inner.pending.is_some(),
+                created: inner.created,
                 updated: inner.updated,
             }));
         }
@@ -985,20 +1080,48 @@ async fn load_session(
             .into_iter()
             .find(|item| item.name == selection.name)
             .context("saved session not found")?;
-        let turns = store.load(
-            &selection.name,
-            cfg.max_context_turns,
-            cfg.model_tool_output_max_bytes,
-        )?;
+        let saved_turns =
+            store.load(&selection.name, usize::MAX, cfg.model_tool_output_max_bytes)?;
+        let turns = saved_turns[saved_turns.len().saturating_sub(cfg.max_context_turns)..].to_vec();
+        let mut checkpoint = store.load_web_checkpoint(&selection.name)?;
+        let mut history = render_turns(&turns);
+        if let Some(current) = checkpoint.as_mut() {
+            if current.status != "completed" {
+                mark_unresolved_tools(&mut current.history);
+            }
+            if current.status == "running" {
+                current.status = "interrupted".into();
+                current.events.push(WebCheckpointEvent {
+                    at: unix_seconds(),
+                    kind: "interrupted_after_restart".into(),
+                    tool: None,
+                });
+                current
+                    .history
+                    .push("⏹ 上次任务在服务重启时中断；以下结果仅供核对，不会自动重试".into());
+                store.save_web_state(
+                    &selection.name,
+                    &info.title,
+                    &saved_turns,
+                    cfg.model_tool_output_max_bytes,
+                    &[],
+                    Some(current),
+                )?;
+            }
+            if current.status != "completed" {
+                history.extend(current.history.clone());
+            }
+        }
         let current = web_session(SessionState {
             id: info.name.clone(),
             title: info.title.clone(),
-            history: render_turns(&turns),
+            history,
             turns,
             busy: false,
             pending: None,
             reply: None,
-            title_generated: true,
+            title_generated: info.title != "新会话",
+            created: info.created_unix_secs,
             updated: info.updated_unix_secs,
             steps: 0,
             tool_calls: 0,
@@ -1008,6 +1131,9 @@ async fn load_session(
             activity: "idle",
             activity_detail: None,
             activity_since_ms: unix_millis(),
+            checkpoint,
+            checkpoint_start: None,
+            redaction_secrets: Vec::new(),
         });
         sessions.insert(info.name.clone(), current);
         Ok(Json(SessionSummary {
@@ -1016,6 +1142,7 @@ async fn load_session(
             turns: info.turns,
             busy: false,
             pending: false,
+            created: info.created_unix_secs,
             updated: info.updated_unix_secs,
         }))
     })
@@ -1098,28 +1225,52 @@ async fn post_message(
     if text.is_empty() || text.len() > 16 * 1024 {
         return Err(ApiError::bad(anyhow!("message must contain 1–16384 bytes")));
     }
-    let sessions = state
-        .sessions
-        .lock()
-        .map_err(|_| anyhow!("web session registry lock poisoned"))?;
-    let current = sessions
-        .get(&message.session_id)
-        .cloned()
-        .context("web session not found")?;
-    let mut inner = current
-        .inner
-        .lock()
-        .map_err(|_| anyhow!("web session lock poisoned"))?;
-    if inner.busy || inner.pending.is_some() {
-        return Err(ApiError::conflict("this Agent session is already running"));
+    let path = state.path.clone();
+    let cfg =
+        tokio::task::spawn_blocking(move || config::load_or_default_unvalidated(&path)).await??;
+    let current = {
+        let sessions = state
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("web session registry lock poisoned"))?;
+        let current = sessions
+            .get(&message.session_id)
+            .cloned()
+            .context("web session not found")?;
+        let mut inner = current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("web session lock poisoned"))?;
+        if inner.busy || inner.pending.is_some() {
+            return Err(ApiError::conflict("this Agent session is already running"));
+        }
+        inner.busy = true;
+        remember_redaction_secrets(&mut inner, &cfg);
+        current.cancel.send_replace(false);
+        set_activity(&mut inner, "thinking", None);
+        inner.updated = unix_seconds();
+        inner.checkpoint_start = Some(inner.history.len());
+        push(&mut inner, format!("> {text}"));
+        inner.checkpoint = Some(WebCheckpoint {
+            status: "running".into(),
+            activity: "thinking".into(),
+            history: Vec::new(),
+            events: Vec::new(),
+        });
+        checkpoint_event(&mut inner, "input_accepted", None);
+        drop(inner);
+        current
+    };
+    if let Err(error) = persist_web_session(&state, &current).await {
+        if let Ok(mut inner) = current.inner.lock() {
+            inner.busy = false;
+            inner.checkpoint = None;
+            inner.checkpoint_start = None;
+            set_activity(&mut inner, "idle", None);
+            push(&mut inner, format!("❌ 无法保存会话检查点：{error:#}"));
+        }
+        return Err(error.into());
     }
-    inner.busy = true;
-    current.cancel.send_replace(false);
-    set_activity(&mut inner, "thinking", None);
-    inner.updated = unix_seconds();
-    push(&mut inner, format!("> {text}"));
-    drop(inner);
-    drop(sessions);
     notify(&current, "state");
     tokio::spawn(run_message(state, current, text));
     Ok((StatusCode::ACCEPTED, "任务已开始".into()))
@@ -1130,23 +1281,28 @@ async fn cancel_message(
     Json(message): Json<SessionSelection>,
 ) -> ApiResult<String> {
     let current = session(&state, &message.name)?;
-    let mut inner = current
-        .inner
-        .lock()
-        .map_err(|_| anyhow!("web session lock poisoned"))?;
-    if !inner.busy {
-        return Err(ApiError::conflict("this Agent session is not running"));
+    {
+        let mut inner = current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("web session lock poisoned"))?;
+        if !inner.busy {
+            return Err(ApiError::conflict("this Agent session is not running"));
+        }
+        current.cancel.send_replace(true);
+        if let Some(reply) = inner.reply.take() {
+            let response = match inner.pending.take() {
+                Some(Pending::Approval { .. }) => Reply::Approval(ConfirmationDecision::Reject),
+                _ => Reply::Questions(None),
+            };
+            let _ = reply.send(response);
+        }
+        set_activity(&mut inner, "cancelling", None);
+        checkpoint_event(&mut inner, "cancel_requested", None);
     }
-    current.cancel.send_replace(true);
-    if let Some(reply) = inner.reply.take() {
-        let response = match inner.pending.take() {
-            Some(Pending::Approval { .. }) => Reply::Approval(ConfirmationDecision::Reject),
-            _ => Reply::Questions(None),
-        };
-        let _ = reply.send(response);
+    if let Err(error) = persist_web_session(&state, &current).await {
+        eprintln!("cannot save Web cancellation checkpoint: {error:#}");
     }
-    set_activity(&mut inner, "cancelling", None);
-    drop(inner);
     notify(&current, "cancelling");
     Ok("正在取消".into())
 }
@@ -1249,6 +1405,7 @@ async fn run_terminal_command(
     let cfg = load_config(state.path.clone()).await?;
     let confirmer = WebConfirmer {
         session: current.clone(),
+        state: None,
     };
     let mut assessment = crate::security::assess(&command, &cfg);
     while assessment.requires_confirmation {
@@ -1331,7 +1488,11 @@ fn render_turns(turns: &[Vec<ConversationItem>]) -> Vec<String> {
 fn push(inner: &mut SessionState, line: String) {
     inner.history.push(line);
     if inner.history.len() > MAX_HISTORY {
-        inner.history.drain(..inner.history.len() - MAX_HISTORY);
+        let excess = inner.history.len() - MAX_HISTORY;
+        inner.history.drain(..excess);
+        if let Some(start) = inner.checkpoint_start.as_mut() {
+            *start = start.saturating_sub(excess);
+        }
     }
 }
 
@@ -1341,19 +1502,44 @@ fn clear_live_tool_output(inner: &mut SessionState) {
         .retain(|line| !line.starts_with("[OUT]") && !line.starts_with("[ERR]"));
 }
 
+fn mark_unresolved_tools(history: &mut [String]) {
+    for line in history {
+        if line.starts_with(LIVE_TOOL_PENDING_PREFIX) {
+            *line = "\u{1e}TOOL_ERR:任务中断，工具结果未记录；执行状态未知".into();
+        }
+    }
+}
+
 async fn run_message(state: Arc<Shared>, current: Arc<WebSession>, text: String) {
     let result = run_agent(state.clone(), current.clone(), text).await;
+    let failed = result.is_err();
     if let Ok(mut inner) = current.inner.lock() {
         clear_live_tool_output(&mut inner);
         if let Err(error) = result {
+            mark_unresolved_tools(&mut inner.history);
             if *current.cancel.borrow() {
                 push(&mut inner, "⏹ 任务已取消".into());
+                if let Some(checkpoint) = inner.checkpoint.as_mut() {
+                    checkpoint.status = "cancelled".into();
+                }
+                checkpoint_event(&mut inner, "cancelled", None);
             } else {
                 push(&mut inner, format!("❌ {error:#}"));
+                if let Some(checkpoint) = inner.checkpoint.as_mut() {
+                    checkpoint.status = "failed".into();
+                }
+                checkpoint_event(&mut inner, "failed", None);
             }
         } else if *current.cancel.borrow() {
             push(&mut inner, "⏹ 停止请求已收到，已完成的结果已保留".into());
         }
+    }
+    if failed {
+        if let Err(error) = persist_web_session(&state, &current).await {
+            eprintln!("cannot save failed Web task checkpoint: {error:#}");
+        }
+    }
+    if let Ok(mut inner) = current.inner.lock() {
         inner.busy = false;
         inner.pending = None;
         inner.reply = None;
@@ -1370,6 +1556,13 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
         Ok(cfg)
     })
     .await??;
+    {
+        let mut inner = current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("web session lock poisoned"))?;
+        remember_redaction_secrets(&mut inner, &cfg);
+    }
     if !cfg.provider_is_configured() {
         return Err(anyhow!("请先在 Web 配置页填写模型服务设置"));
     }
@@ -1386,6 +1579,7 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
     );
     let confirmer = WebConfirmer {
         session: current.clone(),
+        state: Some(state.clone()),
     };
     let runner = AgentRunner {
         config: &cfg,
@@ -1402,6 +1596,7 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
     };
     let sink = WebTextSink {
         session: current.clone(),
+        state: Some(state.clone()),
     };
     let agent_text = tokio::task::spawn_blocking({
         let text = text.clone();
@@ -1416,15 +1611,8 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
             current.cancel.subscribe(),
         )
         .await?;
-    let generated_title = if needs_title && !*current.cancel.borrow() {
-        tokio::select! {
-            title = generate_title(&llm, &cfg, &text, &result.final_text) => title,
-            _ = wait_web_cancel(current.cancel.subscribe()) => None,
-        }
-    } else {
-        None
-    };
-    let (turns, id, title) = {
+    let answer = result.final_text.clone();
+    {
         let mut inner = current
             .inner
             .lock()
@@ -1435,11 +1623,12 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
         if inner.turns.len() > cfg.max_context_turns {
             inner.turns.remove(0);
         }
-        if let Some(title) = generated_title {
-            inner.title = title;
-        }
         if needs_title {
             inner.title_generated = true;
+        }
+        checkpoint_event(&mut inner, "answer_completed", None);
+        if let Some(checkpoint) = inner.checkpoint.as_mut() {
+            checkpoint.status = "completed".into();
         }
         inner.steps = inner.steps.saturating_add(result.steps);
         inner.tool_calls = inner.tool_calls.saturating_add(result.tool_calls);
@@ -1451,27 +1640,105 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
             .saturating_add(result.usage.output_tokens.unwrap_or(0));
         inner.final_input_tokens = result.final_input_tokens;
         inner.updated = unix_seconds();
-        (inner.turns.clone(), inner.id.clone(), inner.title.clone())
-    };
+    }
     notify(&current, "state");
-    let secrets = vec![
-        cfg.api_key.clone(),
-        cfg.proxy_password.clone(),
-        cfg.ima_api_key.clone(),
-        cfg.jev_api_key.clone(),
-    ];
+    persist_web_session(&state, &current).await?;
+    {
+        let mut inner = current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("web session lock poisoned"))?;
+        inner.checkpoint = None;
+        inner.checkpoint_start = None;
+    }
+    if let Err(error) = persist_web_session(&state, &current).await {
+        eprintln!("cannot clear completed Web checkpoint: {error:#}");
+    }
+    if let Ok(mut inner) = current.inner.lock() {
+        inner.busy = false;
+        set_activity(&mut inner, "idle", None);
+    }
+    notify(&current, "state");
+    if needs_title && !*current.cancel.borrow() {
+        tokio::spawn(generate_title_after_reply(
+            state, current, llm, cfg, text, answer,
+        ));
+    }
+    Ok(())
+}
+
+async fn generate_title_after_reply(
+    state: Arc<Shared>,
+    current: Arc<WebSession>,
+    llm: impl LlmClient,
+    cfg: Config,
+    input: String,
+    answer: String,
+) {
+    let Some(title) = generate_title(&llm, &cfg, &input, &answer).await else {
+        return;
+    };
+    let _write = current.persist.lock().await;
     let path = state.path.clone();
-    tokio::task::spawn_blocking(move || -> Result<()> {
-        SessionStore::open(&path)?.save_redacted_with_title(
+    let registered_current = current.clone();
+    let result = tokio::task::spawn_blocking(move || -> Result<()> {
+        let sessions = state
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("web session registry lock poisoned"))?;
+        let Some(registered) = sessions
+            .values()
+            .find(|session| Arc::ptr_eq(session, &registered_current))
+        else {
+            return Ok(());
+        };
+        let (id, turns, checkpoint, prior_secrets) = {
+            let inner = registered
+                .inner
+                .lock()
+                .map_err(|_| anyhow!("web session lock poisoned"))?;
+            let mut checkpoint = inner.checkpoint.clone();
+            if let Some(value) = checkpoint.as_mut() {
+                value.activity = inner.activity.into();
+                value.history = inner.history[inner.checkpoint_start.unwrap_or(0)..].to_vec();
+            }
+            (
+                inner.id.clone(),
+                inner.turns.clone(),
+                checkpoint,
+                inner.redaction_secrets.clone(),
+            )
+        };
+        let cfg = config::load_or_default_unvalidated(&path)?;
+        let mut secrets = vec![
+            cfg.api_key,
+            cfg.proxy_password,
+            cfg.ima_client_id,
+            cfg.ima_api_key,
+            cfg.jev_api_key,
+        ];
+        secrets.extend(prior_secrets);
+        SessionStore::open(&path)?.save_web_state(
             &id,
             &title,
             &turns,
             cfg.model_tool_output_max_bytes,
             &secrets,
-        )
+            checkpoint.as_ref(),
+        )?;
+        if let Ok(mut inner) = registered.inner.lock() {
+            inner.title = title;
+            inner.updated = unix_seconds();
+        }
+        notify(registered, "state");
+        Ok(())
     })
-    .await??;
-    Ok(())
+    .await;
+    if let Err(error) = result {
+        eprintln!("cannot finish Web title update: {error:#}");
+    } else if let Ok(Err(error)) = result {
+        eprintln!("cannot save Web title: {error:#}");
+    }
 }
 
 async fn wait_web_cancel(mut receiver: watch::Receiver<bool>) {
@@ -1480,44 +1747,6 @@ async fn wait_web_cancel(mut receiver: watch::Receiver<bool>) {
             return;
         }
     }
-}
-
-async fn generate_title(
-    llm: &dyn crate::llm::LlmClient,
-    cfg: &Config,
-    input: &str,
-    answer: &str,
-) -> Option<String> {
-    let request = LlmRequest {
-        model: cfg.model.clone(),
-        items: vec![
-            ConversationItem::Message(ConversationMessage::new(Role::System, "Generate a concise title for this conversation. Use the user's language. Output only the title, at most 12 Chinese characters or 8 words. Do not use quotes or punctuation at the ends.")),
-            ConversationItem::Message(ConversationMessage::new(Role::User, format!("User: {}\nAssistant: {}", crate::limits::truncate_text(input, 1000), crate::limits::truncate_text(answer, 1000)))),
-        ],
-        tools: Vec::new(),
-    };
-    let response = llm.complete(request).await.ok()?;
-    normalize_title(response.text.as_deref()?)
-}
-
-fn normalize_title(value: &str) -> Option<String> {
-    let title = value
-        .lines()
-        .next()?
-        .trim()
-        .trim_matches(|c| matches!(c, '"' | '\'' | '`' | '#' | '*' | '：' | ':'))
-        .trim();
-    if title.is_empty() {
-        return None;
-    }
-    let mut bounded = String::new();
-    for character in title.chars().take(48) {
-        if bounded.len() + character.len_utf8() > 150 {
-            break;
-        }
-        bounded.push(character);
-    }
-    (!bounded.is_empty()).then_some(bounded)
 }
 
 // Browser clients cannot drive a terminal PTY. Keep every web execution in
@@ -1574,15 +1803,39 @@ impl WebOutput {
 
 struct WebTextSink {
     session: Arc<WebSession>,
+    state: Option<Arc<Shared>>,
 }
+
+impl WebTextSink {
+    fn schedule_checkpoint(&self) {
+        if let Some(state) = &self.state {
+            let state = state.clone();
+            let session = self.session.clone();
+            tokio::spawn(async move {
+                if let Err(error) = persist_web_session(&state, &session).await {
+                    eprintln!("cannot save Web tool checkpoint: {error:#}");
+                }
+            });
+        }
+    }
+}
+
 impl TextDeltaSink for WebTextSink {
     fn agent_activity(&self, activity: &'static str, detail: Option<&str>) {
+        let mut changed = false;
         if let Ok(mut inner) = self.session.inner.lock() {
             if !*self.session.cancel.borrow() {
+                changed = inner.activity != activity || inner.activity_detail.as_deref() != detail;
                 set_activity(&mut inner, activity, detail);
+                if changed {
+                    checkpoint_event(&mut inner, activity, detail);
+                }
             }
         }
         notify(&self.session, "activity");
+        if changed {
+            self.schedule_checkpoint();
+        }
     }
 
     fn delta(&self, text: &str) {
@@ -1606,6 +1859,7 @@ impl TextDeltaSink for WebTextSink {
 
     fn tool_started(&self, call_id: &str, name: &str) {
         if let Ok(mut inner) = self.session.inner.lock() {
+            checkpoint_event(&mut inner, "tool_started", Some(name));
             push(
                 &mut inner,
                 format!("{LIVE_TOOL_CALL_PREFIX}{call_id}\t{name}"),
@@ -1613,6 +1867,7 @@ impl TextDeltaSink for WebTextSink {
             push(&mut inner, format!("{LIVE_TOOL_PENDING_PREFIX}{call_id}"));
         }
         notify(&self.session, "tool_started");
+        self.schedule_checkpoint();
     }
 
     fn tool_finished(&self, call_id: &str, output: &str, success: bool) {
@@ -1638,13 +1893,24 @@ impl TextDeltaSink for WebTextSink {
             } else {
                 push(&mut inner, result);
             }
+            checkpoint_event(
+                &mut inner,
+                if success {
+                    "tool_completed"
+                } else {
+                    "tool_failed"
+                },
+                None,
+            );
         }
         notify(&self.session, "tool_finished");
+        self.schedule_checkpoint();
     }
 }
 
 struct WebConfirmer {
     session: Arc<WebSession>,
+    state: Option<Arc<Shared>>,
 }
 
 fn approval_explanation(assessment: &SecurityAssessment) -> String {
@@ -1736,8 +2002,22 @@ impl WebConfirmer {
             inner.pending = Some(pending);
             inner.reply = Some(tx);
             set_activity(&mut inner, "waiting", None);
+            checkpoint_event(
+                &mut inner,
+                if is_approval {
+                    "approval_waiting"
+                } else {
+                    "input_waiting"
+                },
+                None,
+            );
         }
         notify(&self.session, "pending");
+        if let Some(state) = &self.state {
+            if let Err(error) = persist_web_session(state, &self.session).await {
+                eprintln!("cannot save Web waiting checkpoint: {error:#}");
+            }
+        }
         tokio::select! {
             reply = rx => reply.context("browser decision was canceled"),
             _ = wait_web_cancel(self.session.cancel.subscribe()) => {
@@ -1757,11 +2037,11 @@ impl WebConfirmer {
 mod tests {
     use super::*;
     use crate::config::ApiType;
-    use crate::llm::{ToolCall, ToolResult};
+    use crate::llm::{FinishReason, LlmResponse, ToolCall, ToolResult, Usage};
     use std::io::Read;
     use tempfile::tempdir;
     use wiremock::{
-        matchers::{method, path},
+        matchers::{body_string_contains, method, path},
         Mock, MockServer, ResponseTemplate,
     };
 
@@ -1880,15 +2160,236 @@ mod tests {
     #[test]
     fn generated_titles_are_bounded_and_cleaned() {
         assert_eq!(
-            normalize_title("**\"检查网络连接\"**\nextra"),
+            crate::session_title::normalize_title("**\"检查网络连接\"**\nextra"),
             Some("检查网络连接".into())
         );
-        assert_eq!(normalize_title("   "), None);
+        assert_eq!(crate::session_title::normalize_title("   "), None);
         assert_eq!(
-            normalize_title(&"a".repeat(60)).map(|value| value.chars().count()),
+            crate::session_title::normalize_title(&"a".repeat(60))
+                .map(|value| value.chars().count()),
             Some(48)
         );
-        assert!(normalize_title(&"😀".repeat(60)).is_some_and(|value| value.len() <= 150));
+        assert!(crate::session_title::normalize_title(&"😀".repeat(60))
+            .is_some_and(|value| value.len() <= 150));
+    }
+
+    struct StaticTitle;
+
+    #[async_trait]
+    impl LlmClient for StaticTitle {
+        async fn complete(&self, _: LlmRequest) -> Result<LlmResponse> {
+            Ok(LlmResponse {
+                text: Some("已完成任务".into()),
+                tool_calls: Vec::new(),
+                usage: Usage::default(),
+                finish_reason: FinishReason::Stop,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn delayed_title_does_not_restore_a_deleted_session() -> Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let shared = state(path.clone());
+        let current = session(&shared, "web-test")?;
+        {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("poisoned"))?;
+            inner.turns.push(vec![
+                ConversationItem::Message(ConversationMessage::new(Role::User, "问题")),
+                ConversationItem::Message(ConversationMessage::new(Role::Assistant, "回答")),
+            ]);
+            inner.history = render_turns(&inner.turns);
+        }
+        persist_web_session(&shared, &current).await?;
+        delete_session(
+            State(shared.clone()),
+            Json(SessionSelection {
+                name: "web-test".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        generate_title_after_reply(
+            shared,
+            current,
+            StaticTitle,
+            Config::default(),
+            "问题".into(),
+            "回答".into(),
+        )
+        .await;
+        assert!(SessionStore::open(&path)?.list()?.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reply_is_idle_and_saved_before_title_request_finishes() -> Result<()> {
+        let provider = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .and(body_string_contains("Generate a concise title"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_delay(std::time::Duration::from_secs(1))
+                    .set_body_json(serde_json::json!({
+                        "choices": [{"message": {"content": "简短标题"}, "finish_reason": "stop"}]
+                    })),
+            )
+            .with_priority(1)
+            .expect(1)
+            .mount(&provider)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_string(concat!(
+                        "data: {\"choices\":[{\"delta\":{\"content\":\"任务完成\"},\"finish_reason\":null}]}\n\n",
+                        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+                        "data: [DONE]\n\n"
+                    )),
+            )
+            .with_priority(10)
+            .expect(1)
+            .mount(&provider)
+            .await;
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        config::save_config(
+            &path,
+            &Config {
+                endpoint: format!("{}/v1", provider.uri()),
+                api_key: "test-key".into(),
+                model: "test-model".into(),
+                api_type: ApiType::ChatCompletions,
+                ..Config::default()
+            },
+        )?;
+        let shared = state(path.clone());
+        post_message(
+            State(shared.clone()),
+            Json(Message {
+                session_id: "web-test".into(),
+                text: "请简短回答".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        let current = session(&shared, "web-test")?;
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let ready = current
+                    .inner
+                    .lock()
+                    .is_ok_and(|inner| !inner.busy && inner.turns.len() == 1);
+                if ready {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await?;
+        assert_eq!(
+            current.inner.lock().map_err(|_| anyhow!("poisoned"))?.title,
+            "新会话"
+        );
+        let store = SessionStore::open(&path)?;
+        assert_eq!(store.load("web-test", 10, 1024)?.len(), 1);
+        assert!(store.load_web_checkpoint("web-test")?.is_none());
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if current
+                    .inner
+                    .lock()
+                    .is_ok_and(|inner| inner.title == "简短标题")
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await?;
+        assert_eq!(store.list()?[0].title, "简短标题");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn tool_start_is_checkpointed_before_a_result_exists() -> Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let shared = state(path.clone());
+        let current = session(&shared, "web-test")?;
+        {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("poisoned"))?;
+            inner.checkpoint = Some(WebCheckpoint {
+                status: "running".into(),
+                activity: "thinking".into(),
+                history: Vec::new(),
+                events: Vec::new(),
+            });
+        }
+        let sink = WebTextSink {
+            session: current,
+            state: Some(shared),
+        };
+        sink.tool_started("pending", "read_file");
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                if let Ok(Some(checkpoint)) = SessionStore::open(&path)
+                    .and_then(|store| store.load_web_checkpoint("web-test"))
+                {
+                    if checkpoint
+                        .events
+                        .iter()
+                        .any(|event| event.kind == "tool_started")
+                    {
+                        assert!(checkpoint
+                            .history
+                            .iter()
+                            .any(|line| line.contains(LIVE_TOOL_PENDING_PREFIX)));
+                        break;
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn checkpoint_keeps_redacting_keys_after_provider_changes() -> Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let mut cfg = Config {
+            api_key: "old-private-key".into(),
+            ..Config::default()
+        };
+        config::save_config(&path, &cfg)?;
+        let shared = state(path.clone());
+        let current = session(&shared, "web-test")?;
+        {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("poisoned"))?;
+            remember_redaction_secrets(&mut inner, &cfg);
+            inner
+                .history
+                .push("> old-private-key new-private-key".into());
+            inner.checkpoint = Some(WebCheckpoint {
+                status: "running".into(),
+                activity: "thinking".into(),
+                history: Vec::new(),
+                events: Vec::new(),
+            });
+        }
+        cfg.api_key = "new-private-key".into();
+        config::save_config(&path, &cfg)?;
+        persist_web_session(&shared, &current).await?;
+        let raw = std::fs::read_to_string(directory.path().join("sessions/web-test.json"))?;
+        assert!(!raw.contains("old-private-key"));
+        assert!(!raw.contains("new-private-key"));
+        Ok(())
     }
 
     #[test]
@@ -1897,6 +2398,7 @@ mod tests {
         let current = session(&state, "web-test")?;
         let sink = WebTextSink {
             session: current.clone(),
+            state: None,
         };
         sink.delta("第一段");
         sink.delta("第二段");
@@ -1915,6 +2417,7 @@ mod tests {
         let current = session(&state, "web-test")?;
         let sink = WebTextSink {
             session: current.clone(),
+            state: None,
         };
 
         sink.tool_started("first", "analyze_audio");
@@ -1969,6 +2472,7 @@ mod tests {
         let current = session(&state, "web-test")?;
         let sink = WebTextSink {
             session: current.clone(),
+            state: None,
         };
         let output = WebOutput {
             session: current.clone(),
@@ -2091,6 +2595,8 @@ mod tests {
             exported_unix_secs: 1,
             busy: true,
             entries: web_entries(&["> 本轮问题".into(), "🤖 本轮回答".into()]),
+            checkpoint_status: None,
+            checkpoint_events: Vec::new(),
         };
         let bytes = build_session_export(&dir.path().join("config.toml"), &conversation)?;
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
@@ -2476,6 +2982,99 @@ mod http_tests {
             .await?;
         assert_eq!(snapshot["entries"][0]["text"], "历史问题");
         assert_eq!(snapshot["entries"][1]["text"], "历史回答");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unfinished_web_request_recovers_as_diagnostic_history() -> Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let mut initial = SessionState::empty();
+        initial.id = "web-test".into();
+        let original = Arc::new(Shared {
+            path: path.clone(),
+            sessions: Mutex::new(BTreeMap::from([("web-test".into(), web_session(initial))])),
+        });
+        let current = session(&original, "web-test")?;
+        {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("poisoned"))?;
+            inner.busy = true;
+            inner.turns.push(vec![
+                ConversationItem::Message(ConversationMessage::new(Role::User, "旧问题")),
+                ConversationItem::Message(ConversationMessage::new(Role::Assistant, "旧回答")),
+            ]);
+            inner.history = render_turns(&inner.turns);
+            inner.checkpoint_start = Some(inner.history.len());
+            inner.history.extend([
+                "> 检查设备".into(),
+                "🔧 inspect_android_environment".into(),
+                "\u{1e}TOOL_OK:设备已检查".into(),
+                format!("{LIVE_TOOL_CALL_PREFIX}pending\tread_file"),
+                format!("{LIVE_TOOL_PENDING_PREFIX}pending"),
+            ]);
+            inner.checkpoint = Some(WebCheckpoint {
+                status: "running".into(),
+                activity: "thinking".into(),
+                history: Vec::new(),
+                events: vec![WebCheckpointEvent {
+                    at: 1,
+                    kind: "tool_completed".into(),
+                    tool: None,
+                }],
+            });
+        }
+        persist_web_session(&original, &current).await?;
+        let restarted = Arc::new(Shared {
+            path: path.clone(),
+            sessions: Mutex::new(BTreeMap::new()),
+        });
+        let Json(_loaded) = load_session(
+            State(restarted.clone()),
+            Json(SessionSelection {
+                name: "web-test".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        let Json(snapshot) = get_state(
+            State(restarted),
+            Query(StateQuery {
+                id: "web-test".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        assert!(!snapshot.busy);
+        assert!(snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.kind == "tool_result"));
+        assert!(snapshot.entries.iter().any(|entry| {
+            entry.kind == "tool_error" && entry.text.contains("执行状态未知")
+        }));
+        assert!(snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.text.contains("上次任务")));
+        assert_eq!(
+            SessionStore::open(&path)?.load("web-test", 10, 1024)?.len(),
+            1
+        );
+        assert_eq!(
+            snapshot
+                .entries
+                .iter()
+                .filter(|entry| entry.text == "旧问题")
+                .count(),
+            1
+        );
+        assert_eq!(
+            SessionStore::open(&path)?
+                .load_web_checkpoint("web-test")?
+                .context("missing checkpoint")?
+                .status,
+            "interrupted"
+        );
         Ok(())
     }
 }
