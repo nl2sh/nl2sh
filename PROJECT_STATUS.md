@@ -4,7 +4,7 @@ Last Updated: 2026-09-27
 
 ## Recent Changes
 
-- 准备发布 `v1.0.3`：Cargo 版本与 changelog 已收敛到 2026-09-27 的补丁版本；标签推送继续通过既有工作流构建双 ABI Android、自更新裸二进制、Termux `.deb`、签名 APT 仓库及 GitHub Release。
+- `v1.0.3` 已正式发布：标签工作流完成双 ABI Android、自更新裸二进制、统一 ZIP/TAR、Termux `.deb`、签名 APT 仓库及 GitHub Release 发布。
 - 预编译部署启动器现按本地主机与设备端实际 SHA-256 跳过相同二进制的重复推送，更新后再次校验；Linux Bash 与 Windows PowerShell 一键安装入口会校验 Release ZIP、生成最小 Provider 配置，并通过显式配置部署入口启动。
 - 部署优化验证：`bash -n android-run-linux.sh install-android.sh pack-release.sh`、`actionlint .github/workflows/release.yml`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 及 `git diff --check` 通过。
 
@@ -15,7 +15,7 @@ Last Updated: 2026-09-27
 - Web 模型回答与流式 Markdown 的围栏代码按声明语言高亮，使用按需注册的语法规则和现有语义色板；未知语言继续转义为纯文本。TUI 的围栏代码为 Shell、Rust、Python、JavaScript/TypeScript 和 JSON 提供轻量高亮；工具原始输出、安全审批、Android 与 PTY 路径不变。
 - 代码高亮验证：Web `npm test --prefix web`、`npm run build --prefix web`，Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 及 `git diff --check` 通过；回归覆盖已知语言、未知语言的 HTML 转义和 TUI 文本保真。
 - Web 顶栏的菜单项独立横向滚动，GitHub Star 与其右侧的展开/收起按钮保持可见；按钮改用 `<`/`>` 字符并保留可访问名称。对话输入框增加提问及 `@` 文件选择提示；“能做什么”弹窗固定搜索与分类筛选区，由工具示例列表独立滚动。这些改动只涉及浏览器展示，不改变会话、文件引用、安全审批、Android 或 PTY 路径。
-- 项目介绍与计划按当前模块同步：Android 单文件程序包含 TUI、Web 多会话和结构化工具；可选主机侧 A2A/MCP 网关支持设备盘点与 Agent 咨询，拒绝所有需要人工确认的操作。公开发布版本为 1.0.2；TUR 配方 PR #2804 已合并。
+- 项目介绍与计划按当前模块同步：Android 单文件程序包含 TUI、Web 多会话和结构化工具；可选主机侧 A2A/MCP 网关支持设备盘点与 Agent 咨询，拒绝所有需要人工确认的操作。公开发布版本为 1.0.3；TUR 配方 PR #2804 已合并。
 - TUI 完整 Agent 首轮保存后复用 Web 的无工具短标题生成器，`/sessions` 显示标题；后续自动保存、恢复与重命名保留标题。标题生成失败不阻断回答或会话保存，本地命令不触发生成。
 - Web 会话摘要增加独立创建时间，侧栏轮数或运行状态后显示相对时间；满一天后显示本地日期和时刻。旧快照从系统生成的会话 ID 推算创建时间，后续保存和重命名保持不变。
 - 会话标题与创建时间验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`，Web `npm run build --prefix web`、`npm test --prefix web`，Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 及 `git diff --check` 通过；TUI 伪终端回归确认真实首轮回复后自动标题写入私有快照，存储回归确认旧快照时间恢复、续存与重命名保留创建时间。
@@ -158,7 +158,7 @@ Last Updated: 2026-09-27
 
 ## Current Phase
 
-1.0.3 正在发布；TUI、Web 多会话、结构化工具和可选 A2A/MCP 网关均已实现。TUR 上游配方已合并，后续工作集中在兼容性与体验改进。
+1.0.3 已发布；TUI、Web 多会话、结构化工具和可选 A2A/MCP 网关均已实现。TUR 上游配方已合并，后续工作集中在兼容性与体验改进。
 
 ## Overall Status
 
@@ -250,6 +250,7 @@ Last Updated: 2026-09-27
 ## Verification Performed
 
 - `v1.0.3` 发布门禁：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`cargo build --release`、前端测试/生产构建、Release workflow 静态检查和发布相关 Bash 语法检查通过；NDK r28c/API 26 的 AArch64 与 ARMv7 release 交叉编译通过，分别验证为使用 `/system/bin/linker64` 的 64 位 PIE 和使用 `/system/bin/linker` 的 32 位 PIE。
+- `v1.0.3` GitHub Actions 发布工作流全部通过；正式 Release 包含双 ABI 裸二进制及摘要、统一 `.zip`/`.tar.gz`、两个 Termux `.deb` 和 `SHA256SUMS`，签名 APT 仓库同步部署成功。
 - Web 导航、输入与工具目录调整：`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 在 Linux 目标通过；菜单按钮保留动态可访问名称与 `aria-expanded` 状态。
 - 文档同步验证：Linux 目标 `git diff --check`、`cargo fmt --all -- --check`、`cargo check` 与 `cargo test` 通过；默认测试 1 项显式凭据 ima smoke 按设计忽略。
 - GitHub 公开发布与上游记录核对：`v1.0.2` Release 已发布，TUR PR #2804 于 2026-09-15 合并。
