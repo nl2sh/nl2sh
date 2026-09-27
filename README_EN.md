@@ -18,6 +18,7 @@ The optional host-side [A2A gateway](a2a_gateway/README.md) and stdio MCP adapte
 - A single Android executable with a rich ratatui/crossterm TUI and an embedded multi-session Web UI.
 - Streaming model output, live command output, Markdown, syntax highlighting, collapsible tool results, charts, saved sessions, and Chinese/English TUI localization.
 - Structured bounded tools for files, Android diagnostics, UI inspection and interaction, screenshots, networking, audio analysis, private agent notes, and charts.
+- APK tools inspect ZIP entries and DEX class names in Rust. Single-class decompilation uses a DEX helper through Android `app_process` after strong confirmation.
 - `@` file and directory references with completion; referenced content is still read through bounded structured tools.
 - OpenRouter, OpenAI, DeepSeek, Moonshot/Kimi, SiliconFlow, Ollama, and custom OpenAI-compatible endpoints.
 - Chat Completions and Responses API support with automatic protocol negotiation.
@@ -35,6 +36,8 @@ LLM -> Security -> Confirmation -> Execution
 Commands run through a Unix PTY. Timeouts terminate and reap the entire process group. Interactive full-screen commands temporarily take control of the terminal; RAII guards restore raw mode, the alternate screen, mouse capture, and the cursor on normal and error paths.
 
 ## Build
+
+APK archive and DEX indexing tools need no extra runtime. Android-only `decompile_apk_class` uses the [DEX helper](jadx-helper/README.md) built from this repository: set `NL2SH_JADX_ANDROID_HELPER_PATH`, or set both `NL2SH_JADX_ANDROID_HELPER_URL` (HTTPS) and `NL2SH_JADX_ANDROID_HELPER_SHA256` for confirmed first-use download. `NL2SH_JADX_CACHE_DIR` selects a custom cache root. No verified default helper has been published yet. A JVM class JAR is rejected; the caller verifies manually provided JARs.
 
 Development requires stable Rust (edition 2021) and Node.js 22+ with npm. Cargo copies the `web/` source into its output directory, runs `npm ci` and `npm run build`, and embeds the generated assets in the executable.
 

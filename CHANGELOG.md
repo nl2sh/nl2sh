@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add bounded APK archive inspection, entry listing, and DEX class indexing tools. Single-class JADX decompilation requires strong confirmation and an Android DEX helper run with `app_process`; a local helper build project and hash-pinned on-demand download path are included.
+
 ## [1.0.3] - 2026-09-27
 
 ### Changed

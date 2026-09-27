@@ -27,6 +27,7 @@ macro_rules! define_tool {
 }
 
 pub mod android;
+pub mod apk;
 pub mod audio;
 pub mod chart;
 mod extended;
@@ -300,6 +301,10 @@ impl ToolRegistry {
     pub fn builtin(capabilities: &[Capability]) -> Self {
         let mut tools: Vec<Box<dyn Tool>> = vec![
             Box::new(ShellTool),
+            Box::new(apk::InspectApkTool),
+            Box::new(apk::ListApkEntriesTool),
+            Box::new(apk::ListDexClassesTool),
+            Box::new(apk::DecompileApkClassTool),
             Box::new(ReadFileTool),
             Box::new(ListDirTool),
             Box::new(SearchTextTool),
@@ -352,7 +357,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 37);
+        assert_eq!(names.len(), 41);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()
@@ -365,6 +370,10 @@ mod tests {
             "android_clipboard",
             "agent_memory",
             "inspect_tls",
+            "inspect_apk",
+            "list_apk_entries",
+            "list_dex_classes",
+            "decompile_apk_class",
         ] {
             assert!(names.contains(&name.to_string()), "missing {name}");
         }

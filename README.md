@@ -19,6 +19,7 @@ Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环�
 - 丰富 TUI 支持 LLM 文本流式渐变输出、实时状态与命令输出、内嵌确认、历史滚动、工具结果折叠、Markdown 渲染、中英文界面和热重配置。
 - 内置 Web 支持多个独立 Agent 会话、流式结果、图表、审批与配置；进行中任务保存脱敏检查点，重启后可查看中断诊断，不自动续跑。
 - 内置 `read_file`、`list_dir`、`search_text`、`apply_patch` 结构化文件工具；允许绝对路径、父目录和符号链接，资源大小仍受限，补丁先展示 diff 并确认。
+- 内置 `inspect_apk`、`list_apk_entries`、`list_dex_classes` 对本地 APK 做有界只读分析；`decompile_apk_class` 在强确认后使用含 `classes.dex` 的 helper 和系统 `app_process`。三项只读工具无需 helper。
 - 内置 `analyze_audio` 对 WAV/Raw PCM 做纯 Rust 确定性 DSP 分析；WAV 以真实 header 为准，无头 PCM 缺少可靠元数据时弹出结构化问答窗口，可直接选择常用值或输入自定义采样率、声道数和采样格式，不会把猜测当事实。
 - 内置 `judge_audio_quality` 对 Feature JSON 做多维音质判断；配置 Jev Key 时使用 Jev，否则使用当前通用 LLM，原始 WAV 不上传给判断模型。
 - 内置完整 Android 交互闭环：读取 UI 树后可对仍匹配的控件 bounds 执行确认后的点击、滑动、长按和文本输入；默认返回紧凑可操作节点，操作后附带最新界面状态；PNG/JPEG/WebP 截图会在必要时有界缩放后交给支持视觉的模型，图片不保存进会话。
@@ -48,6 +49,12 @@ cargo build --release
 ```
 
 HTTP 使用 rustls，未启用 native-tls。
+
+### APK 反编译后端
+
+APK 概览、条目列表和 DEX 类名索引无需额外运行时。单类反编译仅在 Android 上运行，使用仓库内 [Android helper](jadx-helper/README.md) 构建出的 DEX JAR；它不安装为常规 APK，也不需要设备端 Java 命令。
+
+可用 `NL2SH_JADX_ANDROID_HELPER_PATH=/path/to/jadx-helper.jar` 指定离线文件，或同时设置 `NL2SH_JADX_ANDROID_HELPER_URL=https://…` 与 `NL2SH_JADX_ANDROID_HELPER_SHA256=<64位摘要>`，在首次获批后按需下载并校验缓存。普通 JVM `.class` JAR 被拒绝。`NL2SH_JADX_CACHE_DIR` 可选择缓存根目录。手工指定的 helper 由操作者核验来源；目前没有经真机验证并固定摘要的默认发布资产，未配置时返回明确的后端不可用错误。
 
 ### 内置 Web 界面
 

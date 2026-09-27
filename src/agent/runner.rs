@@ -280,7 +280,7 @@ impl AgentRunner<'_> {
                             &call.id,
                             format!(
                                 "Tool call rejected: arguments are invalid JSON ({bytes} bytes): {error}. Regenerate this tool call with complete valid JSON.{length_hint} The rejected arguments were not executed.",
-                                bytes = call.invalid_argument_bytes().map_or(0, |bytes| bytes),
+                                bytes = call.invalid_argument_bytes().unwrap_or(0),
                             ),
                         ),
                         text_sink,

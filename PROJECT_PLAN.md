@@ -299,3 +299,12 @@
 - [x] 完整回答先保存，自动标题在后台更新；断线重连时清除不存在会话的过期状态。
 - [x] 会话侧栏与上方菜单可独立收起；会话显示创建时间，窄屏保持可用。
 - [x] TUI 首轮完整 Agent 回复后自动生成会话标题，`/sessions` 展示标题并保留稳定 ID。
+
+## Phase 34 APK 静态分析工具 — 部分实现
+
+- [x] 结构化只读 APK 概览、ZIP 条目检索和 DEX 类索引，限制条目、解压量和结果数量。
+- [x] 单类 JADX 反编译经过 Dangerous 强确认；只接受含 `classes.dex` 的 Android helper，并通过 `CLASSPATH` + `/system/bin/app_process` 启动；离线 JAR 或 HTTPS URL + 固定 SHA-256 可在强确认后使用。
+- [x] 仓库内提供固定 JADX 1.5.3 的最小 Android helper 源码、Gradle 构建和发布元数据生成脚本。
+- [ ] 发布并锁定经真机验证的 Android DEX helper，提供默认下载地址和摘要；当前未配置 helper 时返回明确错误。
+- [x] 在 Android API 35 模拟器通过 `app_process` 对单 DEX 和双 DEX 测试 APK 完成单类反编译；不使用设备端 Java 或安装 helper APK。
+- [ ] 在 Android API 26 真机及其他 API 版本验证，并覆盖大型多 DEX APK、内存与超时清理。

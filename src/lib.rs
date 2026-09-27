@@ -21,6 +21,7 @@ pub mod provider_account;
 pub mod provider_metadata;
 /// Direct Android shell versus Termux compatibility runtime detection.
 pub mod runtime;
+pub mod runtime_dependencies;
 /// Local shell command classification and confirmation requirements.
 pub mod security;
 /// Shared short titles for persisted Web and TUI conversations.

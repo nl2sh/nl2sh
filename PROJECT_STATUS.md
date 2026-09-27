@@ -4,6 +4,10 @@ Last Updated: 2026-09-27
 
 ## Recent Changes
 
+- 新增 APK 工具系列：`inspect_apk`、`list_apk_entries`、`list_dex_classes` 直接以有界 Rust 解析 ZIP/DEX；`decompile_apk_class` 需要强确认，只在 Android 通过 `CLASSPATH` + `/system/bin/app_process` 调用含 `classes.dex` 的 helper。仓库内提供固定 JADX 1.5.3 的 helper 源码和构建脚本；运行时支持离线路径或 HTTPS URL + 固定 SHA-256 按需下载并原子缓存，普通 JVM JAR 被拒绝。当前尚无经真机验证的默认 helper 资产，未配置时明确报错。前三项不依赖 helper；未改动 PTY 路径。
+- APK 工具验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`，以及 Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 通过；合成压缩 APK 回归覆盖 ZIP 概览、条目和 DEX 类索引，异常偏移与非法类名被拒绝，JADX 工具风险下限要求强确认。
+- Android JADX helper 构建验证：JDK 17、Gradle 8.9、Android Gradle Plugin 8.7.3 与 Android SDK API 35 下执行 `jadx-helper/build-helper.sh` 成功；产物为单个 `classes.dex` 的约 2.6 MiB JAR，DEX 中含 `com.nl2sh.jadx.Main` 和 `jadx.api.JadxDecompiler`，脚本生成 SHA-256 与版本元数据。Android API 35 x86_64 模拟器中，以 `CLASSPATH` + `/system/bin/app_process` 分别对单 DEX 和双 DEX 测试 APK 成功反编译单类并读取 Java 源码；尚未验证 API 26 真机、大型多 DEX、内存和超时清理。
+
 - `v1.0.3` 已正式发布：标签工作流完成双 ABI Android、自更新裸二进制、统一 ZIP/TAR、Termux `.deb`、签名 APT 仓库及 GitHub Release 发布。
 - 新增独立英文项目说明 `README_EN.md`，与中文 README 顶部互链，并在两种语言中展示最新的 TUI 与 Web 存储分析截图；文档变更不影响 Android 运行、安全确认或 PTY 路径。
 - 预编译部署启动器现按本地主机与设备端实际 SHA-256 跳过相同二进制的重复推送，更新后再次校验；Linux Bash 与 Windows PowerShell 一键安装入口会校验 Release ZIP、生成最小 Provider 配置，并通过显式配置部署入口启动。

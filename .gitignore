@@ -7,3 +7,7 @@
 /web/node_modules/
 /web/dist/
 /web/tsconfig.tsbuildinfo
+/jadx-helper/.gradle/
+/jadx-helper/app/build/
+/jadx-helper/dist/
+/jadx-helper/local.properties
