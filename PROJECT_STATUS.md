@@ -5,6 +5,7 @@ Last Updated: 2026-09-27
 ## Recent Changes
 
 - `v1.0.3` 已正式发布：标签工作流完成双 ABI Android、自更新裸二进制、统一 ZIP/TAR、Termux `.deb`、签名 APT 仓库及 GitHub Release 发布。
+- 新增独立英文项目说明 `README_EN.md`，与中文 README 顶部互链，并在两种语言中展示最新的 TUI 与 Web 存储分析截图；文档变更不影响 Android 运行、安全确认或 PTY 路径。
 - 预编译部署启动器现按本地主机与设备端实际 SHA-256 跳过相同二进制的重复推送，更新后再次校验；Linux Bash 与 Windows PowerShell 一键安装入口会校验 Release ZIP、生成最小 Provider 配置，并通过显式配置部署入口启动。
 - 部署优化验证：`bash -n android-run-linux.sh install-android.sh pack-release.sh`、`actionlint .github/workflows/release.yml`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 及 `git diff --check` 通过。
 

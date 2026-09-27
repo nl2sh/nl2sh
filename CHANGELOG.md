@@ -26,6 +26,7 @@
 
 ### Added
 
+- Add a standalone English README with reciprocal language links and current TUI/Web storage-analysis screenshots.
 - 新增 Linux/Windows 一键安装脚本：下载并校验最新 `nl2sh-android.zip`，按可选 Provider、模型、Endpoint 和 API Key 生成配置，然后部署并启动；配置文件权限保持为 `0600`。
 - Add a stdio MCP adapter that discovers the A2A gateway, authenticates requests, and exposes device inspection, tool listing, consultation, and task lookup to coding agents.
 - Add an optional host-side A2A 1.0 gateway with Agent Card discovery, authenticated JSON-RPC tasks, persistent context, and a narrow Android bridge. Add explicit build/deploy checkpoints and reject unattended device modifications through the existing confirmation boundary.

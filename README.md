@@ -4,6 +4,8 @@
 
 <h1 align="center">nl2sh</h1>
 
+<p align="center"><strong>简体中文</strong> | <a href="README_EN.md">English</a></p>
+
 Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环境、同时兼容 Termux 的类 Hermes AI Agent。直接 Android 部署以单个可执行文件交付，无需 Termux 或设备端运行时依赖；Termux 用户可选择包管理安装。它提供丰富的 TUI 和内置 Web 多会话界面，用于对话、实时结果、安全确认、历史恢复和配置。自然语言任务由多轮 Tool Calling 连接 OpenAI 兼容模型与本地工具；需要执行的操作先经过本地安全分类和确认，再把真实结果返回模型。
 
 “类 Hermes”指的是自主 Agent 的产品形态和 Tool Calling 交互方式；nl2sh 专注 Android shell，不声称与 Hermes 的 API、插件或全部功能兼容。
@@ -351,6 +353,14 @@ Agent 内置只读 Android 诊断工具，可结构化查询前台或指定应�
 例如，输入“查看本机信息”后，TUI 会实时显示命令输出、状态和 Agent 的最终总结：
 
 ![nl2sh Android TUI demonstration](screenshots/nl2sh.gif)
+
+存储空间占用分析（TUI）
+
+![nl2sh Android TUI 存储空间占用分析](screenshots/tui.png)
+
+存储空间占用分析（Web）
+
+![nl2sh Android Web 存储空间占用图表](screenshots/web.png)
 
 ## 测试和真机 smoke test
 
