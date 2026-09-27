@@ -4,6 +4,7 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- `v1.0.4` 已正式发布：GitHub Actions 的 helper、双 ABI Android、Termux 包、统一安装包、签名 APT 仓库和 Release job 全部通过；正式 Release 包含可复现的 `jadx-helper.jar`、摘要与元数据。使用正式 ARMv7 二进制且不设置 helper URL/路径时，API 28 设备在强确认后从默认 Release URL 下载、校验、缓存并成功反编译目标类。
 - `v1.0.4` 发布门禁：JADX helper 通过 Gradle Wrapper 8.9 在 Windows 与 Linux/JDK 17 构建为相同的可复现 JAR，固定 SHA-256 为 `b733944a9588abbafee1d9b9d77cb78c02bb95f056301f115c0fcb77307c7328`，并在 API 28 ARMv7 设备通过单类反编译。默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、239 项执行测试、Release workflow 的 actionlint、相关 Bash/PowerShell 语法、Android API 26 AArch64 与 ARMv7 release 构建均通过；1 项需外部 ima 凭据的 smoke 按设计忽略。
 - Android JADX helper 增加固定并校验发行包 SHA-256 的 Gradle Wrapper 8.9，以及 Windows PowerShell 构建入口 `jadx-helper/build-helper.ps1`；Windows 与 Bash 脚本均通过仓库 Wrapper 执行 release 构建，并把 APK 运行时条目重新封装为无时间戳、固定顺序和固定压缩方式的可复现 JAR。Windows 与 Linux 构建摘要一致，脚本校验单个 `classes.dex` 和 `com.nl2sh.jadx.Main` 入口并生成 SHA-256 与版本元数据，无需系统安装 Gradle；不改变安全确认或 PTY 路径。
 - Android JADX helper API 28 ARMv7 真机闭环：JADX 固定为与其 Android 示例一致的 1.5.1，避开 1.5.3 在旧平台调用 API 35 `Inflater.setInput(ByteBuffer)` 的兼容问题；helper 使用单线程、精确类过滤、无代码缓存和 R8 缩减，并拒绝意外 XML 解析。运行时为 `app_process` 注入私有可写 `java.io.tmpdir`。约 685 KiB 的单 DEX 系统 APK经 TUI 普通确认及 `YES` 强确认后成功反编译目标类并返回 Java 结构摘要，终端正常恢复；候选部署未覆盖设备既有程序。
