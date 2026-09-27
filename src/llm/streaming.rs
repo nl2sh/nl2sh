@@ -157,16 +157,15 @@ impl ChatStream {
                 if call.id.is_empty() || call.name.is_empty() {
                     bail!("incomplete streamed tool call");
                 }
-                Ok(ToolCall {
-                    id: call.id,
-                    name: call.name,
-                    arguments: serde_json::from_str(if call.arguments.is_empty() {
+                Ok(ToolCall::from_raw_arguments(
+                    call.id,
+                    call.name,
+                    if call.arguments.is_empty() {
                         "{}"
                     } else {
                         &call.arguments
-                    })
-                    .context("invalid streamed tool arguments")?,
-                })
+                    },
+                ))
             })
             .collect::<Result<Vec<_>>>()?;
         let text = (!self.text.is_empty()).then_some(self.text);
@@ -217,6 +216,19 @@ mod tests {
         assert_eq!(result.text.as_deref(), Some("你好"));
         assert_eq!(result.tool_calls[0].arguments["command"], "id");
         assert_eq!(*sink.0.lock().map_err(|_| anyhow::anyhow!("lock"))?, "你好");
+        Ok(())
+    }
+
+    #[test]
+    fn chat_stream_retains_malformed_tool_arguments_for_agent_repair() -> Result<()> {
+        let sink = Sink::default();
+        let mut stream = ChatStream::default();
+        stream.push(
+            &serde_json::json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"broken","function":{"name":"execute_shell_command","arguments":"{\"command\":\"id"}}]},"finish_reason":"tool_calls"}]}),
+            &sink,
+        )?;
+        let result = stream.finish()?;
+        assert!(result.tool_calls[0].argument_error().is_some());
         Ok(())
     }
 

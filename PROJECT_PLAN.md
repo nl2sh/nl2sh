@@ -14,11 +14,18 @@
 
 - [x] 断线重连时核对会话是否仍存在，清除过期运行状态并恢复可用会话。
 - [x] Web 进行中任务保存私有脱敏检查点；重启后保留诊断证据并标记中断，未完成内容不进入模型历史。
+- [x] Web 失败检查点支持显式重新提交原始用户输入，不回放工具输出、审批或脱敏后不可恢复的内容。
 - [x] 完整回答先保存并结束运行状态，短标题在后台生成和更新。
 - [x] 运行中任务提供会话级停止入口，模型等待可取消，捕获式命令完成进程组清理后停止。
 - [x] 快速开始使用短模型请求验证真实对话接口；设备概览无需模型即可读取固定只读信息。
 - [x] 工具目录按中文用途、分类和确认要求展示，并提供可填入输入框的示例提问。
 - [x] Web 对完成任务归纳工具完整、部分和失败结果，弹窗维持键盘焦点并在关闭后恢复。
+
+## Android 预编译部署优化 — 已实现
+
+- [x] Linux 与 Windows 启动器以主机和设备端实际 SHA-256 判断是否需要推送，推送后再次校验。
+- [x] 提供 Linux Bash 与 Windows PowerShell Bootstrap，校验最新 Release ZIP 后解压、生成最小 Provider 配置并启动。
+- [x] 配置只通过显式 `NL2SH_CONFIG_SOURCE` 部署，设备端保持 `0600`，普通启动不覆盖已有配置。
 
 ## Phase 0 项目初始化与工程基线 — 完成
 
@@ -60,6 +67,7 @@
 - [x] rustls、认证省略、timeout、可重试状态和退避。
 - [x] Ctrl+C 取消请求/退避和增量 command output sink。
 - [x] 默认自动协商 Responses/Chat Completions，仅对协议不匹配安全回退并缓存结果。
+- [x] Responses、Chat Completions 与 SSE 的残缺 Tool Calling JSON 以不可执行失败结果反馈模型，有限重试后终止。
 - [ ] 更多兼容厂商响应变体。
 
 验收：wiremock 文本/tool/错误测试。风险：兼容 endpoint 方言。
@@ -265,6 +273,7 @@
 
 - [x] 将文件、音频、Android、网络、UI 与便签工具实现及内部引用统一归入 `src/tools/<domain>/`，移除旧公共路径兼容导出。
 - [x] 使用显式 `ToolRegistry`、`Tool`、`ToolContext` 和 `PreparedToolCall` 分离参数准备、审批与执行，移除 Runner 逐工具分发 match。
+- [x] `agent_memory` 动作使用 JSON Schema 枚举约束，未知动作在风险分流前拒绝。
 - [x] 从 serde 参数类型派生 JSON Schema，以 `ToolMetadata`、`ToolRisk` 和 `Capability` 统一风险下限与条件暴露。
 - [x] 保留新增工具的动态写入风险、音频缺参问答/缓存、输入二次校验、截图附件及 Web 审批语义。
 - [x] 增加声明式 `define_tool!` 和编译期 `#[tool(...)]`，显式注册且保持每 ABI 单一 Android 可执行文件。

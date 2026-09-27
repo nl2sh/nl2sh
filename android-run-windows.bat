@@ -6,6 +6,7 @@ title nl2sh Android Launcher
 
 if not defined ANDROID_DIR set "ANDROID_DIR=/data/local/tmp"
 set "REMOTE_BINARY=%ANDROID_DIR%/nl2sh"
+set "REMOTE_CONFIG=%ANDROID_DIR%/config.toml"
 
 where adb >nul 2>&1
 if errorlevel 1 (
@@ -68,11 +69,52 @@ if "!DEVICE_UID!"=="0" (
 echo Creating Android directory: %ANDROID_DIR%
 adb -s "!SERIAL!" shell mkdir -p "%ANDROID_DIR%"
 if errorlevel 1 goto :adb_fail
-echo Pushing: !LOCAL_BINARY! ^> %REMOTE_BINARY%
-adb -s "!SERIAL!" push "!LOCAL_BINARY!" "%REMOTE_BINARY%"
-if errorlevel 1 goto :adb_fail
+call :local_sha256 "!LOCAL_BINARY!"
+if errorlevel 1 goto :fail
+call :remote_sha256
+if /i "!REMOTE_SHA256!"=="!LOCAL_SHA256!" (
+  echo Binary checksum matches; skipping adb push.
+) else (
+  echo Pushing: !LOCAL_BINARY! ^> %REMOTE_BINARY%
+  adb -s "!SERIAL!" push "!LOCAL_BINARY!" "%REMOTE_BINARY%"
+  if errorlevel 1 goto :adb_fail
+  call :remote_sha256
+  if /i not "!REMOTE_SHA256!"=="!LOCAL_SHA256!" (
+    echo ERROR: remote binary checksum verification failed after adb push.
+    goto :fail
+  )
+  echo Verified SHA-256: !LOCAL_SHA256!
+)
 adb -s "!SERIAL!" shell chmod 755 "%REMOTE_BINARY%"
 if errorlevel 1 goto :adb_fail
+
+if defined NL2SH_CONFIG_SOURCE (
+  if not exist "!NL2SH_CONFIG_SOURCE!" (
+    echo ERROR: NL2SH_CONFIG_SOURCE is not a file: !NL2SH_CONFIG_SOURCE!
+    goto :fail
+  )
+  echo Deploying configuration: !NL2SH_CONFIG_SOURCE! ^> %REMOTE_CONFIG%
+  if "!ADB_IS_ROOT!"=="true" (
+    adb -s "!SERIAL!" push "!NL2SH_CONFIG_SOURCE!" "%REMOTE_CONFIG%" >nul
+    if errorlevel 1 goto :adb_fail
+    adb -s "!SERIAL!" shell chmod 600 "%REMOTE_CONFIG%"
+    if errorlevel 1 goto :adb_fail
+  ) else (
+    set "REMOTE_CONFIG_TEMP=%ANDROID_DIR%/.config.toml.nl2sh-adb"
+    adb -s "!SERIAL!" push "!NL2SH_CONFIG_SOURCE!" "!REMOTE_CONFIG_TEMP!" >nul
+    if errorlevel 1 goto :adb_fail
+    adb -s "!SERIAL!" shell su -c id >nul 2>&1
+    if not errorlevel 1 (
+      adb -s "!SERIAL!" shell su -c "cp '!REMOTE_CONFIG_TEMP!' '%REMOTE_CONFIG%' && chmod 600 '%REMOTE_CONFIG%' && rm -f '!REMOTE_CONFIG_TEMP!'"
+      if errorlevel 1 goto :adb_fail
+    ) else (
+      adb -s "!SERIAL!" shell mv "!REMOTE_CONFIG_TEMP!" "%REMOTE_CONFIG%"
+      if errorlevel 1 goto :adb_fail
+      adb -s "!SERIAL!" shell chmod 600 "%REMOTE_CONFIG%"
+      if errorlevel 1 goto :adb_fail
+    )
+  )
+)
 
 if "!ADB_IS_ROOT!"=="true" (
   echo Starting %REMOTE_BINARY% through root adbd.
@@ -92,9 +134,9 @@ if not errorlevel 1 (
   goto :done
 )
 
-adb -s "!SERIAL!" shell test -e "%ANDROID_DIR%/config.toml" >nul 2>&1
+adb -s "!SERIAL!" shell test -e "%REMOTE_CONFIG%" >nul 2>&1
 if not errorlevel 1 (
-  adb -s "!SERIAL!" shell test -r "%ANDROID_DIR%/config.toml" >nul 2>&1
+  adb -s "!SERIAL!" shell test -r "%REMOTE_CONFIG%" >nul 2>&1
   if errorlevel 1 (
     echo ERROR: config.toml exists but is unreadable without root.
     echo Permissions were left unchanged to protect the API key.
@@ -162,6 +204,22 @@ for /f "skip=1 tokens=1,2" %%A in ('adb devices 2^>nul') do (
     set "DEVICE_!DEVICE_COUNT!=%%A"
   )
 )
+exit /b 0
+
+:local_sha256
+set "LOCAL_SHA256="
+for /f "skip=1 tokens=*" %%A in ('certutil -hashfile "%~1" SHA256 2^>nul') do if not defined LOCAL_SHA256 set "LOCAL_SHA256=%%A"
+set "LOCAL_SHA256=!LOCAL_SHA256: =!"
+echo(!LOCAL_SHA256!| findstr /r /i /x "[0-9a-f][0-9a-f]*" >nul
+if errorlevel 1 (
+  echo ERROR: failed to calculate the local SHA-256 checksum with certutil.
+  exit /b 1
+)
+exit /b 0
+
+:remote_sha256
+set "REMOTE_SHA256="
+for /f "usebackq tokens=1" %%A in (`adb -s "!SERIAL!" shell toybox sha256sum "%REMOTE_BINARY%" 2^>nul`) do if not defined REMOTE_SHA256 set "REMOTE_SHA256=%%A"
 exit /b 0
 
 :adb_fail

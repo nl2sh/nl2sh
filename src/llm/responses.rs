@@ -60,11 +60,7 @@ pub fn response(v: Value) -> Result<LlmResponse> {
                     .as_str()
                     .filter(|value| !value.is_empty())
                     .context("function call is missing name")?;
-                calls.push(ToolCall {
-                    id: id.into(),
-                    name: name.into(),
-                    arguments: serde_json::from_str(a).context("invalid function arguments")?,
-                });
+                calls.push(ToolCall::from_raw_arguments(id, name, a));
             }
             "message" => {
                 if let Some(content) = item["content"].as_array() {
@@ -86,7 +82,11 @@ pub fn response(v: Value) -> Result<LlmResponse> {
     if text.as_deref().is_none_or(str::is_empty) && calls.is_empty() {
         anyhow::bail!("empty Responses output")
     }
-    let finish = if calls.is_empty() {
+    let finish = if v["status"] == "incomplete"
+        && v["incomplete_details"]["reason"] == "max_output_tokens"
+    {
+        FinishReason::Length
+    } else if calls.is_empty() {
         FinishReason::Stop
     } else {
         FinishReason::ToolCalls
@@ -104,7 +104,7 @@ pub fn response(v: Value) -> Result<LlmResponse> {
 
 #[cfg(test)]
 mod tests {
-    use super::request;
+    use super::{request, response};
     use crate::llm::{
         ConversationItem, LlmRequest, ToolAttachment, ToolCall, ToolResult, ToolRound,
     };
@@ -135,5 +135,35 @@ mod tests {
         assert_eq!(body["input"][1]["type"], "function_call_output");
         assert_eq!(body["input"][2]["type"], "message");
         assert_eq!(body["input"][2]["content"][1]["type"], "input_image");
+    }
+
+    #[test]
+    fn malformed_function_arguments_become_recoverable_call() -> anyhow::Result<()> {
+        let parsed = response(json!({
+            "output": [{
+                "type": "function_call",
+                "call_id": "broken",
+                "name": "execute_shell_command",
+                "arguments": "{\"command\":\"id"
+            }]
+        }))?;
+        assert!(parsed.tool_calls[0].argument_error().is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn incomplete_max_output_response_reports_length_finish_reason() -> anyhow::Result<()> {
+        let parsed = response(json!({
+            "status": "incomplete",
+            "incomplete_details": {"reason": "max_output_tokens"},
+            "output": [{
+                "type": "function_call",
+                "call_id": "broken",
+                "name": "execute_shell_command",
+                "arguments": "{\"command\":\"id"
+            }]
+        }))?;
+        assert_eq!(parsed.finish_reason, crate::llm::FinishReason::Length);
+        Ok(())
     }
 }

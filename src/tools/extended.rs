@@ -17,7 +17,7 @@ use super::{
         domain::{AnalyzeAudioArgs, AudioAnalysisResult},
         quality::{judge_audio_quality, JudgeAudioQualityArgs},
     },
-    memory::domain::{AgentMemory, AgentMemoryArgs},
+    memory::domain::{AgentMemory, AgentMemoryAction, AgentMemoryArgs},
     network::{
         domain::{
             self as web_tools, DownloadUrlArgs, HttpPostArgs, HttpRequestArgs, PreparedDownload,
@@ -85,7 +85,7 @@ static METADATA: &[ToolMetadata] = &[
     meta!("android_clipboard", "Read clipboard text or, after confirmation, set bounded text.", Android, ReadOnly),
     meta!("android_media_control", "Read media status or, after confirmation, change playback or volume.", Android, ReadOnly),
     meta!("android_media_query", "Query bounded MediaStore image, video, or audio metadata.", Android, ReadOnly),
-    meta!("agent_memory", "Read or update a small private task notebook; writes require confirmation.", Memory, ReadOnly),
+    meta!("agent_memory", "Read or update a small private task notebook. Use get/list to read and set/delete/clear to write; writes require confirmation.", Memory, ReadOnly),
     meta!("android_connectivity", "Aggregate bounded Android connectivity evidence for a validated public host.", Android, ReadOnly),
     meta!("inspect_tls", "Inspect and validate the TLS certificate chain of a public host.", Network, ReadOnly),
 ];
@@ -251,7 +251,10 @@ impl Tool for ExtendedTool {
             }
             "agent_memory" => {
                 let args: AgentMemoryArgs = parse_args(name, arguments)?;
-                if !matches!(args.action.as_str(), "get" | "list") {
+                if !matches!(
+                    args.action,
+                    AgentMemoryAction::Get | AgentMemoryAction::List
+                ) {
                     let memory = AgentMemory::new(ctx.file_tools.base());
                     let summary = memory.mutation_summary(&args)?;
                     return Ok(PreparedToolCall::operation_with_risk(

@@ -53,6 +53,7 @@ impl std::error::Error for AgentRunFailure {
 }
 use tokio::sync::watch;
 use tokio::time::timeout;
+const MAX_INVALID_ARGUMENT_REPAIRS: usize = 2;
 /// Dependencies for one bounded Agent tool loop.
 pub struct AgentRunner<'a> {
     /// Validated policy and provider configuration.
@@ -134,6 +135,7 @@ impl AgentRunner<'_> {
         let mut history_turns_evicted = 0;
         let mut runtime = TaskRuntime::new();
         let mut action_history: HashMap<String, (u64, usize)> = HashMap::new();
+        let mut invalid_argument_rounds = 0usize;
         let tool_base = std::env::current_dir().context("cannot determine tool base directory")?;
         let file_tools = FileToolExecutor::new(&tool_base)?;
         let audio_tools = AudioToolExecutor::new(&tool_base)?;
@@ -244,10 +246,13 @@ impl AgentRunner<'_> {
                     history_turns_evicted,
                 });
             }
+            let response_was_length_limited =
+                response.finish_reason == crate::llm::FinishReason::Length;
             let calls = response.tool_calls;
             let mut results = Vec::new();
             let mut round_calls = Vec::new();
             let mut step_made_progress = false;
+            let mut step_had_invalid_arguments = false;
             'tool_calls: for call in calls.iter().cloned() {
                 if cancel.as_ref().is_some_and(|signal| *signal.borrow()) {
                     break 'tool_calls;
@@ -260,6 +265,27 @@ impl AgentRunner<'_> {
                 if let Some(sink) = text_sink {
                     sink.agent_activity("tool", Some(&call.name));
                     sink.tool_started(&call.id, &call.name);
+                }
+                if let Some(error) = call.argument_error() {
+                    step_had_invalid_arguments = true;
+                    round_calls.push(call.clone());
+                    let length_hint = if response_was_length_limited {
+                        " Provider reported its output length limit; regenerate with shorter arguments or split the operation."
+                    } else {
+                        ""
+                    };
+                    push_tool_result(
+                        &mut results,
+                        self.tool_error_result(
+                            &call.id,
+                            format!(
+                                "Tool call rejected: arguments are invalid JSON ({bytes} bytes): {error}. Regenerate this tool call with complete valid JSON.{length_hint} The rejected arguments were not executed.",
+                                bytes = call.invalid_argument_bytes().map_or(0, |bytes| bytes),
+                            ),
+                        ),
+                        text_sink,
+                    );
+                    continue;
                 }
                 round_calls.push(call.clone());
                 let Some(tool) = registry.get(&call.name) else {
@@ -517,6 +543,20 @@ impl AgentRunner<'_> {
                 results: model_results,
             }));
             runtime.steps_used = step;
+            if step_had_invalid_arguments {
+                invalid_argument_rounds = invalid_argument_rounds.saturating_add(1);
+                if invalid_argument_rounds > MAX_INVALID_ARGUMENT_REPAIRS {
+                    return Err(AgentRunFailure {
+                        source: anyhow::anyhow!(
+                            "model tool arguments remained invalid after {MAX_INVALID_ARGUMENT_REPAIRS} repair attempts"
+                        ),
+                        transcript,
+                    }
+                    .into());
+                }
+            } else {
+                invalid_argument_rounds = 0;
+            }
             if matches!(
                 stopped_by,
                 Some(LimitType::ExecutionTime | LimitType::ToolCalls)

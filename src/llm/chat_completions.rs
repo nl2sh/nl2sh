@@ -68,11 +68,7 @@ pub fn response(v: Value) -> Result<LlmResponse> {
                         .as_str()
                         .filter(|value| !value.is_empty())
                         .context("tool call is missing function name")?;
-                    Ok(ToolCall {
-                        id: id.into(),
-                        name: name.into(),
-                        arguments: serde_json::from_str(args).context("invalid tool arguments")?,
-                    })
+                    Ok(ToolCall::from_raw_arguments(id, name, args))
                 })
                 .collect::<Result<Vec<_>>>()
         })
@@ -101,7 +97,7 @@ pub fn response(v: Value) -> Result<LlmResponse> {
 
 #[cfg(test)]
 mod tests {
-    use super::request;
+    use super::{request, response};
     use crate::llm::{
         ConversationItem, LlmRequest, ToolAttachment, ToolCall, ToolResult, ToolRound,
     };
@@ -132,5 +128,23 @@ mod tests {
         assert_eq!(body["messages"][1]["role"], "tool");
         assert_eq!(body["messages"][2]["role"], "user");
         assert_eq!(body["messages"][2]["content"][1]["type"], "image_url");
+    }
+
+    #[test]
+    fn malformed_tool_arguments_become_recoverable_call() -> anyhow::Result<()> {
+        let parsed = response(json!({
+            "choices": [{
+                "message": {"tool_calls": [{
+                    "id": "broken",
+                    "function": {
+                        "name": "execute_shell_command",
+                        "arguments": "{\"command\":\"id"
+                    }
+                }]},
+                "finish_reason": "tool_calls"
+            }]
+        }))?;
+        assert!(parsed.tool_calls[0].argument_error().is_some());
+        Ok(())
     }
 }

@@ -54,6 +54,76 @@ struct AlwaysToolLlm {
     command: &'static str,
 }
 
+struct RepairingArgumentsLlm {
+    calls: AtomicUsize,
+}
+
+#[async_trait]
+impl LlmClient for RepairingArgumentsLlm {
+    async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
+        match self.calls.fetch_add(1, Ordering::SeqCst) {
+            0 => Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![ToolCall::from_raw_arguments(
+                    "broken",
+                    "execute_shell_command",
+                    r#"{"command":"id"#,
+                )],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            }),
+            1 => {
+                let rejected = request.items.iter().find_map(|item| match item {
+                    ConversationItem::Tools(round) => round.results.first(),
+                    _ => None,
+                });
+                assert!(rejected.is_some_and(|result| {
+                    !result.success
+                        && result.output.contains("invalid JSON")
+                        && result.output.contains("not executed")
+                }));
+                Ok(LlmResponse {
+                    text: None,
+                    tool_calls: vec![ToolCall {
+                        id: "fixed".into(),
+                        name: "execute_shell_command".into(),
+                        arguments: json!({"command":"id"}),
+                    }],
+                    usage: Usage::default(),
+                    finish_reason: FinishReason::ToolCalls,
+                })
+            }
+            _ => Ok(LlmResponse {
+                text: Some("repaired".into()),
+                tool_calls: Vec::new(),
+                usage: Usage::default(),
+                finish_reason: FinishReason::Stop,
+            }),
+        }
+    }
+}
+
+struct AlwaysMalformedArgumentsLlm {
+    calls: AtomicUsize,
+}
+
+#[async_trait]
+impl LlmClient for AlwaysMalformedArgumentsLlm {
+    async fn complete(&self, _: LlmRequest) -> Result<LlmResponse> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(LlmResponse {
+            text: None,
+            tool_calls: vec![ToolCall::from_raw_arguments(
+                format!("broken-{call}"),
+                "execute_shell_command",
+                r#"{"command":"id"#,
+            )],
+            usage: Usage::default(),
+            finish_reason: FinishReason::ToolCalls,
+        })
+    }
+}
+
 struct StructuredFileLlm {
     calls: AtomicUsize,
     path: String,
@@ -259,6 +329,52 @@ async fn tool_budget_blocks_the_next_tool_before_execution() {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(outcome.tool_calls, 1);
     assert_eq!(outcome.stats.limit_reached, Some(LimitType::ToolCalls));
+}
+
+#[tokio::test]
+async fn malformed_arguments_are_rejected_then_repaired_without_early_execution() -> Result<()> {
+    let llm = RepairingArgumentsLlm {
+        calls: AtomicUsize::new(0),
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let outcome = AgentRunner {
+        config: &Config::default(),
+        llm: &llm,
+        executor: &Exec {
+            calls: calls.clone(),
+        },
+        confirmer: &Confirm(true),
+    }
+    .run("repair")
+    .await?;
+    assert_eq!(outcome.final_text, "repaired");
+    assert_eq!(outcome.tool_calls, 2);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_arguments_stop_after_two_repair_attempts_without_execution() {
+    let llm = AlwaysMalformedArgumentsLlm {
+        calls: AtomicUsize::new(0),
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let error = AgentRunner {
+        config: &Config::default(),
+        llm: &llm,
+        executor: &Exec {
+            calls: calls.clone(),
+        },
+        confirmer: &Confirm(true),
+    }
+    .run("never execute")
+    .await
+    .expect_err("malformed arguments must stop after bounded repair attempts");
+    assert!(error
+        .to_string()
+        .contains("remained invalid after 2 repair attempts"));
+    assert_eq!(llm.calls.load(Ordering::SeqCst), 3);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

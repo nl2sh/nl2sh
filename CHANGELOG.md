@@ -4,6 +4,9 @@
 
 ### Changed
 
+- 优化预编译 Android 启动器：Linux 与 Windows 会比较主机和设备端 `nl2sh` 的 SHA-256，相同则跳过重复 `adb push`，推送后强制复核摘要。
+- Constrain `agent_memory` actions to a generated JSON Schema enum and reject unknown actions before risk routing. Failed Web tasks can now explicitly resubmit their original user input without replaying checkpoint tool output, approvals, or irrecoverably redacted text.
+- Recover malformed Tool Calling JSON by rejecting it without execution, returning a diagnostic Tool Result to the model, and allowing at most two regeneration attempts before failing the task. Rejected calls still consume task budgets and repaired arguments traverse the full safety and confirmation chain.
 - Highlight fenced code in Web model replies and TUI Markdown using the existing semantic palette; unknown languages remain plain text, with HTML escaped in Web.
 - Generate short TUI session titles after the first completed Agent turn, and show Web session creation time as relative time for the first day or a local date and time thereafter.
 - Web reconnects discard stale running state and recover saved sessions. In-progress requests now keep bounded, redacted diagnostic checkpoints; completed replies are saved before automatic titles are generated in the background.
@@ -21,6 +24,7 @@
 
 ### Added
 
+- 新增 Linux/Windows 一键安装脚本：下载并校验最新 `nl2sh-android.zip`，按可选 Provider、模型、Endpoint 和 API Key 生成配置，然后部署并启动；配置文件权限保持为 `0600`。
 - Add a stdio MCP adapter that discovers the A2A gateway, authenticates requests, and exposes device inspection, tool listing, consultation, and task lookup to coding agents.
 - Add an optional host-side A2A 1.0 gateway with Agent Card discovery, authenticated JSON-RPC tasks, persistent context, and a narrow Android bridge. Add explicit build/deploy checkpoints and reject unattended device modifications through the existing confirmation boundary.
 - Added a Web task stop control, a model-free read-only device overview, example prompts in the tool catalog, and keyboard focus management for modal dialogs.

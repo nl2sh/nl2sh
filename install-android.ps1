@@ -1,0 +1,73 @@
+[CmdletBinding()]
+param(
+    [ValidateSet("openrouter", "openai", "deepseek", "moonshot", "kimi", "siliconflow", "ollama", "custom")]
+    [string]$Provider = "openrouter",
+    [string]$Model = "",
+    [string]$ApiKey = "",
+    [string]$Endpoint = "",
+    [string]$InstallDir = (Join-Path (Get-Location) "nl2sh-android"),
+    [string]$Repository = "https://github.com/nl2sh/nl2sh"
+)
+
+$ErrorActionPreference = "Stop"
+$Repository = $Repository.TrimEnd('/')
+if ([string]::IsNullOrEmpty($ApiKey)) { $ApiKey = $env:NL2SH_API_KEY }
+
+$Defaults = @{
+    openrouter  = @("https://openrouter.ai/api/v1", "openrouter/free")
+    openai      = @("https://api.openai.com/v1", "gpt-4o-mini")
+    deepseek    = @("https://api.deepseek.com", "deepseek-flash")
+    moonshot    = @("https://api.moonshot.cn/v1", "kimi-k2-turbo-preview")
+    kimi        = @("https://api.moonshot.cn/v1", "kimi-k2-turbo-preview")
+    siliconflow = @("https://api.siliconflow.cn/v1", "Qwen/Qwen3-8B")
+    ollama      = @("http://127.0.0.1:11434/v1", "qwen3")
+    custom      = @("", "custom-model")
+}
+if ($Provider -eq "custom" -and [string]::IsNullOrWhiteSpace($Endpoint)) {
+    throw "-Endpoint is required when -Provider is custom"
+}
+if ([string]::IsNullOrWhiteSpace($Endpoint)) { $Endpoint = $Defaults[$Provider][0] }
+if ([string]::IsNullOrWhiteSpace($Model)) { $Model = $Defaults[$Provider][1] }
+foreach ($Value in @($Endpoint, $Model, $ApiKey)) {
+    if ($Value -match "[`r`n]") { throw "configuration values must not contain newlines" }
+}
+
+$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nl2sh-install-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $TempDir | Out-Null
+try {
+    $Archive = Join-Path $TempDir "nl2sh-android.zip"
+    $Sums = Join-Path $TempDir "SHA256SUMS"
+    $DownloadBase = "$Repository/releases/latest/download"
+    Write-Host "Downloading the latest nl2sh Android release..."
+    Invoke-WebRequest -UseBasicParsing -Uri "$DownloadBase/nl2sh-android.zip" -OutFile $Archive
+    Invoke-WebRequest -UseBasicParsing -Uri "$DownloadBase/SHA256SUMS" -OutFile $Sums
+    $ChecksumLine = Get-Content -LiteralPath $Sums | Where-Object { $_ -match '^[0-9a-fA-F]{64}\s+\*?nl2sh-android\.zip$' } | Select-Object -First 1
+    if (-not $ChecksumLine) { throw "release checksum for nl2sh-android.zip is missing" }
+    $Expected = ($ChecksumLine -split '\s+')[0]
+    $Actual = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash
+    if ($Actual -ne $Expected) { throw "downloaded ZIP checksum mismatch" }
+    if (Test-Path -LiteralPath $InstallDir) { throw "install directory already exists: $InstallDir" }
+    $Unpacked = Join-Path $TempDir "unpacked"
+    Expand-Archive -LiteralPath $Archive -DestinationPath $Unpacked
+    $PackageDir = Join-Path $Unpacked "nl2sh-android"
+    if (-not (Test-Path -LiteralPath $PackageDir -PathType Container)) { throw "release ZIP has an unexpected layout" }
+    Move-Item -LiteralPath $PackageDir -Destination $InstallDir
+
+    function ConvertTo-TomlBasicString([string]$Value) {
+        return $Value.Replace('\', '\\').Replace('"', '\"')
+    }
+    $ConfigFile = Join-Path $InstallDir "config.toml"
+    $Config = @(
+        'api_key = "' + (ConvertTo-TomlBasicString $ApiKey) + '"'
+        'model = "' + (ConvertTo-TomlBasicString $Model) + '"'
+        'endpoint = "' + (ConvertTo-TomlBasicString $Endpoint) + '"'
+        'api_type = "auto"'
+    ) -join "`r`n"
+    [System.IO.File]::WriteAllText($ConfigFile, $Config + "`r`n", [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Installed and verified: $InstallDir"
+    $env:NL2SH_CONFIG_SOURCE = $ConfigFile
+    & (Join-Path $InstallDir "android-run-windows.bat")
+    exit $LASTEXITCODE
+} finally {
+    Remove-Item -LiteralPath $TempDir -Recurse -Force -ErrorAction SilentlyContinue
+}

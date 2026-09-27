@@ -4,10 +4,27 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANDROID_DIR="${ANDROID_DIR:-/data/local/tmp}"
 REMOTE_BINARY="${ANDROID_DIR}/nl2sh"
+REMOTE_CONFIG="${ANDROID_DIR}/config.toml"
 
 die() {
   echo "error: $*" >&2
   exit 1
+}
+
+sha256_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum -- "${path}" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 -- "${path}" | awk '{print $1}'
+  else
+    die "sha256sum or shasum is required"
+  fi
+}
+
+remote_sha256() {
+  "${ADB[@]}" shell toybox sha256sum "${REMOTE_BINARY}" 2>/dev/null \
+    | tr -d '\r' | awk 'NR == 1 {print $1}'
 }
 
 collect_devices() {
@@ -92,9 +109,38 @@ fi
 
 echo "Creating Android directory: ${ANDROID_DIR}"
 "${ADB[@]}" shell mkdir -p "${ANDROID_DIR}"
-echo "Pushing: ${LOCAL_BINARY} -> ${REMOTE_BINARY}"
-"${ADB[@]}" push "${LOCAL_BINARY}" "${REMOTE_BINARY}"
+LOCAL_SHA256="$(sha256_file "${LOCAL_BINARY}")"
+REMOTE_SHA256="$(remote_sha256 || true)"
+if [[ "${REMOTE_SHA256}" == "${LOCAL_SHA256}" ]]; then
+  echo "Binary checksum matches; skipping adb push."
+else
+  echo "Pushing: ${LOCAL_BINARY} -> ${REMOTE_BINARY}"
+  "${ADB[@]}" push "${LOCAL_BINARY}" "${REMOTE_BINARY}"
+  REMOTE_SHA256="$(remote_sha256 || true)"
+  [[ "${REMOTE_SHA256}" == "${LOCAL_SHA256}" ]] \
+    || die "remote binary checksum verification failed after adb push"
+  echo "Verified SHA-256: ${LOCAL_SHA256}"
+fi
 "${ADB[@]}" shell chmod 755 "${REMOTE_BINARY}"
+
+if [[ -n "${NL2SH_CONFIG_SOURCE:-}" ]]; then
+  [[ -f "${NL2SH_CONFIG_SOURCE}" ]] \
+    || die "NL2SH_CONFIG_SOURCE is not a file: ${NL2SH_CONFIG_SOURCE}"
+  echo "Deploying configuration: ${NL2SH_CONFIG_SOURCE} -> ${REMOTE_CONFIG}"
+  if [[ "${ADB_IS_ROOT}" == true ]]; then
+    "${ADB[@]}" push "${NL2SH_CONFIG_SOURCE}" "${REMOTE_CONFIG}" >/dev/null
+    "${ADB[@]}" shell chmod 600 "${REMOTE_CONFIG}"
+  else
+    REMOTE_CONFIG_TEMP="${ANDROID_DIR}/.config.toml.nl2sh-adb"
+    "${ADB[@]}" push "${NL2SH_CONFIG_SOURCE}" "${REMOTE_CONFIG_TEMP}" >/dev/null
+    if "${ADB[@]}" shell su -c id >/dev/null 2>&1; then
+      "${ADB[@]}" shell su -c "cp '${REMOTE_CONFIG_TEMP}' '${REMOTE_CONFIG}' && chmod 600 '${REMOTE_CONFIG}' && rm -f '${REMOTE_CONFIG_TEMP}'"
+    else
+      "${ADB[@]}" shell mv "${REMOTE_CONFIG_TEMP}" "${REMOTE_CONFIG}"
+      "${ADB[@]}" shell chmod 600 "${REMOTE_CONFIG}"
+    fi
+  fi
+fi
 
 if [[ "${ADB_IS_ROOT}" == true ]]; then
   echo "Starting ${REMOTE_BINARY} through root adbd."
@@ -109,7 +155,6 @@ if "${ADB[@]}" shell su -c id >/dev/null 2>&1; then
   exec "${ADB[@]}" shell -t su -c "${REMOTE_BINARY}"
 fi
 
-REMOTE_CONFIG="${ANDROID_DIR}/config.toml"
 if "${ADB[@]}" shell test -e "${REMOTE_CONFIG}" \
   && ! "${ADB[@]}" shell test -r "${REMOTE_CONFIG}"; then
   die "${REMOTE_CONFIG} exists but is unreadable; permissions remain unchanged to protect the API key"

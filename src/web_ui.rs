@@ -317,6 +317,7 @@ struct Snapshot {
     activity: &'static str,
     activity_detail: Option<String>,
     activity_elapsed_ms: u64,
+    can_retry: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -537,6 +538,7 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/sessions/delete-all", post(delete_all_sessions))
         .route("/api/sessions/export", get(export_session))
         .route("/api/message", post(post_message))
+        .route("/api/message/retry", post(retry_message))
         .route("/api/message/cancel", post(cancel_message))
         .route("/api/decision", post(post_decision))
         .route("/api/events", get(session_events))
@@ -685,6 +687,7 @@ async fn get_state(
         activity: inner.activity,
         activity_detail: inner.activity_detail.clone(),
         activity_elapsed_ms: unix_millis().saturating_sub(inner.activity_since_ms),
+        can_retry: retryable_input(&inner).is_some(),
     }))
 }
 
@@ -1225,6 +1228,34 @@ async fn post_message(
     if text.is_empty() || text.len() > 16 * 1024 {
         return Err(ApiError::bad(anyhow!("message must contain 1–16384 bytes")));
     }
+    start_message(state, &message.session_id, text).await
+}
+
+async fn retry_message(
+    State(state): State<Arc<Shared>>,
+    Json(selection): Json<SessionSelection>,
+) -> ApiResult<(StatusCode, String)> {
+    let current = session(&state, &selection.name)?;
+    let text = {
+        let inner = current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("web session lock poisoned"))?;
+        let Some(text) = retryable_input(&inner) else {
+            return Err(ApiError::conflict(
+                "this session has no failed task available to retry",
+            ));
+        };
+        text
+    };
+    start_message(state, &selection.name, text).await
+}
+
+async fn start_message(
+    state: Arc<Shared>,
+    session_id: &str,
+    text: String,
+) -> ApiResult<(StatusCode, String)> {
     let path = state.path.clone();
     let cfg =
         tokio::task::spawn_blocking(move || config::load_or_default_unvalidated(&path)).await??;
@@ -1234,7 +1265,7 @@ async fn post_message(
             .lock()
             .map_err(|_| anyhow!("web session registry lock poisoned"))?;
         let current = sessions
-            .get(&message.session_id)
+            .get(session_id)
             .cloned()
             .context("web session not found")?;
         let mut inner = current
@@ -1274,6 +1305,26 @@ async fn post_message(
     notify(&current, "state");
     tokio::spawn(run_message(state, current, text));
     Ok((StatusCode::ACCEPTED, "任务已开始".into()))
+}
+
+fn retryable_input(inner: &SessionState) -> Option<String> {
+    let checkpoint = inner.checkpoint.as_ref()?;
+    if !matches!(
+        checkpoint.status.as_str(),
+        "failed" | "interrupted" | "cancelled"
+    ) {
+        return None;
+    }
+    let history = if checkpoint.history.is_empty() {
+        let start = inner.checkpoint_start.unwrap_or(0);
+        inner.history.get(start..)?
+    } else {
+        checkpoint.history.as_slice()
+    };
+    history.iter().find_map(|line| {
+        let text = line.strip_prefix("> ")?.trim();
+        (!text.is_empty() && !text.contains("[NL2SH CREDENTIAL REDACTED]")).then(|| text.to_owned())
+    })
 }
 
 async fn cancel_message(
@@ -2390,6 +2441,32 @@ mod tests {
         assert!(!raw.contains("old-private-key"));
         assert!(!raw.contains("new-private-key"));
         Ok(())
+    }
+
+    #[test]
+    fn retry_uses_only_the_original_failed_input() {
+        let mut inner = SessionState::empty();
+        inner.history = vec![
+            "> inspect the device".into(),
+            "\u{1e}TOOL_OK:untrusted output".into(),
+            "❌ provider failed".into(),
+        ];
+        inner.checkpoint_start = Some(0);
+        inner.checkpoint = Some(WebCheckpoint {
+            status: "failed".into(),
+            activity: "thinking".into(),
+            history: Vec::new(),
+            events: Vec::new(),
+        });
+        assert_eq!(
+            retryable_input(&inner).as_deref(),
+            Some("inspect the device")
+        );
+
+        if let Some(checkpoint) = inner.checkpoint.as_mut() {
+            checkpoint.history = vec!["> [NL2SH CREDENTIAL REDACTED]".into()];
+        }
+        assert!(retryable_input(&inner).is_none());
     }
 
     #[test]

@@ -59,6 +59,44 @@ pub struct ToolCall {
     pub arguments: serde_json::Value,
 }
 
+const INVALID_ARGUMENTS_KEY: &str = "__nl2sh_invalid_tool_arguments";
+
+impl ToolCall {
+    /// Creates a call from provider-supplied JSON without guessing repairs for malformed input.
+    pub fn from_raw_arguments(id: impl Into<String>, name: impl Into<String>, raw: &str) -> Self {
+        let arguments = match serde_json::from_str(raw) {
+            Ok(arguments) => arguments,
+            Err(error) => serde_json::json!({
+                INVALID_ARGUMENTS_KEY: {
+                    "error": error.to_string(),
+                    "bytes": raw.len(),
+                }
+            }),
+        };
+        Self {
+            id: id.into(),
+            name: name.into(),
+            arguments,
+        }
+    }
+
+    /// Returns the provider JSON parsing error when this call must not be executed.
+    pub fn argument_error(&self) -> Option<&str> {
+        self.arguments
+            .get(INVALID_ARGUMENTS_KEY)?
+            .get("error")?
+            .as_str()
+    }
+
+    /// Returns the malformed provider argument size retained for bounded diagnostics.
+    pub fn invalid_argument_bytes(&self) -> Option<u64> {
+        self.arguments
+            .get(INVALID_ARGUMENTS_KEY)?
+            .get("bytes")?
+            .as_u64()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Real output produced while handling one tool call.
 pub struct ToolResult {
@@ -144,7 +182,7 @@ fn add_optional(current: Option<u64>, next: Option<u64>) -> Option<u64> {
 
 #[cfg(test)]
 mod usage_tests {
-    use super::Usage;
+    use super::{ToolCall, Usage};
 
     #[test]
     fn accumulates_usage_across_agent_steps() {
@@ -160,6 +198,14 @@ mod usage_tests {
         assert_eq!(usage.input_tokens, Some(17));
         assert_eq!(usage.output_tokens, Some(7));
         assert_eq!(usage.total_tokens(), Some(24));
+    }
+
+    #[test]
+    fn malformed_tool_arguments_are_retained_as_non_executable_diagnostics() {
+        let call = ToolCall::from_raw_arguments("call", "tool", r#"{"command":"id"#);
+        let error = call.argument_error();
+        assert!(error.is_some_and(|message| message.contains("EOF while parsing a string")));
+        assert!(call.arguments["__nl2sh_invalid_tool_arguments"]["bytes"].is_number());
     }
 }
 

@@ -411,6 +411,25 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn agent_memory_schema_lists_every_supported_action() {
+        let definition = builtin_tools(false)
+            .into_iter()
+            .find(|tool| tool.name == "agent_memory");
+        let actions = definition.as_ref().and_then(|tool| {
+            let reference = tool.parameters["properties"]["action"]["$ref"].as_str()?;
+            let name = reference.strip_prefix("#/$defs/")?;
+            let choices = tool.parameters["$defs"][name]["oneOf"].as_array()?;
+            Some(
+                choices
+                    .iter()
+                    .filter_map(|choice| choice["const"].as_str())
+                    .collect::<Vec<_>>(),
+            )
+        });
+        assert_eq!(actions, Some(vec!["get", "list", "set", "delete", "clear"]));
+    }
+
     #[tokio::test]
     async fn patch_prepare_only_builds_a_preview() -> Result<()> {
         let directory = tempfile::tempdir()?;

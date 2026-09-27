@@ -1,9 +1,16 @@
 # Project Status
 
-Last Updated: 2026-09-26
+Last Updated: 2026-09-27
 
 ## Recent Changes
 
+- 预编译部署启动器现按本地主机与设备端实际 SHA-256 跳过相同二进制的重复推送，更新后再次校验；Linux Bash 与 Windows PowerShell 一键安装入口会校验 Release ZIP、生成最小 Provider 配置，并通过显式配置部署入口启动。
+- 部署优化验证：`bash -n android-run-linux.sh install-android.sh pack-release.sh`、`actionlint .github/workflows/release.yml`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 及 `git diff --check` 通过。
+
+- `agent_memory.action` 改为 `get/list/set/delete/clear` 强类型枚举，Schema 向模型列出合法值，`read` 等未知动作在风险分流前直接拒绝，不再误报为写操作。Web 对失败、中断或取消检查点显示“重试原任务”，仅重新提交原始用户输入，不回放工具输出、旧审批或脱敏后不可恢复的内容；新执行继续走完整安全与确认链。
+- Agent memory 与 Web 原任务重试验证：`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 及 `git diff --check` 通过；回归覆盖枚举 Schema、未知动作拒绝、仅提取原始输入和脱敏输入禁用重试。
+- Provider 返回残缺或未闭合的 Tool Calling JSON 时不再立即丢失当前任务：Responses、Chat Completions 与 Chat SSE 统一保留不可执行诊断，Runner 将失败 Tool Result 回传模型并最多允许两次修复；每次拒绝计入 Step/Tool Call 预算，坏参数绝不进入工具准备、安全审批或执行器，连续失败后有界终止。
+- Tool Calling JSON 恢复验证：`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 与 `git diff --check` 通过；回归覆盖三个协议解析入口、输出长度上限识别、首次修复成功、连续失败上限及坏参数零执行。
 - Web 模型回答与流式 Markdown 的围栏代码按声明语言高亮，使用按需注册的语法规则和现有语义色板；未知语言继续转义为纯文本。TUI 的围栏代码为 Shell、Rust、Python、JavaScript/TypeScript 和 JSON 提供轻量高亮；工具原始输出、安全审批、Android 与 PTY 路径不变。
 - 代码高亮验证：Web `npm test --prefix web`、`npm run build --prefix web`，Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 及 `git diff --check` 通过；回归覆盖已知语言、未知语言的 HTML 转义和 TUI 文本保真。
 - Web 顶栏的菜单项独立横向滚动，GitHub Star 与其右侧的展开/收起按钮保持可见；按钮改用 `<`/`>` 字符并保留可访问名称。对话输入框增加提问及 `@` 文件选择提示；“能做什么”弹窗固定搜索与分类筛选区，由工具示例列表独立滚动。这些改动只涉及浏览器展示，不改变会话、文件引用、安全审批、Android 或 PTY 路径。

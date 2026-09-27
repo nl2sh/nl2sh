@@ -32,6 +32,8 @@ function ChatComposer({text,setText,send,busy}:{text:string;setText:(value:strin
 }
 function SessionStatus({state,quick,advanced}:{state?:Snapshot;quick?:QuickSettings;advanced:boolean}){
   const[now,setNow]=useState(Date.now());
+  const[retrying,setRetrying]=useState(false);
+  const[retryError,setRetryError]=useState('');
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer)},[]);
   const activity=state?.pending?'waiting':state?.busy?state.activity:'idle';
   const label=activity==='waiting'?(state?.pending?.kind==='questions'?'等待补充信息':'等待审批'):activity==='cancelling'?'正在取消':activity==='tool'?'执行工具':activity==='thinking'?'模型思考中':'空闲';
@@ -39,7 +41,8 @@ function SessionStatus({state,quick,advanced}:{state?:Snapshot;quick?:QuickSetti
   const seconds=Math.max(0,Math.floor(((state?.activity_elapsed_ms||0)+now-(state?.received_at_ms||now))/1000));
   const duration=`${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`;
   const tokens=(state?.input_tokens||0)+(state?.output_tokens||0);
-  return <div class="session-status" role="status" aria-live="off"><span class={`activity ${activity}`}><i/>{label}{detail} · {duration}</span>{advanced&&quick&&<span class="session-metrics">轮次 {state?.turns||0}/{quick.max_context_turns} · 步骤 {state?.steps||0}/{quick.max_agent_steps} · 工具 {state?.tool_calls||0}/{quick.max_tool_calls} · Token {tokens||'-'}{quick.context_window?` / ${quick.context_window}`:''} · Root {quick.root}</span>}</div>
+  const retry=async()=>{if(!state?.can_retry||retrying)return;setRetrying(true);setRetryError('');try{await api.retry(state.id)}catch(error){setRetryError(`重试失败：${String(error)}`)}finally{setRetrying(false)}};
+  return <div class="session-status" role="status" aria-live="off"><span class={`activity ${activity}`}><i/>{label}{detail} · {duration}</span>{state?.can_retry&&!state.busy&&<button class="retry-task" disabled={retrying} onClick={retry}>{retrying?'正在重试…':'重试原任务'}</button>}{retryError&&<span class="bad">{retryError}</span>}{advanced&&quick&&<span class="session-metrics">轮次 {state?.turns||0}/{quick.max_context_turns} · 步骤 {state?.steps||0}/{quick.max_agent_steps} · 工具 {state?.tool_calls||0}/{quick.max_tool_calls} · Token {tokens||'-'}{quick.context_window?` / ${quick.context_window}`:''} · Root {quick.root}</span>}</div>
 }
 function SessionSidebar({sessions,selected,create,choose,remove,removeAll,collapsed,toggle}:{sessions:Session[];selected:string;create:()=>void;choose:(id:string)=>void;remove:(session:Session)=>void;removeAll:()=>void;collapsed:boolean;toggle:()=>void}){
   const hasActive=sessions.some(session=>session.busy||session.pending);

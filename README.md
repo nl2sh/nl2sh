@@ -129,9 +129,29 @@ set ADB_SERIAL=device-serial
 android-run-windows.bat
 ```
 
+启动器会比较包内程序与设备端实际文件的 SHA-256；一致时直接启动，不再重复传输，摘要不同才推送并在推送后复核。只有显式设置 `NL2SH_CONFIG_SOURCE` 时才会把指定配置部署为设备端 `config.toml`，普通启动不会覆盖配置。
+
+也可直接下载最新 Release、校验 ZIP、填写最小配置并启动。建议通过环境变量传 API Key，避免它进入 shell 历史：
+
+```bash
+export NL2SH_API_KEY='你的密钥'
+curl -fsSL https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.sh \
+  | bash -s -- --provider deepseek --model deepseek-flash
+```
+
+Windows PowerShell：
+
+```powershell
+$env:NL2SH_API_KEY = "你的密钥"
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.ps1))) `
+  -Provider deepseek -Model deepseek-flash
+```
+
+支持 `openrouter`、`openai`、`deepseek`、`moonshot`/`kimi`、`siliconflow`、`ollama` 与 `custom`；自定义服务还需传 `--endpoint` / `-Endpoint`。API Key 也可作为 `--api-key` / `-ApiKey` 参数提供，但可能保留在命令历史中。
+
 ### 通过 GitHub Actions 自动发布
 
-仓库内置 `.github/workflows/release.yml`。推送 `v*` tag（如 `git tag v0.2.0 && git push origin v0.2.0`）会触发 GitHub Actions：并行交叉编译 `aarch64-linux-android`（arm64-v8a）与 `armv7-linux-androideabi`（armeabi-v7a），再把两种程序分别放入 `bin/arm64-v8a/` 和 `bin/armeabi-v7a/`，连同 Linux/BAT 启动脚本、`config.toml.example` 和 `使用说明.md` 合并为一份 `nl2sh-android.tar.gz` 与 `nl2sh-android.zip`，并附带 `SHA256SUMS` 发布到对应 tag 的 GitHub Release。Actions 页的 `workflow_dispatch` 可手动触发并生成草稿 Release（tag 通过输入指定）。
+仓库内置 `.github/workflows/release.yml`。推送 `v*` tag（如 `git tag v0.2.0 && git push origin v0.2.0`）会触发 GitHub Actions：并行交叉编译 `aarch64-linux-android`（arm64-v8a）与 `armv7-linux-androideabi`（armeabi-v7a），再把两种程序分别放入 `bin/arm64-v8a/` 和 `bin/armeabi-v7a/`，连同 Linux/BAT 启动脚本、Bash/PowerShell 安装脚本、`config.toml.example` 和 `使用说明.md` 合并为一份 `nl2sh-android.tar.gz` 与 `nl2sh-android.zip`，并附带 `SHA256SUMS` 发布到对应 tag 的 GitHub Release。Actions 页的 `workflow_dispatch` 可手动触发并生成草稿 Release（tag 通过输入指定）。
 
 下载统一发布包并完整解压后，Linux 直接运行 `./android-run-linux.sh`，Windows 双击 `android-run-windows.bat`。没有设备时脚本提示输入网络 ADB 地址，单设备自动选择，多设备按编号选择；随后自动检测 ABI，并完成 root adbd/`su` 回退部署。Windows 启动脚本还会启用 alternate-scroll 兼容模式：不请求远端鼠标捕获，由 Windows Terminal 将滚轮转换成 Up/Down 输入，再由 nl2sh 滚动历史；Linux 路径继续使用原生鼠标事件。
 
@@ -260,6 +280,8 @@ cp config.toml.example config.toml
 
 `api_type` 默认是 `auto`，因此配置文件可省略该字段。首次请求优先使用 Responses；仅当端点不存在、明确不支持，或在尚未输出任何内容时返回不兼容结构，才回退 Chat Completions，并在当前进程缓存成功协议。鉴权、限流、5xx、超时和已经产生流式内容后的错误不会触发切换。遇到特殊兼容服务时仍可显式设置 `responses` 或 `chat_completions`，也可用 `--api-type` 临时强制覆盖。
 
+如果 Provider 返回残缺或未闭合的工具参数 JSON，nl2sh 不会执行或猜测补全该调用，而是把解析错误作为失败 Tool Result 反馈给模型，最多允许两次重新生成。被拒绝的调用仍计入任务预算；修复后的参数必须重新经过工具校验、安全分类和确认流程。连续失败超过上限时当前任务会明确结束，并保留已完成的工具证据。
+
 腾讯 ima 为独立的可选只读连接器，可在 `/config` 的“知识库”分类配置，或使用环境变量 `NL2SH_IMA_CLIENT_ID` 与 `NL2SH_IMA_API_KEY`。TOML 字段为 `ima_enabled`、`ima_client_id`、`ima_api_key`，可选 `ima_knowledge_base_id` 用于固定默认知识库；未指定时会有界发现可访问知识库。启用后 Agent 获得知识库列表、搜索和原文读取工具。ima 客户端始终无代理直连，不继承网络 Tab 的代理设置；API Key、Client ID、临时下载 header 和签名 URL不会进入模型、审计日志或会话文件。远程资料被视为不可信数据，不会作为系统指令执行。项目不实现任何 ima 写操作。
 
 `model_context_window` 和 `model_max_output_tokens` 是可选的 Token 限额覆盖；省略上下文窗口时，nl2sh 优先使用 Provider 元数据，再使用内置的保守模型注册表。OpenRouter、OpenAI、DeepSeek、SiliconFlow 使用各自的 OpenAI 风格模型列表，Ollama 使用原生 `/api/tags` 与 `/api/show` 读取本地模型及上下文。状态栏的上下文百分比使用最后一次模型请求的输入 Token 除以已知窗口估算，未知时显示 `?`。实际输入 Token 达到上下文安全水位后，Agent 会按观测用量动态淘汰最旧的完整历史轮次；system instruction、当前轮次和完整 Tool Calling round 不会被拆分，`max_context_turns` 仍是硬上限。
@@ -305,6 +327,8 @@ nl2sh update                  # 检查并安装最新 Android 构建
 Command 模式生成、分类后执行单条命令；`--dry-run` 只展示。TUI 中输入 `!command` 可不经过模型而直接运行命令，即使尚未配置 Provider 也可使用；命令仍会经过安全分类与必要确认，修改、危险、Root 和编辑后的命令不能绕过保护。实时输出与退出状态显示在当前界面，但不会加入模型上下文。需要多轮执行和结果回传时使用默认 Agent 模式。Agent TUI 在请求和捕获式执行期间保持同一 frame，并在界面内显示输出与确认弹窗；审批弹窗支持方向键与 Enter，也可直接使用 `1-7` 或 `y/n/a/r/e/i/t` 选择允许一次、当前任务允许完全相同命令、本次运行允许全部普通修改、拒绝、编辑、交互执行或捕获执行。运行期许可也可用 `/permission allow` 开启、用 `/permission ask` 关闭、用 `/permission` 查看状态；它只保存在当前进程内存中。任务级与运行期许可均不适用于 Root、Dangerous、Critical 或强确认操作，也不持久化。命令运行时实时展示有界输出，完成后工具结果默认折叠，按 F2 可展开或收起；超出各层配置上限时，日志和模型上下文会携带明确截断标记。Agent 总结支持终端 Markdown 渲染，带语言标记的围栏代码在 Web 与 TUI 中按语法高亮；TUI 支持 Shell、Rust、Python、JavaScript/TypeScript 和 JSON，未知语言保持原文。TUI 使用统一的现代深色语义主题，并按终端能力选择 TrueColor 或 ANSI 256 palette；普通正文保持灰白，青蓝表示交互与焦点，绿色、黄色和红色分别保留给成功、警告和错误。底部输入框使用低对比度深色背景和青蓝色闪烁光标，支持 Left/Right/Home/End/Delete 编辑及 Up/Down 调取当前会话输入历史；输入 `/` 时显示垂直命令候选，使用 Up/Down 选择、Enter 补全，当前提供 `/help`、`/clear`、`/config`、`/setting`、`/permission`、`/balance`、`/sessions`、`/update` 和 `/exit`。每次 Agent 任务完成后，状态栏显示该任务跨全部 Tool Calling 步骤累计的输入、输出和总 Token；Provider 未返回用量时显示未知而不是零。TUI 启用鼠标追踪以稳定接收滚轮；复制屏幕文字时按住 Shift 拖选，由宿主终端高亮选区，再通过右键系统菜单复制。对话区只保留上下边框，避免选取内容混入左右边框。另支持 PageUp/PageDown 浏览历史、Enter 提交、Ctrl+C 取消当前任务（空闲时清空输入）、Ctrl+Q 安全退出。
 
 会话在每个完整 Agent turn 后自动保存到配置目录旁的私有 `sessions/` 目录，首轮完成后由当前模型异步生成简短标题，`/sessions` 列表显示标题。稳定的内部名称只接受字母、数字、`-` 和 `_`：`/sessions` 列表，`/sessions resume NAME` 恢复，`/sessions rename OLD NEW` 重命名，`/sessions delete NAME` 删除。会话只保存对话与有界工具结果，不保存 API Key、代理密码、余额或当前任务审批许可。
+
+Web 任务失败、中断或取消后，如果检查点仍保留可识别的原始用户输入，状态区会显示“重试原任务”。该操作只重新提交原始输入，不把检查点中的工具输出加入模型历史，也不恢复旧审批；重新生成的工具调用仍完整经过安全分类与确认。输入在持久化时已被凭据脱敏且无法安全还原时，不提供重试按钮。
 
 `/new` 开始新的空白会话并保留已保存快照与审计日志；`/clear` 只清空当前会话内容。未知斜杠命令不会提交给模型，接近已知命令时只显示纠错建议而不自动执行。
 

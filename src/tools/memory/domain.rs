@@ -15,10 +15,26 @@ const MAX_ENTRIES: usize = 128;
 const MAX_KEY_BYTES: usize = 128;
 const MAX_VALUE_BYTES: usize = 16 * 1024;
 
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+/// Supported private Agent notebook operations exposed in the tool schema.
+pub enum AgentMemoryAction {
+    /// Read one value by key.
+    Get,
+    /// List all stored keys and values.
+    List,
+    /// Create or replace one value after confirmation.
+    Set,
+    /// Delete one key after confirmation.
+    Delete,
+    /// Delete all entries after confirmation.
+    Clear,
+}
+
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AgentMemoryArgs {
-    pub action: String,
+    pub action: AgentMemoryAction,
     #[serde(default)]
     pub key: Option<String>,
     #[serde(default)]
@@ -39,22 +55,24 @@ impl AgentMemory {
 
     pub fn read(&self, args: &AgentMemoryArgs) -> Result<String> {
         let values = self.load()?;
-        match args.action.as_str() {
-            "get" => {
+        match args.action {
+            AgentMemoryAction::Get => {
                 let key = valid_key(args.key.as_deref())?;
                 serde_json::to_string_pretty(
                     &serde_json::json!({"key":key,"value":values.get(key)}),
                 )
                 .context("cannot encode memory result")
             }
-            "list" => serde_json::to_string_pretty(&values).context("cannot encode memory result"),
+            AgentMemoryAction::List => {
+                serde_json::to_string_pretty(&values).context("cannot encode memory result")
+            }
             _ => bail!("read action must be get or list"),
         }
     }
 
     pub fn mutation_summary(&self, args: &AgentMemoryArgs) -> Result<String> {
-        match args.action.as_str() {
-            "set" => {
+        match args.action {
+            AgentMemoryAction::Set => {
                 let key = valid_key(args.key.as_deref())?;
                 let value = args.value.as_deref().context("set requires value")?;
                 if value.len() > MAX_VALUE_BYTES {
@@ -65,19 +83,19 @@ impl AgentMemory {
                     value.len(),
                 ))
             }
-            "delete" => Ok(format!(
+            AgentMemoryAction::Delete => Ok(format!(
                 "Delete persistent Agent memory key: {}",
                 valid_key(args.key.as_deref())?
             )),
-            "clear" => Ok("Clear all persistent Agent memory entries".into()),
+            AgentMemoryAction::Clear => Ok("Clear all persistent Agent memory entries".into()),
             _ => bail!("mutation action must be set, delete, or clear"),
         }
     }
 
     pub fn apply(&self, args: &AgentMemoryArgs) -> Result<String> {
         let mut values = self.load()?;
-        match args.action.as_str() {
-            "set" => {
+        match args.action {
+            AgentMemoryAction::Set => {
                 let key = valid_key(args.key.as_deref())?.to_owned();
                 let value = args.value.as_deref().context("set requires value")?;
                 if value.len() > MAX_VALUE_BYTES {
@@ -88,10 +106,10 @@ impl AgentMemory {
                 }
                 values.insert(key, value.to_owned());
             }
-            "delete" => {
+            AgentMemoryAction::Delete => {
                 values.remove(valid_key(args.key.as_deref())?);
             }
-            "clear" => values.clear(),
+            AgentMemoryAction::Clear => values.clear(),
             _ => bail!("mutation action must be set, delete, or clear"),
         }
         self.store(&values)?;
@@ -167,30 +185,45 @@ mod tests {
         let dir = tempfile::tempdir()?;
         let memory = AgentMemory::new(dir.path());
         let set = AgentMemoryArgs {
-            action: "set".into(),
+            action: AgentMemoryAction::Set,
             key: Some("task.note".into()),
             value: Some("done".into()),
         };
         memory.apply(&set)?;
         assert!(memory
             .read(&AgentMemoryArgs {
-                action: "get".into(),
+                action: AgentMemoryAction::Get,
                 key: set.key.clone(),
                 value: None
             })?
             .contains("done"));
         memory.apply(&AgentMemoryArgs {
-            action: "delete".into(),
+            action: AgentMemoryAction::Delete,
             key: set.key,
             value: None,
         })?;
         assert!(!memory
             .read(&AgentMemoryArgs {
-                action: "list".into(),
+                action: AgentMemoryAction::List,
                 key: None,
                 value: None
             })?
             .contains("done"));
         Ok(())
+    }
+
+    #[test]
+    fn rejects_unknown_actions_before_risk_routing() {
+        let error = serde_json::from_value::<AgentMemoryArgs>(serde_json::json!({
+            "action": "read"
+        }))
+        .expect_err("unknown memory actions must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("unknown variant `read`"));
+        assert!(message.contains("get"));
+        assert!(message.contains("list"));
+        assert!(message.contains("set"));
+        assert!(message.contains("delete"));
+        assert!(message.contains("clear"));
     }
 }

@@ -91,6 +91,7 @@ button:disabled { opacity: .45; }
 .task-evidence p, .task-evidence details { width: 100%; margin: 0; }
 .task-evidence span { color: var(--text-secondary); }
 .stop-task { align-self: flex-start; margin-top: .45rem; color: var(--warning); border-color: var(--warning); }
+.retry-task { color: var(--accent); border-color: var(--accent); }
 .composer { display: flex; gap: .6rem; margin-top: .7rem; }
 .composer textarea { flex: 1; min-width: 0; }
 .composer button { flex: none; min-width: 64px; white-space: nowrap; }

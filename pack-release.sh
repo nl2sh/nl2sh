@@ -28,9 +28,11 @@ done
 mkdir -p "${PACKAGE_DIR}/bin/arm64-v8a" "${PACKAGE_DIR}/bin/armeabi-v7a" "${DIST_DIR}"
 cp target/aarch64-linux-android/release/nl2sh "${PACKAGE_DIR}/bin/arm64-v8a/nl2sh"
 cp target/armv7-linux-androideabi/release/nl2sh "${PACKAGE_DIR}/bin/armeabi-v7a/nl2sh"
-cp android-run-linux.sh android-run-windows.bat config.toml.example 使用说明.md "${PACKAGE_DIR}/"
+cp android-run-linux.sh android-run-windows.bat install-android.sh install-android.ps1 \
+  config.toml.example 使用说明.md "${PACKAGE_DIR}/"
 cp -R screenshots "${PACKAGE_DIR}/screenshots"
 chmod +x "${PACKAGE_DIR}/android-run-linux.sh" \
+  "${PACKAGE_DIR}/install-android.sh" \
   "${PACKAGE_DIR}/bin/arm64-v8a/nl2sh" \
   "${PACKAGE_DIR}/bin/armeabi-v7a/nl2sh"
 
