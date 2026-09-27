@@ -1,10 +1,14 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.4] - 2026-09-28
 
 ### Added
 
 - Add bounded APK archive inspection, entry listing, and DEX class indexing tools. Single-class JADX decompilation requires strong confirmation and an Android DEX helper run with `app_process`; a local helper build project and hash-pinned on-demand download path are included.
+
+### Changed
+
+- Make the Android JADX helper compatible with API 28 ARMv7 by pinning the Android-compatible JADX 1.5.1 line, restricting work to the requested class, and supplying a private writable ART temporary directory. The helper continues to require strong confirmation and now rejects unexpected XML parsing.
 
 ## [1.0.3] - 2026-09-27
 

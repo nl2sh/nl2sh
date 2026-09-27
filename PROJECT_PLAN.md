@@ -1,6 +1,6 @@
 # Project Plan
 
-状态以 2026-09-27 的代码、验证记录和公开发布状态为准；当前发布版本为 1.0.3。未完成项不会机械勾选。
+状态以 2026-09-28 的代码、验证记录和公开发布状态为准；当前发布版本为 1.0.4。未完成项不会机械勾选。
 
 ## 独立 A2A 网关 — 已实现
 
@@ -304,7 +304,8 @@
 
 - [x] 结构化只读 APK 概览、ZIP 条目检索和 DEX 类索引，限制条目、解压量和结果数量。
 - [x] 单类 JADX 反编译经过 Dangerous 强确认；只接受含 `classes.dex` 的 Android helper，并通过 `CLASSPATH` + `/system/bin/app_process` 启动；离线 JAR 或 HTTPS URL + 固定 SHA-256 可在强确认后使用。
-- [x] 仓库内提供固定 JADX 1.5.3 的最小 Android helper 源码、Gradle 构建和发布元数据生成脚本。
-- [ ] 发布并锁定经真机验证的 Android DEX helper，提供默认下载地址和摘要；当前未配置 helper 时返回明确错误。
+- [x] 仓库内提供固定 JADX 1.5.1 的最小 Android helper 源码、Gradle 构建和发布元数据生成脚本；该版本兼容 API 28 的 `Inflater` 接口基线。
+- [x] 发布并锁定经真机验证的 Android DEX helper，提供默认 GitHub Release 下载地址和固定摘要；自定义下载源仍强制提供独立摘要。
 - [x] 在 Android API 35 模拟器通过 `app_process` 对单 DEX 和双 DEX 测试 APK 完成单类反编译；不使用设备端 Java 或安装 helper APK。
+- [x] 在 Android API 28 ARMv7 设备通过完整强确认链反编译单类；运行时为 ART 提供私有临时目录，helper 限定目标类并拒绝 XML 解析。
 - [ ] 在 Android API 26 真机及其他 API 版本验证，并覆盖大型多 DEX APK、内存与超时清理。

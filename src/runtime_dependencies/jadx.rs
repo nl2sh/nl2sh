@@ -16,6 +16,10 @@ use std::{
 use tokio::{io::AsyncWriteExt, process::Command};
 
 const HELPER_VERSION: &str = "0.1.0";
+const DEFAULT_HELPER_URL: &str =
+    "https://github.com/nl2sh/nl2sh/releases/download/v1.0.4/jadx-helper.jar";
+const DEFAULT_HELPER_SHA256: &str =
+    "b733944a9588abbafee1d9b9d77cb78c02bb95f056301f115c0fcb77307c7328";
 const MAX_HELPER_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SOURCE_BYTES: u64 = 64 * 1024;
 const ENTRYPOINT: &str = "com.nl2sh.jadx.Main";
@@ -32,9 +36,7 @@ fn cache_dir() -> Result<PathBuf> {
         .join(HELPER_VERSION))
 }
 
-fn expected_sha() -> Result<String> {
-    let sha = std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")
-        .context("NL2SH_JADX_ANDROID_HELPER_SHA256 is required for helper downloads")?;
+fn parse_sha(sha: String) -> Result<String> {
     if sha.len() != 64 || !sha.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         bail!("Android JADX helper SHA-256 must be 64 hexadecimal characters")
     }
@@ -42,9 +44,17 @@ fn expected_sha() -> Result<String> {
 }
 
 fn download_source() -> Result<(String, String)> {
-    let url = std::env::var("NL2SH_JADX_ANDROID_HELPER_URL").context(
-        "no Android JADX helper is configured; set NL2SH_JADX_ANDROID_HELPER_PATH, or set NL2SH_JADX_ANDROID_HELPER_URL and NL2SH_JADX_ANDROID_HELPER_SHA256",
-    )?;
+    let configured_url = std::env::var("NL2SH_JADX_ANDROID_HELPER_URL").ok();
+    let (url, sha) = if let Some(url) = configured_url {
+        let sha = std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")
+            .context("NL2SH_JADX_ANDROID_HELPER_SHA256 is required with a custom helper URL")?;
+        (url, parse_sha(sha)?)
+    } else {
+        (
+            DEFAULT_HELPER_URL.to_owned(),
+            DEFAULT_HELPER_SHA256.to_owned(),
+        )
+    };
     let parsed = reqwest::Url::parse(&url).context("invalid Android JADX helper URL")?;
     if parsed.scheme() != "https"
         || parsed.username() != ""
@@ -53,7 +63,7 @@ fn download_source() -> Result<(String, String)> {
     {
         bail!("Android JADX helper URL must be HTTPS without credentials or fragment")
     }
-    Ok((url, expected_sha()?))
+    Ok((url, sha))
 }
 
 fn make_private_dir(path: &Path) -> Result<()> {
@@ -147,7 +157,7 @@ async fn ensure_helper(config: &Config) -> Result<PathBuf> {
             .await
             .context("helper validation worker failed")??;
         if std::env::var_os("NL2SH_JADX_ANDROID_HELPER_SHA256").is_some() {
-            let expected = expected_sha()?;
+            let expected = parse_sha(std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")?)?;
             let checked = path.clone();
             if !tokio::task::spawn_blocking(move || {
                 digest_file(&checked).is_ok_and(|digest| digest == expected)
@@ -232,10 +242,19 @@ async fn ensure_helper(config: &Config) -> Result<PathBuf> {
     fs::canonicalize(dest).context("cannot resolve downloaded Android helper")
 }
 
-fn helper_command(jar: &Path, apk: &Path, class_name: &str, source: &Path) -> Command {
+fn helper_command(
+    jar: &Path,
+    apk: &Path,
+    class_name: &str,
+    source: &Path,
+    temp_dir: &Path,
+) -> Command {
     let mut command = Command::new("/system/bin/app_process");
+    let mut java_temp_arg = std::ffi::OsString::from("-Djava.io.tmpdir=");
+    java_temp_arg.push(temp_dir);
     command
         .env("CLASSPATH", jar)
+        .arg(java_temp_arg)
         .arg("/")
         .arg(ENTRYPOINT)
         .arg(apk)
@@ -261,7 +280,7 @@ pub async fn decompile_class(config: &Config, apk_path: &str, class_name: &str) 
     let stderr =
         tempfile::NamedTempFile::new_in(work.path()).context("cannot stage helper diagnostics")?;
     let stderr_output = stderr.reopen().context("cannot open helper diagnostics")?;
-    let mut command = helper_command(&jar, &apk, class_name, &source);
+    let mut command = helper_command(&jar, &apk, class_name, &source, work.path());
     command
         .env("JADX_CONFIG_DIR", work.path())
         .env("JADX_CACHE_DIR", work.path())
@@ -348,16 +367,31 @@ mod tests {
             Path::new("/data/local/tmp/app.apk"),
             "com.example.Main",
             Path::new("/data/local/tmp/out.java"),
+            Path::new("/data/local/tmp/work"),
         );
         assert_eq!(command.as_std().get_program(), "/system/bin/app_process");
         let args = command.as_std().get_args().collect::<Vec<_>>();
-        assert_eq!(args[0], "/");
-        assert_eq!(args[1], ENTRYPOINT);
-        assert_eq!(args[2], "/data/local/tmp/app.apk");
+        assert_eq!(args[0], "-Djava.io.tmpdir=/data/local/tmp/work");
+        assert_eq!(args[1], "/");
+        assert_eq!(args[2], ENTRYPOINT);
+        assert_eq!(args[3], "/data/local/tmp/app.apk");
         assert!(command
             .as_std()
             .get_envs()
             .any(|(name, value)| name == "CLASSPATH"
                 && value == Some(std::ffi::OsStr::new("/data/local/tmp/helper.jar"))));
+    }
+
+    #[test]
+    fn published_helper_defaults_are_pinned() -> Result<()> {
+        assert_eq!(
+            DEFAULT_HELPER_URL,
+            "https://github.com/nl2sh/nl2sh/releases/download/v1.0.4/jadx-helper.jar"
+        );
+        assert_eq!(
+            parse_sha(DEFAULT_HELPER_SHA256.to_owned())?,
+            DEFAULT_HELPER_SHA256
+        );
+        Ok(())
     }
 }

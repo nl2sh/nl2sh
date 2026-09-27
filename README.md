@@ -54,7 +54,7 @@ HTTP 使用 rustls，未启用 native-tls。
 
 APK 概览、条目列表和 DEX 类名索引无需额外运行时。单类反编译仅在 Android 上运行，使用仓库内 [Android helper](jadx-helper/README.md) 构建出的 DEX JAR；它不安装为常规 APK，也不需要设备端 Java 命令。
 
-可用 `NL2SH_JADX_ANDROID_HELPER_PATH=/path/to/jadx-helper.jar` 指定离线文件，或同时设置 `NL2SH_JADX_ANDROID_HELPER_URL=https://…` 与 `NL2SH_JADX_ANDROID_HELPER_SHA256=<64位摘要>`，在首次获批后按需下载并校验缓存。普通 JVM `.class` JAR 被拒绝。`NL2SH_JADX_CACHE_DIR` 可选择缓存根目录。手工指定的 helper 由操作者核验来源；目前没有经真机验证并固定摘要的默认发布资产，未配置时返回明确的后端不可用错误。
+首次批准反编译后，nl2sh 默认从 `v1.0.4` GitHub Release 下载并校验固定 SHA-256 的 `jadx-helper.jar`，随后复用私有缓存。可用 `NL2SH_JADX_ANDROID_HELPER_PATH=/path/to/jadx-helper.jar` 指定离线文件；覆盖下载源时必须同时设置 `NL2SH_JADX_ANDROID_HELPER_URL=https://…` 与 `NL2SH_JADX_ANDROID_HELPER_SHA256=<64位摘要>`。普通 JVM `.class` JAR 被拒绝，`NL2SH_JADX_CACHE_DIR` 可选择缓存根目录。
 
 ### 内置 Web 界面
 

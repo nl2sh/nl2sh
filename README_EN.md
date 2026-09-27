@@ -37,7 +37,7 @@ Commands run through a Unix PTY. Timeouts terminate and reap the entire process 
 
 ## Build
 
-APK archive and DEX indexing tools need no extra runtime. Android-only `decompile_apk_class` uses the [DEX helper](jadx-helper/README.md) built from this repository: set `NL2SH_JADX_ANDROID_HELPER_PATH`, or set both `NL2SH_JADX_ANDROID_HELPER_URL` (HTTPS) and `NL2SH_JADX_ANDROID_HELPER_SHA256` for confirmed first-use download. `NL2SH_JADX_CACHE_DIR` selects a custom cache root. No verified default helper has been published yet. A JVM class JAR is rejected; the caller verifies manually provided JARs.
+APK archive and DEX indexing tools need no extra runtime. After the first approved `decompile_apk_class` call, nl2sh downloads the SHA-256-pinned [DEX helper](jadx-helper/README.md) from the `v1.0.4` GitHub Release and reuses its private cache. Set `NL2SH_JADX_ANDROID_HELPER_PATH` for an offline helper, or set both `NL2SH_JADX_ANDROID_HELPER_URL` (HTTPS) and `NL2SH_JADX_ANDROID_HELPER_SHA256` to override the download. `NL2SH_JADX_CACHE_DIR` selects a custom cache root. A JVM class JAR is rejected.
 
 Development requires stable Rust (edition 2021) and Node.js 22+ with npm. Cargo copies the `web/` source into its output directory, runs `npm ci` and `npm run build`, and embeds the generated assets in the executable.
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 helper_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-gradle --project-dir "$helper_root" :app:assembleRelease
+sh "$helper_root/gradlew" --project-dir "$helper_root" :app:packageHelper
 
 python3 - "$helper_root" <<'PY'
 import hashlib
@@ -13,11 +13,11 @@ import sys
 import zipfile
 
 root = Path(sys.argv[1])
-apk = root / 'app/build/outputs/apk/release/app-release-unsigned.apk'
+packaged = root / 'app/build/distributions/jadx-helper.jar'
 dist = root / 'dist'
 dist.mkdir(exist_ok=True)
 jar = dist / 'jadx-helper.jar'
-shutil.copyfile(apk, jar)
+shutil.copyfile(packaged, jar)
 with zipfile.ZipFile(jar) as archive:
     dex = archive.read('classes.dex')
     if not dex.startswith(b'dex\n') or b'Lcom/nl2sh/jadx/Main;' not in dex:
@@ -28,7 +28,7 @@ sha = hashlib.sha256(jar.read_bytes()).hexdigest()
 (dist / 'jadx-helper.jar.sha256').write_text(f'{sha}  jadx-helper.jar\n')
 (dist / 'metadata.json').write_text(json.dumps({
     'helper_version': '0.1.0',
-    'jadx_version': '1.5.3',
+    'jadx_version': '1.5.1',
     'min_android_api': 26,
     'entrypoint': 'com.nl2sh.jadx.Main',
     'sha256': sha,

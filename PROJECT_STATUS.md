@@ -1,12 +1,15 @@
 # Project Status
 
-Last Updated: 2026-09-27
+Last Updated: 2026-09-28
 
 ## Recent Changes
 
-- 新增 APK 工具系列：`inspect_apk`、`list_apk_entries`、`list_dex_classes` 直接以有界 Rust 解析 ZIP/DEX；`decompile_apk_class` 需要强确认，只在 Android 通过 `CLASSPATH` + `/system/bin/app_process` 调用含 `classes.dex` 的 helper。仓库内提供固定 JADX 1.5.3 的 helper 源码和构建脚本；运行时支持离线路径或 HTTPS URL + 固定 SHA-256 按需下载并原子缓存，普通 JVM JAR 被拒绝。当前尚无经真机验证的默认 helper 资产，未配置时明确报错。前三项不依赖 helper；未改动 PTY 路径。
+- `v1.0.4` 发布门禁：JADX helper 通过 Gradle Wrapper 8.9 在 Windows 与 Linux/JDK 17 构建为相同的可复现 JAR，固定 SHA-256 为 `b733944a9588abbafee1d9b9d77cb78c02bb95f056301f115c0fcb77307c7328`，并在 API 28 ARMv7 设备通过单类反编译。默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、239 项执行测试、Release workflow 的 actionlint、相关 Bash/PowerShell 语法、Android API 26 AArch64 与 ARMv7 release 构建均通过；1 项需外部 ima 凭据的 smoke 按设计忽略。
+- Android JADX helper 增加固定并校验发行包 SHA-256 的 Gradle Wrapper 8.9，以及 Windows PowerShell 构建入口 `jadx-helper/build-helper.ps1`；Windows 与 Bash 脚本均通过仓库 Wrapper 执行 release 构建，并把 APK 运行时条目重新封装为无时间戳、固定顺序和固定压缩方式的可复现 JAR。Windows 与 Linux 构建摘要一致，脚本校验单个 `classes.dex` 和 `com.nl2sh.jadx.Main` 入口并生成 SHA-256 与版本元数据，无需系统安装 Gradle；不改变安全确认或 PTY 路径。
+- Android JADX helper API 28 ARMv7 真机闭环：JADX 固定为与其 Android 示例一致的 1.5.1，避开 1.5.3 在旧平台调用 API 35 `Inflater.setInput(ByteBuffer)` 的兼容问题；helper 使用单线程、精确类过滤、无代码缓存和 R8 缩减，并拒绝意外 XML 解析。运行时为 `app_process` 注入私有可写 `java.io.tmpdir`。约 685 KiB 的单 DEX 系统 APK经 TUI 普通确认及 `YES` 强确认后成功反编译目标类并返回 Java 结构摘要，终端正常恢复；候选部署未覆盖设备既有程序。
+- 新增 APK 工具系列：`inspect_apk`、`list_apk_entries`、`list_dex_classes` 直接以有界 Rust 解析 ZIP/DEX；`decompile_apk_class` 需要强确认，只在 Android 通过 `CLASSPATH` + `/system/bin/app_process` 调用含 `classes.dex` 的 helper。仓库内提供固定 JADX 1.5.1 的 helper 源码和构建脚本；运行时默认使用 `v1.0.4` 的固定 HTTPS URL 与 SHA-256，也支持离线路径或自定义 URL + 独立摘要并原子缓存，普通 JVM JAR 被拒绝。前三项不依赖 helper；未改动 PTY 路径。
 - APK 工具验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`，以及 Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 通过；合成压缩 APK 回归覆盖 ZIP 概览、条目和 DEX 类索引，异常偏移与非法类名被拒绝，JADX 工具风险下限要求强确认。
-- Android JADX helper 构建验证：JDK 17、Gradle 8.9、Android Gradle Plugin 8.7.3 与 Android SDK API 35 下执行 `jadx-helper/build-helper.sh` 成功；产物为单个 `classes.dex` 的约 2.6 MiB JAR，DEX 中含 `com.nl2sh.jadx.Main` 和 `jadx.api.JadxDecompiler`，脚本生成 SHA-256 与版本元数据。Android API 35 x86_64 模拟器中，以 `CLASSPATH` + `/system/bin/app_process` 分别对单 DEX 和双 DEX 测试 APK 成功反编译单类并读取 Java 源码；尚未验证 API 26 真机、大型多 DEX、内存和超时清理。
+- Android JADX helper 构建验证：JDK 17、Gradle Wrapper 8.9、Android Gradle Plugin 8.7.3 与 Android SDK API 35 可生成单个 `classes.dex` 的压缩 DEX JAR、SHA-256 与版本元数据。Android API 35 x86_64 模拟器的单/双 DEX 输入及 API 28 ARMv7 设备的小型单 DEX 输入均成功反编译单类；仍需验证 API 26、较大型多 DEX、内存峰值和超时清理。
 
 - `v1.0.3` 已正式发布：标签工作流完成双 ABI Android、自更新裸二进制、统一 ZIP/TAR、Termux `.deb`、签名 APT 仓库及 GitHub Release 发布。
 - 新增独立英文项目说明 `README_EN.md`，与中文 README 顶部互链，并在两种语言中展示最新的 TUI 与 Web 存储分析截图；文档变更不影响 Android 运行、安全确认或 PTY 路径。
@@ -20,7 +23,7 @@ Last Updated: 2026-09-27
 - Web 模型回答与流式 Markdown 的围栏代码按声明语言高亮，使用按需注册的语法规则和现有语义色板；未知语言继续转义为纯文本。TUI 的围栏代码为 Shell、Rust、Python、JavaScript/TypeScript 和 JSON 提供轻量高亮；工具原始输出、安全审批、Android 与 PTY 路径不变。
 - 代码高亮验证：Web `npm test --prefix web`、`npm run build --prefix web`，Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`，Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 及 `git diff --check` 通过；回归覆盖已知语言、未知语言的 HTML 转义和 TUI 文本保真。
 - Web 顶栏的菜单项独立横向滚动，GitHub Star 与其右侧的展开/收起按钮保持可见；按钮改用 `<`/`>` 字符并保留可访问名称。对话输入框增加提问及 `@` 文件选择提示；“能做什么”弹窗固定搜索与分类筛选区，由工具示例列表独立滚动。这些改动只涉及浏览器展示，不改变会话、文件引用、安全审批、Android 或 PTY 路径。
-- 项目介绍与计划按当前模块同步：Android 单文件程序包含 TUI、Web 多会话和结构化工具；可选主机侧 A2A/MCP 网关支持设备盘点与 Agent 咨询，拒绝所有需要人工确认的操作。公开发布版本为 1.0.3；TUR 配方 PR #2804 已合并。
+- 项目介绍与计划按当前模块同步：Android 单文件程序包含 TUI、Web 多会话和结构化工具；可选主机侧 A2A/MCP 网关支持设备盘点与 Agent 咨询，拒绝所有需要人工确认的操作。公开发布版本为 1.0.4；TUR 配方 PR #2804 已合并。
 - TUI 完整 Agent 首轮保存后复用 Web 的无工具短标题生成器，`/sessions` 显示标题；后续自动保存、恢复与重命名保留标题。标题生成失败不阻断回答或会话保存，本地命令不触发生成。
 - Web 会话摘要增加独立创建时间，侧栏轮数或运行状态后显示相对时间；满一天后显示本地日期和时刻。旧快照从系统生成的会话 ID 推算创建时间，后续保存和重命名保持不变。
 - 会话标题与创建时间验证：Linux 目标 `cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`，Web `npm run build --prefix web`、`npm test --prefix web`，Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 及 `git diff --check` 通过；TUI 伪终端回归确认真实首轮回复后自动标题写入私有快照，存储回归确认旧快照时间恢复、续存与重命名保留创建时间。
@@ -163,12 +166,12 @@ Last Updated: 2026-09-27
 
 ## Current Phase
 
-1.0.3 已发布；TUI、Web 多会话、结构化工具和可选 A2A/MCP 网关均已实现。TUR 上游配方已合并，后续工作集中在兼容性与体验改进。
+1.0.4 已发布；TUI、Web 多会话、结构化工具和可选 A2A/MCP 网关均已实现。TUR 上游配方已合并，后续工作集中在兼容性与体验改进。
 
 ## Overall Status
 
 - Product positioning: 以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent；核心程序以单个可执行文件交付，提供多轮 Tool Calling 和丰富 TUI，不声称与 Hermes API 或插件兼容。
-- Build status: 1.0.3 的 stable Rust 检查、Clippy 与 Android API 26 双 ABI release 交叉编译通过。
+- Build status: 1.0.4 的 stable Rust 检查、测试与 Android API 26 双 ABI release 交叉编译通过。
 - Test status: 全量 `cargo test --all-targets` 通过；显式凭据 ima live smoke 按设计忽略。
 - Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
@@ -227,7 +230,7 @@ Last Updated: 2026-09-27
 - 命令审批改为固定 `1-6` 列表，支持方向键/Enter 与 `y/n/a/e/i/t` 别名；可在当前 Agent 任务内记住完全相同的普通命令，但 Root、Dangerous、Critical 和强确认命令始终禁用该选项，且许可不持久化、不做前缀匹配。
 - 审批区域使用完整风险色边框和统一 `background_alt` 面板背景；阶段切换保持稳定最小高度并清空整个面板，避免列表字符残留到强确认或编辑画面。
 - 审批面板锚定在输入区正上方的左下角；初始审批忽略孤立 Esc 和大写 CSI 尾字符，避免 adb 将方向键拆分后误触拒绝或 always 导致弹窗消失。
-- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.3。
+- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.4。
 - 实时 TUI、捕获式工具结果、发给模型的 Tool Result、JSONL 单事件和单文件均有可配置上限；截断会插入明确标记。
 - TUI 输出与历史生命周期已从 session 控制器拆为独立模块，同时保留新的审批菜单和任务级精确命令许可。
 - 真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵已完成，覆盖提权与确认链、超时回收，以及全屏程序退出后的终端恢复和 TUI 重绘。

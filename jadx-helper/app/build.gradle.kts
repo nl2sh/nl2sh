@@ -1,3 +1,6 @@
+import org.gradle.api.tasks.bundling.Zip
+import org.gradle.api.tasks.bundling.ZipEntryCompression
+
 plugins {
     id("com.android.application")
 }
@@ -17,7 +20,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
@@ -28,7 +35,18 @@ android {
 }
 
 dependencies {
-    implementation("io.github.skylot:jadx-core:1.5.3")
-    implementation("io.github.skylot:jadx-dex-input:1.5.3")
-    implementation("com.github.tony19:logback-android:3.0.0")
+    implementation("io.github.skylot:jadx-core:1.5.1")
+    implementation("io.github.skylot:jadx-dex-input:1.5.1")
+}
+
+tasks.register<Zip>("packageHelper") {
+    dependsOn("assembleRelease")
+    from(provider {
+        zipTree(layout.buildDirectory.file("outputs/apk/release/app-release-unsigned.apk").get().asFile)
+    })
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    archiveFileName.set("jadx-helper.jar")
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    entryCompression = ZipEntryCompression.DEFLATED
 }
