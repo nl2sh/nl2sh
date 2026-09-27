@@ -4,6 +4,7 @@ Last Updated: 2026-09-27
 
 ## Recent Changes
 
+- 准备发布 `v1.0.3`：Cargo 版本与 changelog 已收敛到 2026-09-27 的补丁版本；标签推送继续通过既有工作流构建双 ABI Android、自更新裸二进制、Termux `.deb`、签名 APT 仓库及 GitHub Release。
 - 预编译部署启动器现按本地主机与设备端实际 SHA-256 跳过相同二进制的重复推送，更新后再次校验；Linux Bash 与 Windows PowerShell 一键安装入口会校验 Release ZIP、生成最小 Provider 配置，并通过显式配置部署入口启动。
 - 部署优化验证：`bash -n android-run-linux.sh install-android.sh pack-release.sh`、`actionlint .github/workflows/release.yml`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 及 `git diff --check` 通过。
 
@@ -157,12 +158,12 @@ Last Updated: 2026-09-27
 
 ## Current Phase
 
-1.0.2 已发布；TUI、Web 多会话、结构化工具和可选 A2A/MCP 网关均已实现。TUR 上游配方已合并，后续工作集中在兼容性与体验改进。
+1.0.3 正在发布；TUI、Web 多会话、结构化工具和可选 A2A/MCP 网关均已实现。TUR 上游配方已合并，后续工作集中在兼容性与体验改进。
 
 ## Overall Status
 
 - Product positioning: 以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent；核心程序以单个可执行文件交付，提供多轮 Tool Calling 和丰富 TUI，不声称与 Hermes API 或插件兼容。
-- Build status: 1.0.2 的 stable Rust 检查、Clippy 与 Android API 26 双 ABI release 交叉编译通过。
+- Build status: 1.0.3 的 stable Rust 检查、Clippy 与 Android API 26 双 ABI release 交叉编译通过。
 - Test status: 全量 `cargo test --all-targets` 通过；显式凭据 ima live smoke 按设计忽略。
 - Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
@@ -221,7 +222,7 @@ Last Updated: 2026-09-27
 - 命令审批改为固定 `1-6` 列表，支持方向键/Enter 与 `y/n/a/e/i/t` 别名；可在当前 Agent 任务内记住完全相同的普通命令，但 Root、Dangerous、Critical 和强确认命令始终禁用该选项，且许可不持久化、不做前缀匹配。
 - 审批区域使用完整风险色边框和统一 `background_alt` 面板背景；阶段切换保持稳定最小高度并清空整个面板，避免列表字符残留到强确认或编辑画面。
 - 审批面板锚定在输入区正上方的左下角；初始审批忽略孤立 Esc 和大写 CSI 尾字符，避免 adb 将方向键拆分后误触拒绝或 always 导致弹窗消失。
-- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.2。
+- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.3。
 - 实时 TUI、捕获式工具结果、发给模型的 Tool Result、JSONL 单事件和单文件均有可配置上限；截断会插入明确标记。
 - TUI 输出与历史生命周期已从 session 控制器拆为独立模块，同时保留新的审批菜单和任务级精确命令许可。
 - 真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵已完成，覆盖提权与确认链、超时回收，以及全屏程序退出后的终端恢复和 TUI 重绘。
@@ -248,6 +249,7 @@ Last Updated: 2026-09-27
 
 ## Verification Performed
 
+- `v1.0.3` 发布门禁：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`cargo build --release`、前端测试/生产构建、Release workflow 静态检查和发布相关 Bash 语法检查通过；NDK r28c/API 26 的 AArch64 与 ARMv7 release 交叉编译通过，分别验证为使用 `/system/bin/linker64` 的 64 位 PIE 和使用 `/system/bin/linker` 的 32 位 PIE。
 - Web 导航、输入与工具目录调整：`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 在 Linux 目标通过；菜单按钮保留动态可访问名称与 `aria-expanded` 状态。
 - 文档同步验证：Linux 目标 `git diff --check`、`cargo fmt --all -- --check`、`cargo check` 与 `cargo test` 通过；默认测试 1 项显式凭据 ima smoke 按设计忽略。
 - GitHub 公开发布与上游记录核对：`v1.0.2` Release 已发布，TUR PR #2804 于 2026-09-15 合并。

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-09-27
+
 ### Changed
 
 - 优化预编译 Android 启动器：Linux 与 Windows 会比较主机和设备端 `nl2sh` 的 SHA-256，相同则跳过重复 `adb push`，推送后强制复核摘要。
