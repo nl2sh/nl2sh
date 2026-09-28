@@ -155,7 +155,7 @@ Passing a key through the environment avoids storing it in shell history.
 
 Whether you extracted a release manually or used a one-command installer, you do not need to reinstall nl2sh later. Keep the host-side `nl2sh-android` directory, connect the device, confirm that `adb devices` reports it as `device`, and run the launcher from that directory:
 
-Windows users may also rerun the same CMD or PowerShell bootstrap command. When it finds a complete installation, it reuses and launches it instead of failing with “install directory already exists.” Explicit provider, model, or endpoint arguments update only those configuration fields; other TUI settings and an existing API key are preserved.
+Linux and Windows users may also rerun the same bootstrap command. When it finds a complete installation, it reuses and launches it instead of failing with “install directory already exists.” Explicit provider, model, or endpoint arguments update only those configuration fields; other TUI settings and an existing API key are preserved.
 
 ```bash
 cd /path/to/nl2sh-android

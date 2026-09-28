@@ -7,6 +7,7 @@ PROVIDER="openrouter"
 MODEL=""
 API_KEY=""
 ENDPOINT=""
+CONFIG_REQUESTED=false
 
 die() {
   echo "error: $*" >&2
@@ -28,10 +29,10 @@ EOF
 
 while (($# > 0)); do
   case "$1" in
-    --provider) [[ $# -ge 2 ]] || die "--provider requires a value"; PROVIDER="$2"; shift 2 ;;
-    --model) [[ $# -ge 2 ]] || die "--model requires a value"; MODEL="$2"; shift 2 ;;
-    --api-key) [[ $# -ge 2 ]] || die "--api-key requires a value"; API_KEY="$2"; shift 2 ;;
-    --endpoint) [[ $# -ge 2 ]] || die "--endpoint requires a value"; ENDPOINT="$2"; shift 2 ;;
+    --provider) [[ $# -ge 2 ]] || die "--provider requires a value"; PROVIDER="$2"; CONFIG_REQUESTED=true; shift 2 ;;
+    --model) [[ $# -ge 2 ]] || die "--model requires a value"; MODEL="$2"; CONFIG_REQUESTED=true; shift 2 ;;
+    --api-key) [[ $# -ge 2 ]] || die "--api-key requires a value"; API_KEY="$2"; CONFIG_REQUESTED=true; shift 2 ;;
+    --endpoint) [[ $# -ge 2 ]] || die "--endpoint requires a value"; ENDPOINT="$2"; CONFIG_REQUESTED=true; shift 2 ;;
     --install-dir) [[ $# -ge 2 ]] || die "--install-dir requires a value"; INSTALL_DIR="$2"; shift 2 ;;
     --repository) [[ $# -ge 2 ]] || die "--repository requires a value"; REPOSITORY="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -61,6 +62,75 @@ for value_name in ENDPOINT MODEL API_KEY; do
   [[ "${value}" != *$'\n'* && "${value}" != *$'\r'* ]] \
     || die "${value_name,,} must not contain a newline"
 done
+
+toml_escape() {
+  local escaped="$1"
+  escaped="${escaped//\\/\\\\}"
+  escaped="${escaped//\"/\\\"}"
+  printf '%s' "${escaped}"
+}
+
+upsert_toml_scalar() {
+  local file="$1" key="$2" replacement="$3" temp current
+  local found=false
+  temp="$(mktemp "${file}.tmp.XXXXXX")"
+  chmod 600 "${temp}"
+  if [[ -f "${file}" ]]; then
+    while IFS= read -r current || [[ -n "${current}" ]]; do
+      if [[ "${current}" =~ ^${key}[[:space:]]*= ]]; then
+        if [[ "${found}" == false ]]; then
+          printf '%s\n' "${replacement}" >> "${temp}"
+          found=true
+        fi
+      else
+        printf '%s\n' "${current}" >> "${temp}"
+      fi
+    done < "${file}"
+  fi
+  if [[ "${found}" == false ]]; then
+    printf '%s\n' "${replacement}" >> "${temp}"
+  fi
+  mv "${temp}" "${file}"
+}
+
+write_installer_config() {
+  local file="$1" merge_existing="$2"
+  if [[ "${merge_existing}" == false ]]; then
+    (umask 077; : > "${file}")
+  fi
+  upsert_toml_scalar "${file}" "model" "model = \"$(toml_escape "${MODEL}")\""
+  upsert_toml_scalar "${file}" "endpoint" "endpoint = \"$(toml_escape "${ENDPOINT}")\""
+  upsert_toml_scalar "${file}" "api_type" 'api_type = "auto"'
+  if [[ "${merge_existing}" == false || -n "${API_KEY}" ]]; then
+    upsert_toml_scalar "${file}" "api_key" "api_key = \"$(toml_escape "${API_KEY}")\""
+  fi
+  chmod 600 "${file}"
+}
+
+EXISTING_CONFIG="${INSTALL_DIR}/config.toml"
+if [[ -e "${INSTALL_DIR}" ]]; then
+  [[ -d "${INSTALL_DIR}" ]] || die "install path exists but is not a directory: ${INSTALL_DIR}"
+  if [[ ! -f "${INSTALL_DIR}/android-run-linux.sh" \
+    || ! -f "${INSTALL_DIR}/bin/arm64-v8a/nl2sh" \
+    || ! -f "${INSTALL_DIR}/bin/armeabi-v7a/nl2sh" ]]; then
+    die "install directory exists but is incomplete: ${INSTALL_DIR}"
+  fi
+  chmod +x "${INSTALL_DIR}/android-run-linux.sh"
+  if [[ "${CONFIG_REQUESTED}" == true || ! -f "${EXISTING_CONFIG}" ]]; then
+    write_installer_config "${EXISTING_CONFIG}" true
+    echo "Updated existing provider configuration without replacing other settings."
+  else
+    echo "Keeping the existing provider configuration."
+  fi
+  echo "Existing verified installation found: ${INSTALL_DIR}"
+  if [[ -t 0 ]]; then
+    NL2SH_CONFIG_SOURCE="${EXISTING_CONFIG}" exec "${INSTALL_DIR}/android-run-linux.sh"
+  fi
+  if exec 3</dev/tty; then
+    NL2SH_CONFIG_SOURCE="${EXISTING_CONFIG}" exec "${INSTALL_DIR}/android-run-linux.sh" <&3
+  fi
+  die "installation is ready, but no controlling terminal is available; run ${INSTALL_DIR}/android-run-linux.sh from an interactive terminal"
+fi
 
 TEMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf -- "${TEMP_DIR}"; }
@@ -101,7 +171,6 @@ else
 fi
 [[ "${ACTUAL_SHA256,,}" == "${EXPECTED_SHA256,,}" ]] || die "downloaded ZIP checksum mismatch"
 
-[[ ! -e "${INSTALL_DIR}" ]] || die "install directory already exists: ${INSTALL_DIR}"
 if command -v unzip >/dev/null 2>&1; then
   unzip -q "${ARCHIVE}" -d "${TEMP_DIR}/unpacked"
 else
@@ -111,21 +180,8 @@ fi
 mv "${TEMP_DIR}/unpacked/nl2sh-android" "${INSTALL_DIR}"
 chmod +x "${INSTALL_DIR}/android-run-linux.sh"
 
-toml_escape() {
-  local escaped="$1"
-  escaped="${escaped//\\/\\\\}"
-  escaped="${escaped//\"/\\\"}"
-  printf '%s' "${escaped}"
-}
 CONFIG_FILE="${INSTALL_DIR}/config.toml"
-umask 077
-{
-  printf 'api_key = "%s"\n' "$(toml_escape "${API_KEY}")"
-  printf 'model = "%s"\n' "$(toml_escape "${MODEL}")"
-  printf 'endpoint = "%s"\n' "$(toml_escape "${ENDPOINT}")"
-  printf 'api_type = "auto"\n'
-} > "${CONFIG_FILE}"
-chmod 600 "${CONFIG_FILE}"
+write_installer_config "${CONFIG_FILE}" false
 
 echo "Installed and verified: ${INSTALL_DIR}"
 if [[ -t 0 ]]; then

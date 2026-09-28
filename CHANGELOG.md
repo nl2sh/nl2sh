@@ -19,6 +19,7 @@
 - Resolve the selected PowerShell installer URL before entering the CMD parenthesized block, preventing `%PS_INSTALLER_URL%` from expanding to an empty curl argument in the downloaded batch bootstrap.
 - Preserve the CMD bootstrap directory before argument `shift` operations and perform temporary PowerShell-installer path assignment outside parenthesized blocks, preventing endpoint text from corrupting the download destination or stale early-expanded paths from being used.
 - Make the Windows bootstrap idempotent for complete existing installations: reuse the launcher, merge explicitly supplied provider fields into `config.toml` without discarding unrelated settings, preserve configuration on an option-free rerun, and continue to reject incomplete directories.
+- Apply the same idempotent reuse and field-preserving configuration merge to the Linux bootstrap, including controlling-terminal restoration for repeated `curl | bash` launches.
 
 ## [1.0.3] - 2026-09-27
 

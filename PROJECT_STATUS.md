@@ -4,6 +4,8 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- Linux 一键安装与 Windows 保持一致：完整已安装目录会直接复用并启动，显式 Provider/模型/Endpoint 只合并更新对应 TOML 顶层字段，未提供新 Key 时保留旧 API Key 及其他 TUI 设置，无参数重跑则完整保留配置。复用路径继续在 `curl | bash` 后恢复 controlling terminal，不完整目录仍失败关闭。
+- Linux 安装复用回归在隔离的完整双 ABI 目录中通过：自定义 Provider/模型/Endpoint 被更新，原 API Key 和 `max_agent_steps` 等其他配置保留，配置权限为 `0600`，且未进入 Release 下载路径。`bash -n install-android.sh android-run-linux.sh pack-release.sh`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 和 `git diff --check` 通过；239 项测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。
 - Windows CMD/PowerShell 一键安装现可幂等复用完整的已安装目录：检查 Windows launcher 与两个 ABI 程序后直接启动；本次显式传入 Provider/模型/Endpoint 时只合并更新对应 TOML 顶层字段，保留其他 TUI 设置，未提供新 API Key 时也保留旧 Key；无配置参数重跑时保留整份现有配置。不完整或非目录路径仍拒绝自动覆盖，避免破坏用户文件。
 - Windows CMD 一键安装在参数 `shift` 之前立即保存 BAT 所在目录，避免 `%0` 被后续 `--endpoint` 等参数取代后把 URL 误当本地路径；PowerShell 安装器的临时路径赋值与使用也已移出括号块，消除 CMD 早期展开造成的陈旧路径。
 - Windows CMD 一键安装修复批处理括号块的早期 `%VAR%` 展开问题：PowerShell 安装器 URL 现在于进入括号块前确定，Gitee/GitHub 远程 BAT 不再向 `curl.exe` 传入空 URL。修复不改变 Release 校验、ADB 设备选择或 TUI 交互路径。
