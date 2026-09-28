@@ -1,0 +1,21 @@
+//! Approved shell execution entry shared by interactive frontends.
+
+use super::{CommandExecutor, ExecutionResult};
+use crate::security::ApprovedShellCommand;
+use anyhow::Result;
+
+/// Dispatches a command-bound capability to the existing Android executor.
+pub struct ExecutionBroker;
+
+impl ExecutionBroker {
+    /// Executes exactly the command and root plan held by the capability.
+    pub async fn execute(
+        executor: &dyn CommandExecutor,
+        approved: ApprovedShellCommand,
+        interactive: bool,
+    ) -> Result<ExecutionResult> {
+        executor
+            .execute(approved.command(), approved.requires_root(), interactive)
+            .await
+    }
+}

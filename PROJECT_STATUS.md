@@ -4,6 +4,8 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- Shell 安全分类重组为 `shell/{parser,analyzer,expansion,effects}`、`policy/{filesystem,android,privilege,network}` 和 `legacy`；AST 成为主要风险来源，旧启发式风险 parser 删除，内置 regex 缩至 fork bomb 特殊签名，自定义 regex 继续只能升险。审批后的用户 shell 命令由进程内能力 broker 重新评估并绑定精确命令与 root 计划，所有用户 shell 入口经执行 broker 分派；PTY 实现不变。
+- 安全语义回归验证：`cargo fmt --all -- --check`、`cargo check`、`cargo check --all-targets --no-default-features`、`cargo test`、`cargo clippy --all-targets -- -D warnings` 与 `git diff --check` 通过；覆盖嵌套替换、复合命令、进程替换、静态及动态 shell 重入、解析失败、文件描述符复制、关键路径归一化、宽松配置仍要求修改确认，以及 root 能力拒绝缺失或不匹配的审批文本。
 - 修复 tombstone 只读查询误触修改审批：脚本执行选项仅与已知 shell/解释器关联，`grep -E/-e/-c` 与 `sed -e` 的引号内 `>>>` 不再被当作文件写入；真实重定向、脚本包装、eval、管道执行及命令替换仍需按风险确认，strict 继续确认只读操作。公共接口、Android 执行路径与 PTY 行为不变。
 - 安全分类修复验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`、Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 与 `git diff --check` 通过；248 项测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。新增回归覆盖完整 tombstone 循环、诊断选项、真实重定向、嵌套脚本执行、解释器参数与 strict 确认。
 - Web 可观测性验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 与 `git diff --check` 通过；246 项 Rust 测试和 21 项前端测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。新增回归覆盖实时预算计数、思考内容隔离、协议禁止重放、分阶段计时与冻结、失败恢复、日志脱敏及共享限额。

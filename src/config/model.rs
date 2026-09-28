@@ -44,7 +44,7 @@ pub enum SecurityLevel {
     #[default]
     /// Auto-run reads and confirm state changes.
     Balanced,
-    /// Auto-run ordinary changes but retain dangerous confirmation.
+    /// Legacy permissive preference; mandatory mutation confirmation still applies.
     Unsafe,
 }
 

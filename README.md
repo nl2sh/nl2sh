@@ -30,6 +30,7 @@ Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环�
 - 审批窗口根据命令或 diff 动态调整宽高；超高内容可用滚轮或 PageUp/PageDown 浏览，操作选项始终固定可见。
 - 内置 OpenRouter、OpenAI、DeepSeek、Moonshot/Kimi、SiliconFlow 与 Ollama，支持 Chat Completions、Responses API 和自定义 OpenAI 兼容 endpoint。
 - `balanced` 默认策略自动执行只读查询、确认修改操作、二次确认危险操作。
+- Shell 命令主要由 `brush-parser` AST 与本地领域策略评估；解析失败或动态执行需强确认。已批准的命令与 root 计划绑定后才进入执行 broker，root 模式下的只读命令也需确认。结构化工具与 shell 共用确认等级策略。
 - LLM 不能决定确认、风险等级、root 提升或超时；用户编辑后的命令必须重新分类。
 - 支持当前用户、自动提升和强制 root 模式。非 root 提升使用参数化的 `su -c <command>`，不拼接 shell 字符串。
 - crossterm + ratatui 终端界面通过 RAII 和 panic hook 恢复 raw mode、alternate screen、鼠标捕获和光标；滚轮浏览历史，Shift+拖选后可使用宿主终端的右键菜单复制。

@@ -64,7 +64,7 @@ Generated `web/dist/`, `web/node_modules/`, and Cargo `target/` content are not 
 
 Interactive startup also launches an HTTP server on `0.0.0.0:9999`, or another available port if 9999 is occupied. The startup screen shows the device URL. The Web UI has no authentication and can edit credentials, so only run it on a trusted network.
 
-The Web UI supports concurrent independent Agent sessions, streaming output, approvals, structured follow-up questions, charts, configuration, device overview, safe terminal access, log export, and saved-session recovery. In-progress tasks store bounded redacted checkpoints; after a restart they are shown as interrupted diagnostics and are never automatically resumed or approved.
+The Web UI supports concurrent independent Agent sessions, streaming output, approvals, structured follow-up questions, charts, configuration, device overview, safe terminal access, log export, and saved-session recovery. In-progress tasks store bounded redacted checkpoints; after a restart they are shown as interrupted diagnostics and are never automatically resumed or approved. Shell commands are primarily assessed through a `brush-parser` AST and local domain policies; uncertain syntax or dynamic execution requires strong confirmation. Approved shell commands and their root plans are bound in an in-process execution capability, and read-only commands in root mode also require confirmation.
 
 Quick Start can configure and test DeepSeek, OpenRouter, OpenAI, Moonshot/Kimi, SiliconFlow, Ollama, or a custom service. Each new Web task loads the latest saved configuration. A running TUI session must be restarted to load configuration changed in the browser.
 

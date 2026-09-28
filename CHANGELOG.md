@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Make `brush-parser` AST effects the primary shell classifier, split shell and domain policy modules, and keep built-in regex only for the fork-bomb signature. A command-bound in-process privilege broker rechecks approval and root plans before user shell execution; unknown syntax or dynamic code requires strong confirmation.
+
 ### Fixed
 
 - Keep quoted diagnostic patterns such as `grep -E "pid:|>>> |Cmdline|signal "` read-only by binding code-execution options to known interpreters; real redirections and reparsed writes still require confirmation.

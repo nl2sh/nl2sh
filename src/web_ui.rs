@@ -9,10 +9,13 @@ use crate::{
         TextDeltaSink, ToolRound,
     },
     provider_metadata::build_metadata_client,
-    security::SecurityAssessment,
+    security::{PrivilegeBroker, SecurityAssessment},
     session_title::generate_title,
     sessions::{SessionStore, WebCheckpoint, WebCheckpointEvent, WebPresentation, WebTaskMetrics},
-    shell::{CommandExecutor, ExecutionResult, OutputSink, ShellExecutor, SystemRootProbe},
+    shell::{
+        CommandExecutor, ExecutionBroker, ExecutionResult, OutputSink, ShellExecutor,
+        SystemRootProbe,
+    },
     tools::{android::environment::inspect_environment, Capability, ToolRegistry},
 };
 use anyhow::{anyhow, bail, Context, Result};
@@ -1647,13 +1650,17 @@ async fn run_terminal_command(
         state: None,
     };
     let mut assessment = crate::security::assess(&command, &cfg);
+    let mut approved_command = None;
     while assessment.requires_confirmation {
         match confirmer.confirm(&command, &assessment).await? {
             ConfirmationDecision::Approve
             | ConfirmationDecision::ApproveCaptured
             | ConfirmationDecision::ApproveInteractive
             | ConfirmationDecision::ApproveForTask
-            | ConfirmationDecision::ApproveForRun => break,
+            | ConfirmationDecision::ApproveForRun => {
+                approved_command = Some(command.clone());
+                break;
+            }
             ConfirmationDecision::Reject => bail!("command rejected"),
             ConfirmationDecision::Edit(edited) => {
                 command = edited;
@@ -1661,13 +1668,13 @@ async fn run_terminal_command(
             }
         }
     }
+    let capability =
+        PrivilegeBroker::authorize(&command, &assessment, &cfg, approved_command.as_deref())?;
     let output = Arc::new(WebOutput {
         session: current.clone(),
     });
     let executor = CapturedExecutor(ShellExecutor::new(cfg).with_output(output));
-    let result = executor
-        .execute(&command, assessment.requires_root, false)
-        .await?;
+    let result = ExecutionBroker::execute(&executor, capability, false).await?;
     Ok(serde_json::json!({"stdout":result.stdout,"stderr":result.stderr,"exit_code":result.exit_code,"timed_out":result.timed_out,"interrupted":result.interrupted}).to_string())
 }
 

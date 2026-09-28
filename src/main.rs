@@ -9,8 +9,8 @@ use nl2sh::{
     config::{self},
     history::HistoryLog,
     llm::{build_client, ConversationMessage, LlmClient, LlmRequest, Role},
-    security::assess,
-    shell::{ConsoleOutput, OutputSink, ShellExecutor, SystemRootProbe},
+    security::{assess, PrivilegeBroker},
+    shell::{ConsoleOutput, ExecutionBroker, OutputSink, ShellExecutor, SystemRootProbe},
     tui,
 };
 #[tokio::main]
@@ -444,16 +444,25 @@ async fn run_command(
     }
     let confirmer = StdioConfirmer;
     let mut interactive_override = None;
+    let mut approved_command = None;
     while a.requires_confirmation {
         match confirmer.confirm(&command, &a).await? {
-            ConfirmationDecision::Approve => break,
-            ConfirmationDecision::ApproveForTask | ConfirmationDecision::ApproveForRun => break,
+            ConfirmationDecision::Approve => {
+                approved_command = Some(command.clone());
+                break;
+            }
+            ConfirmationDecision::ApproveForTask | ConfirmationDecision::ApproveForRun => {
+                approved_command = Some(command.clone());
+                break;
+            }
             ConfirmationDecision::ApproveInteractive => {
                 interactive_override = Some(true);
+                approved_command = Some(command.clone());
                 break;
             }
             ConfirmationDecision::ApproveCaptured => {
                 interactive_override = Some(false);
+                approved_command = Some(command.clone());
                 break;
             }
             ConfirmationDecision::Reject => {
@@ -467,10 +476,10 @@ async fn run_command(
         }
     }
     let executor = ShellExecutor::new(cfg.clone()).with_output(output);
-    let result = nl2sh::shell::CommandExecutor::execute(
+    let capability = PrivilegeBroker::authorize(&command, &a, cfg, approved_command.as_deref())?;
+    let result = ExecutionBroker::execute(
         &executor,
-        &command,
-        a.requires_root,
+        capability,
         interactive_override.unwrap_or_else(|| nl2sh::shell::is_interactive(&command, false)),
     )
     .await?;

@@ -88,9 +88,12 @@
 - [x] 四级风险、内置危险规则、自定义规则、确认与二次确认。
 - [x] 覆盖要求中的安全测试矩阵。
 - [x] 无 TTY 强制拒绝修改/危险命令，扩大包装、替换、转义测试语料。
-- [ ] 未来以完整 shell AST 取代启发式 parser。
+- [x] 引入 `ShellAstAnalyzer` 和独立 parser、expansion、effects 模块；解析失败和动态执行强确认。
+- [x] AST 成为 shell 风险主要来源，旧启发式风险 parser 移除；文件、Android、特权、网络策略分模块，内置 regex 仅保留特殊 fork bomb 签名。
+- [x] 进程内 `PrivilegeBroker` 绑定审批文本、重新评估命令与 root 计划，再通过 `ExecutionBroker` 分派所有用户 shell 入口。
+- [ ] 扩展 AST 对参数、算术及特殊 shell 结构的精细效果识别，增加 fuzz/对照语料，并评估独立特权进程是否必要。
 
-风险：启发式 parser 不可能覆盖全部 shell 语法。
+风险：AST 不能证明运行时变量、脚本文件或 Android shell 扩展的实际效果；不确定结构保守升险。进程内 broker 不提供操作系统级权限隔离。
 
 ## Phase 7 PTY 执行器 — 完成
 

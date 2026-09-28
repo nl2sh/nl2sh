@@ -1,7 +1,96 @@
 use nl2sh::{
-    config::{Config, ExecuteUserMode, SecurityLevel},
-    security::{assess, RiskLevel},
+    config::{Config, ConfirmPolicy, ExecuteUserMode, SecurityLevel},
+    security::{assess, PrivilegeBroker, RiskLevel},
 };
+
+#[test]
+fn ast_effects_cover_nested_commands_and_uncertain_execution() {
+    let cfg = Config::default();
+    for command in [
+        "if true; then touch /data/local/tmp/a; fi",
+        "cat <(touch /data/local/tmp/a)",
+        "echo \"$(touch /data/local/tmp/a)\"",
+        "sh -c 'touch /data/local/tmp/a'",
+    ] {
+        let assessment = assess(command, &cfg);
+        assert!(assessment.risk_level >= RiskLevel::Mutating, "{command}");
+        assert!(assessment.requires_confirmation, "{command}");
+    }
+    for command in ["eval \"$CMD\"", "sh -c \"$CMD\"", "\"$CMD\"", "echo $("] {
+        let assessment = assess(command, &cfg);
+        assert!(assessment.risk_level >= RiskLevel::Dangerous, "{command}");
+        assert!(assessment.requires_double_confirmation, "{command}");
+    }
+}
+
+#[test]
+fn permissive_preferences_cannot_skip_mutation_confirmation() {
+    let cfg = Config {
+        security_level: SecurityLevel::Unsafe,
+        execute_confirm_policy: ConfirmPolicy::Never,
+        ..Config::default()
+    };
+    let assessment = assess("touch /data/local/tmp/a", &cfg);
+    assert_eq!(assessment.risk_level, RiskLevel::Mutating);
+    assert!(assessment.requires_confirmation);
+}
+
+#[test]
+fn privileged_capability_binds_approval_to_exact_command() {
+    let cfg = Config {
+        execute_user_mode: ExecuteUserMode::Root,
+        ..Config::default()
+    };
+    let assessment = assess("id", &cfg);
+    assert!(assessment.requires_root);
+    assert!(assessment.requires_confirmation);
+    assert!(PrivilegeBroker::authorize("id", &assessment, &cfg, None).is_err());
+    assert!(PrivilegeBroker::authorize("id", &assessment, &cfg, Some("getprop")).is_err());
+    let capability = PrivilegeBroker::authorize("id", &assessment, &cfg, Some("id"));
+    assert!(capability
+        .as_ref()
+        .is_ok_and(|grant| grant.requires_root() && grant.command() == "id"));
+    let normal = Config {
+        execute_user_mode: ExecuteUserMode::Normal,
+        ..Config::default()
+    };
+    let explicit_su = assess("su -c id", &normal);
+    assert!(
+        PrivilegeBroker::authorize("su -c id", &explicit_su, &normal, Some("su -c id")).is_err()
+    );
+}
+
+#[test]
+fn ast_policy_recognizes_effects_without_matching_quoted_data() {
+    let cfg = Config::default();
+    assert_eq!(
+        assess("echo 'rm -rf /'", &cfg).risk_level,
+        RiskLevel::ReadOnly
+    );
+    for command in [
+        "r\\m -rf /",
+        "rm -r -f /data",
+        "rm -rf /data/../",
+        "dd if=/dev/zero of=/dev/block/x",
+        "echo x > /dev/block/x",
+    ] {
+        assert_eq!(
+            assess(command, &cfg).risk_level,
+            RiskLevel::Critical,
+            "{command}"
+        );
+    }
+    for command in [
+        "settings put system screen_brightness 1",
+        "pm install app.apk",
+        "sed -i s/a/b/ file",
+    ] {
+        assert!(
+            assess(command, &cfg).risk_level >= RiskLevel::Mutating,
+            "{command}"
+        );
+    }
+}
 
 #[test]
 fn required_security_matrix() {

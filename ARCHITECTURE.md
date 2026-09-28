@@ -96,8 +96,8 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `a2a_gateway` | 主机侧 A2A Agent Card、JSON-RPC、鉴权、Task Store、adb 传输、stdio MCP 适配及显式构建部署 | MCP → A2A 消息 → Android bridge 结果 | 不在设备运行；不直接执行模型输出；部署仅到独立候选路径 |
 | `src/tools` | `Tool`、显式 `ToolRegistry`、风险/能力元数据、派生 schema 与 `PreparedToolCall` | 模型调用 → 预备动作 → 审批后有界结果 | 只用本地元数据定风险；修改预览必须在统一确认入口批准后执行 |
 | `crates/nl2sh-tool-macros` | 编译期 `#[tool]` 生成适配器与元数据 | 注解函数 → Rust Tool 实现 | 只在构建主机运行；不自动注册或授予执行权限 |
-| `src/security` | normalize、side-effect 分类、内置/自定义规则、`SecurityAssessment` | 原始命令 → 风险和确认要求 | 不依赖 TUI、LLM 或执行器 |
-| `src/shell` | `CommandExecutor`、root invocation、process group、pipeline/PTY 边界 | 已批准命令 → `ExecutionResult` | 不自行降低风险或批准命令 |
+| `src/security` | `shell/{parser,analyzer,expansion,effects}`、`policy/{filesystem,android,privilege,network}`、特殊 regex/自定义规则、`SecurityAssessment` | 原始命令或结构化工具风险 → 风险和确认要求、命令绑定能力 | 不依赖 TUI、LLM 或执行器 |
+| `src/shell` | `ExecutionBroker`、`CommandExecutor`、root invocation、process group、pipeline/PTY 边界 | 已批准命令能力 → `ExecutionResult` | 不自行降低风险或批准命令 |
 | `src/tui` | terminal guard、session 状态机、独立 output/history 生命周期、事件、输入、`@` 文件候选、中英文文案、ratatui 渲染 | key/mouse event → 用户输入 | 不解析 OpenAI JSON，不直接执行；启动帮助不进入模型上下文 |
 | `src/file_references` | 识别用户输入中 `@` 后最长的已存在路径前缀并解析为绝对路径 | 原始用户文本 → 保留原文并附加有界路径提示 | 不读取文件内容、不执行命令；内容仍由结构化文件工具按上限读取 |
 | `src/ima` | 腾讯 ima 知识库只读发现、搜索与原文读取 | 独立 Client ID/API Key → 有界知识库结果 | 强制直连且不使用代理；不提供任何写接口，不泄露长期凭据、临时 header 或签名 URL |
@@ -169,34 +169,36 @@ ima 是这一通用 Provider 代理策略的显式例外：按产品边界使用
 ## 安全架构
 
 ```text
-Raw Command
-  ↓
-Normalize whitespace / escapes
-  ↓
-Token and compound-operator heuristics
-  ↓
-Classify side effects
-  ↓
-Regex built-ins + custom rules
-  ↓
-SecurityAssessment
-  ↓
-Confirmation policy
+LLM → Typed Tool → local Tool Policy ─────────────────────────────┐
+  └→ Shell Tool → brush-parser → Shell AST → Semantic Effects ───┤
+                   └→ special-danger/custom regex policy ────────┤
+                                                                  ↓
+                                                        Unified risk policy
+                                                                  ↓
+                                                       SecurityAssessment
+                                                                  ↓
+                                                       Confirmation Policy
+                                                                  ↓
+                                                       Execution Broker
+                                                                  ↓
+                                                        normal/root Android
 ```
 
-检测不是完整 POSIX parser，但检查重定向、管道上下文、命令替换、`sh -c`/`su -c` 包装和典型副作用选项。内置规则始终存在，自定义规则只会提高最高风险。未来应使用专门 shell AST parser 替换启发式层，并以回归语料保证不能降低既有风险。
+`ShellAstAnalyzer` 使用 `brush-parser` 解析命令列表、管道、复合命令、重定向、替换及静态 `sh -c`/`su -c`，递归收集效果；文件、Android、特权和网络策略按命令与参数分类。解析失败、动态命令名、动态 shell 代码、未知脚本内容或未覆盖的复杂结构提升至 Dangerous。旧启发式风险 parser 已移除；内置 regex 仅保留跨命令的 fork bomb 特殊签名，配置中的自定义 regex 仍可提高风险。结构化工具由本地元数据与预备动作确定风险下限。两条路径共用 `SecurityAssessment::from_policy` 转换确认要求；root 执行计划也要求确认。
 
-重定向扫描通常尊重引号；只有已知 shell/脚本解释器的代码执行选项、eval、system 调用或管道执行等再次解释参数的上下文才保守扫描引号内的 `>`。普通诊断命令的 `grep -E/-e/-c`、`sed -e` 等选项本身不触发该扫描，实际文件重定向与命令替换中的写入继续进入确认链。
+Shell 审批后，`PrivilegeBroker` 重新评估完整命令并核对批准记录的精确文本，签发只包含该命令和 root 计划的 `ApprovedShellCommand`；普通用户模式还拒绝 AST 识别出的显式 `su`。Agent、TUI 本地命令、Web 安全终端与单次 CLI 均通过 `ExecutionBroker` 将它送到既有执行器。它是进程内能力边界，不是独立特权进程；固定内部探测继续使用原执行接口。AST 分析不执行命令，也不能证明运行时变量、外部脚本和解释器代码的实际效果。
+
+AST 以重定向节点判断真实写入，文字参数中的 `>` 不作为重定向。代码解释器、eval、管道进入 shell 等再次解释输入的场景保守升险；`grep -E/-e/-c` 和 `sed -e` 的普通诊断参数不会单凭 `>` 升险。
 
 ## 扩展
 
 - 新 Provider：实现 `LlmClient` 和协议 adapter。
 - 新 Tool：增加内部参数类型和 tool policy，所有有副作用 tool 必须进入 security/confirmation。
-- 新安全规则：配置 regex 或在 builtins 增加规范化规则和测试。
+- 新安全规则：优先在对应领域策略增加 AST 语义与测试；仅跨命令特殊危险签名使用内置 regex，配置仍可增加自定义 regex。
 - 新执行环境：实现 `CommandExecutor`，保持结果和取消语义。
 - 新配置来源：在 loader 合并并记录优先级，再统一 validate。
 - 新 UI：仅依赖 Agent/trait API，不访问 provider JSON。
-- 新 shell parser：输出规范化 command segments，保持 `SecurityAssessment` API。
+- 新 shell 语义：扩展 AST 遍历与回归语料，保持 `assess` 和 `SecurityAssessment` 公共接口。
 
 ## 更新与设置
 

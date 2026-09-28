@@ -232,17 +232,16 @@ impl ToolMetadata {
             ToolRisk::Dangerous => RiskLevel::Dangerous,
             ToolRisk::Critical => RiskLevel::Critical,
         };
-        Some(SecurityAssessment {
+        Some(SecurityAssessment::from_policy(
             risk_level,
-            matched_rules: vec![MatchedRule {
+            vec![MatchedRule {
                 id: format!("structured-{}", self.name),
                 message: self.description.into(),
             }],
-            requires_confirmation: risk_level >= RiskLevel::Mutating,
-            requires_double_confirmation: risk_level >= RiskLevel::Dangerous,
-            requires_root: false,
-            explanation: self.description.into(),
-        })
+            false,
+            self.description.into(),
+            false,
+        ))
     }
 }
 

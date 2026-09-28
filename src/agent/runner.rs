@@ -11,8 +11,8 @@ use crate::{
         ToolResult, ToolRound, Usage,
     },
     runtime::{android_runtime, AndroidRuntime},
-    security::assess,
-    shell::CommandExecutor,
+    security::{assess, PrivilegeBroker},
+    shell::{CommandExecutor, ExecutionBroker},
     tools::{
         audio::domain::{AnalyzeAudioArgs, AudioToolExecutor, RawSampleFormat},
         file::domain::FileToolExecutor,
@@ -360,39 +360,39 @@ impl AgentRunner<'_> {
                 };
                 let mut command = args.command;
                 let mut interactive_override = None;
-                let assessment = loop {
+                let (assessment, approved_command) = loop {
                     let assessment = assess(&command, self.config);
                     if !assessment.requires_confirmation {
-                        break assessment;
+                        break (assessment, None);
                     }
                     if super::can_remember_approval(&assessment)
                         && task_approvals.contains(&command)
                     {
-                        break assessment;
+                        break (assessment, Some(command.clone()));
                     }
                     let confirmation_started = Instant::now();
                     let decision = self.confirmer.confirm(&command, &assessment).await?;
                     runtime.add_confirmation_time(confirmation_started.elapsed());
                     match decision {
-                        ConfirmationDecision::Approve => break assessment,
+                        ConfirmationDecision::Approve => break (assessment, Some(command.clone())),
                         ConfirmationDecision::ApproveForTask => {
                             if super::can_remember_approval(&assessment) {
                                 task_approvals.insert(command.clone());
                             }
-                            break assessment;
+                            break (assessment, Some(command.clone()));
                         }
                         ConfirmationDecision::ApproveForRun => {
                             if super::can_remember_approval(&assessment) {
-                                break assessment;
+                                break (assessment, Some(command.clone()));
                             }
                         }
                         ConfirmationDecision::ApproveInteractive => {
                             interactive_override = Some(true);
-                            break assessment;
+                            break (assessment, Some(command.clone()));
                         }
                         ConfirmationDecision::ApproveCaptured => {
                             interactive_override = Some(false);
-                            break assessment;
+                            break (assessment, Some(command.clone()));
                         }
                         ConfirmationDecision::Edit(edited) => {
                             command = edited;
@@ -449,16 +449,20 @@ impl AgentRunner<'_> {
                 if let Some(sink) = text_sink {
                     sink.agent_activity("tool", Some(&call.name));
                 }
-                let execution = self
-                    .executor
-                    .execute(
-                        &command,
-                        assessment.requires_root,
-                        interactive_override.unwrap_or_else(|| {
-                            crate::shell::is_interactive(&command, args.interactive)
-                        }),
-                    )
-                    .await;
+                let capability = PrivilegeBroker::authorize(
+                    &command,
+                    &assessment,
+                    self.config,
+                    approved_command.as_deref(),
+                )?;
+                let execution = ExecutionBroker::execute(
+                    self.executor,
+                    capability,
+                    interactive_override.unwrap_or_else(|| {
+                        crate::shell::is_interactive(&command, args.interactive)
+                    }),
+                )
+                .await;
                 if let Ok(execution_result) = &execution {
                     let fingerprint = action_fingerprint(&command, execution_result);
                     let repeats = action_history

@@ -39,3 +39,26 @@ pub struct SecurityAssessment {
     /// Concise classification summary.
     pub explanation: String,
 }
+
+impl SecurityAssessment {
+    /// Applies the common risk floor and confirmation policy to a prepared action.
+    pub fn from_policy(
+        risk_level: RiskLevel,
+        matched_rules: Vec<MatchedRule>,
+        requires_root: bool,
+        explanation: String,
+        confirm_read_only: bool,
+    ) -> Self {
+        let requires_double_confirmation = risk_level >= RiskLevel::Dangerous;
+        let requires_confirmation =
+            risk_level >= RiskLevel::Mutating || requires_root || confirm_read_only;
+        Self {
+            risk_level,
+            matched_rules,
+            requires_confirmation,
+            requires_double_confirmation,
+            requires_root,
+            explanation,
+        }
+    }
+}

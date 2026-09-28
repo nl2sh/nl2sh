@@ -19,10 +19,13 @@ use crate::{
     llm::{ConversationItem, LlmClient, Role, TextDeltaSink},
     provider_account::{build_account_client, AccountBalance},
     provider_metadata::{build_metadata_client, ModelMetadata},
-    security::{assess, RiskLevel, SecurityAssessment},
+    security::{assess, PrivilegeBroker, RiskLevel, SecurityAssessment},
     session_title::generate_title,
     sessions::{SessionInfo, SessionStore},
-    shell::{is_interactive, CommandExecutor, ExecutionResult, OutputSink, ShellExecutor},
+    shell::{
+        is_interactive, CommandExecutor, ExecutionBroker, ExecutionResult, OutputSink,
+        ShellExecutor,
+    },
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -1602,17 +1605,23 @@ async fn execute_direct_command(
 ) -> Result<DirectCommandOutcome> {
     let mut assessment = assess(&command, config);
     let mut interactive_override = None;
+    let mut approved_command = None;
     while assessment.requires_confirmation {
         match confirmer.confirm(&command, &assessment).await? {
             ConfirmationDecision::Approve
             | ConfirmationDecision::ApproveForTask
-            | ConfirmationDecision::ApproveForRun => break,
+            | ConfirmationDecision::ApproveForRun => {
+                approved_command = Some(command.clone());
+                break;
+            }
             ConfirmationDecision::ApproveInteractive => {
                 interactive_override = Some(true);
+                approved_command = Some(command.clone());
                 break;
             }
             ConfirmationDecision::ApproveCaptured => {
                 interactive_override = Some(false);
+                approved_command = Some(command.clone());
                 break;
             }
             ConfirmationDecision::Reject => {
@@ -1625,9 +1634,9 @@ async fn execute_direct_command(
         }
     }
     let interactive = interactive_override.unwrap_or_else(|| is_interactive(&command, false));
-    let result = executor
-        .execute(&command, assessment.requires_root, interactive)
-        .await?;
+    let capability =
+        PrivilegeBroker::authorize(&command, &assessment, config, approved_command.as_deref())?;
+    let result = ExecutionBroker::execute(executor, capability, interactive).await?;
     Ok(DirectCommandOutcome {
         command,
         assessment,

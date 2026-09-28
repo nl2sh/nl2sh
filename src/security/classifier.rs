@@ -1,15 +1,16 @@
-use super::{detector, rules, MatchedRule, RiskLevel, SecurityAssessment};
+use super::{
+    legacy::{detector, rules},
+    shell::ShellAstAnalyzer,
+    MatchedRule, RiskLevel, SecurityAssessment,
+};
 use crate::config::{Config, ConfirmPolicy, ExecuteUserMode, SecurityLevel};
 use regex::Regex;
 
 /// Classifies a raw command and applies configured confirmation policy.
 pub fn assess(command: &str, config: &Config) -> SecurityAssessment {
     let normalized = detector::normalize(command);
-    let mut risk = if detector::has_mutation(&normalized) {
-        RiskLevel::Mutating
-    } else {
-        RiskLevel::ReadOnly
-    };
+    let effects = ShellAstAnalyzer::analyze(command);
+    let mut risk = effects.risk;
     let mut matches = Vec::new();
     for (id, compiled, level, msg) in rules::builtins() {
         match compiled {
@@ -47,28 +48,19 @@ pub fn assess(command: &str, config: &Config) -> SecurityAssessment {
             Ok(_) => {}
         }
     }
-    let double = risk >= RiskLevel::Dangerous;
-    let confirm = double
-        || match config.security_level {
-            SecurityLevel::Strict => true,
-            SecurityLevel::Balanced => risk >= RiskLevel::Mutating,
-            SecurityLevel::Unsafe => false,
-        }
-        || matches!(config.execute_confirm_policy, ConfirmPolicy::Always)
-        || (risk >= RiskLevel::Mutating
-            && !matches!(config.execute_confirm_policy, ConfirmPolicy::Never));
-    SecurityAssessment {
-        risk_level: risk,
-        matched_rules: matches,
-        requires_confirmation: confirm,
-        requires_double_confirmation: double,
-        requires_root: match config.execute_user_mode {
+    matches.extend(effects.rules);
+    SecurityAssessment::from_policy(
+        risk,
+        matches,
+        match config.execute_user_mode {
             ExecuteUserMode::Root => true,
             ExecuteUserMode::Normal => false,
-            ExecuteUserMode::Auto => detector::requires_root(&normalized),
+            ExecuteUserMode::Auto => effects.requires_root,
         },
-        explanation: format!("classified as {risk:?}"),
-    }
+        format!("classified as {risk:?}"),
+        matches!(config.security_level, SecurityLevel::Strict)
+            || matches!(config.execute_confirm_policy, ConfirmPolicy::Always),
+    )
 }
 fn parse_risk(s: &str) -> RiskLevel {
     match s.to_ascii_lowercase().as_str() {
