@@ -4,6 +4,8 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- 修复 Web 连续审批按钮被上一条请求锁定：后端为每个审批与补充信息请求生成独立展示 ID，前端据此重建弹窗；即使下一条请求紧接上一条且命令文本相同，也不会继承已提交请求的 `busy` 禁用状态。该 ID 不参与安全分类、确认决定、Root 或执行。
+- Web 连续审批修复验证：`npm test --prefix web`、`npm run build --prefix web`、`cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 通过；175 项库测试及全部集成/TUI 测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。新增回归确认连续相同审批获得不同前端组件身份。
 - Shell 安全分类重组为 `shell/{parser,analyzer,expansion,effects}`、`policy/{filesystem,android,privilege,network}` 和 `legacy`；AST 成为主要风险来源，旧启发式风险 parser 删除，内置 regex 缩至 fork bomb 特殊签名，自定义 regex 继续只能升险。审批后的用户 shell 命令由进程内能力 broker 重新评估并绑定精确命令与 root 计划，所有用户 shell 入口经执行 broker 分派；PTY 实现不变。
 - 安全语义回归验证：`cargo fmt --all -- --check`、`cargo check`、`cargo check --all-targets --no-default-features`、`cargo test`、`cargo clippy --all-targets -- -D warnings` 与 `git diff --check` 通过；覆盖嵌套替换、复合命令、进程替换、静态及动态 shell 重入、解析失败、文件描述符复制、关键路径归一化、宽松配置仍要求修改确认，以及 root 能力拒绝缺失或不匹配的审批文本。
 - 修复 tombstone 只读查询误触修改审批：脚本执行选项仅与已知 shell/解释器关联，`grep -E/-e/-c` 与 `sed -e` 的引号内 `>>>` 不再被当作文件写入；真实重定向、脚本包装、eval、管道执行及命令替换仍需按风险确认，strict 继续确认只读操作。公共接口、Android 执行路径与 PTY 行为不变。

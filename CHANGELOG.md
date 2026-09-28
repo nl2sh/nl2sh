@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- Give every Web approval or question request a distinct presentation identity so immediately consecutive prompts cannot inherit the previous dialog's submitted/disabled state.
 - Keep quoted diagnostic patterns such as `grep -E "pid:|>>> |Cmdline|signal "` read-only by binding code-execution options to known interpreters; real redirections and reparsed writes still require confirmation.
 - Update Web turn, model-step and tool-call counts during execution and restore task statistics after failures, cancellation and restart.
 - Display provider-supplied reasoning separately, preserve intermediate tool-step commentary, and prevent protocol replay after reasoning is emitted.

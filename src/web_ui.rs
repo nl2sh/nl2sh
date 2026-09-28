@@ -61,6 +61,7 @@ const LIVE_TOOL_CALL_PREFIX: &str = "\u{1e}TOOL_CALL:";
 const LIVE_TOOL_PENDING_PREFIX: &str = "\u{1e}TOOL_PENDING:";
 static WELCOME_URL: OnceLock<String> = OnceLock::new();
 static SESSION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static PENDING_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 /// Makes the running browser address available to startup welcome text.
 pub fn set_welcome_url(url: String) {
@@ -403,6 +404,7 @@ async fn persist_web_session(state: &Shared, current: &WebSession) -> Result<()>
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum Pending {
     Approval {
+        request_id: u64,
         command: String,
         risk: String,
         explanation: String,
@@ -410,6 +412,7 @@ enum Pending {
         strong: bool,
     },
     Questions {
+        request_id: u64,
         questions: Vec<WebQuestion>,
     },
 }
@@ -2322,6 +2325,7 @@ impl Confirmer for WebConfirmer {
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
         let pending = Pending::Approval {
+            request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
             command: command.to_owned(),
             risk: format!("{:?}", assessment.risk_level),
             explanation: approval_explanation(assessment),
@@ -2351,7 +2355,13 @@ impl Confirmer for WebConfirmer {
                     .collect(),
             })
             .collect();
-        match self.wait(Pending::Questions { questions }).await? {
+        match self
+            .wait(Pending::Questions {
+                request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+                questions,
+            })
+            .await?
+        {
             Reply::Questions(answers) => Ok(answers),
             Reply::Approval(_) => Err(anyhow!("unexpected approval reply")),
         }
@@ -2669,6 +2679,7 @@ mod tests {
                 .map_err(|_| anyhow!("web lock poisoned"))?;
             inner.busy = true;
             inner.pending = Some(Pending::Approval {
+                request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
                 command: "touch /tmp/x".into(),
                 risk: "Mutating".into(),
                 explanation: "test".into(),
@@ -2705,6 +2716,30 @@ mod tests {
         let assessment = crate::security::assess("rm -rf /", &Config::default());
         assert_eq!(assessment.risk_level, crate::security::RiskLevel::Critical);
         assert_eq!(approval_explanation(&assessment), "检测到递归删除关键目录");
+    }
+
+    #[test]
+    fn consecutive_pending_requests_have_distinct_frontend_identities() -> Result<()> {
+        let first = Pending::Approval {
+            request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+            command: "same command".into(),
+            risk: "Mutating".into(),
+            explanation: "test".into(),
+            root: false,
+            strong: false,
+        };
+        let second = Pending::Approval {
+            request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+            command: "same command".into(),
+            risk: "Mutating".into(),
+            explanation: "test".into(),
+            root: false,
+            strong: false,
+        };
+        let first = serde_json::to_value(first)?;
+        let second = serde_json::to_value(second)?;
+        assert_ne!(first["request_id"], second["request_id"]);
+        Ok(())
     }
 
     fn state(path: PathBuf) -> Arc<Shared> {
