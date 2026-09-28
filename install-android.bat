@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
 
+set "SCRIPT_DIR=%~dp0"
 set "PROVIDER=openrouter"
 set "MODEL="
 set "API_KEY="
@@ -70,26 +71,27 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set "PS_INSTALLER=%~dp0install-android.ps1"
+set "PS_INSTALLER=%SCRIPT_DIR%install-android.ps1"
 set "REMOVE_PS_INSTALLER=false"
 set "PS_INSTALLER_URL=https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.ps1"
 if /i "%REPOSITORY%"=="https://gitee.com/nl2sh/nl2sh" set "PS_INSTALLER_URL=https://gitee.com/nl2sh/nl2sh/raw/master/install-android.ps1"
-if not exist "%PS_INSTALLER%" (
-  where curl.exe >nul 2>&1
-  if errorlevel 1 (
-    echo ERROR: curl.exe was not found in PATH. 1>&2
-    exit /b 1
-  )
-  set "PS_INSTALLER=%TEMP%\nl2sh-install-%RANDOM%-%RANDOM%.ps1"
-  set "REMOVE_PS_INSTALLER=true"
-  echo Downloading the Windows installer...
-  curl.exe -fL --retry 3 --proto "=https" --tlsv1.2 -o "%PS_INSTALLER%" "%PS_INSTALLER_URL%"
-  if errorlevel 1 (
-    echo ERROR: failed to download install-android.ps1. 1>&2
-    exit /b 1
-  )
+if exist "%PS_INSTALLER%" goto :installer_ready
+
+where curl.exe >nul 2>&1
+if errorlevel 1 (
+  echo ERROR: curl.exe was not found in PATH. 1>&2
+  exit /b 1
+)
+set "PS_INSTALLER=%TEMP%\nl2sh-install-%RANDOM%-%RANDOM%.ps1"
+set "REMOVE_PS_INSTALLER=true"
+echo Downloading the Windows installer...
+curl.exe -fL --retry 3 --proto "=https" --tlsv1.2 -o "%PS_INSTALLER%" "%PS_INSTALLER_URL%"
+if errorlevel 1 (
+  echo ERROR: failed to download install-android.ps1. 1>&2
+  exit /b 1
 )
 
+:installer_ready
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PS_INSTALLER%" -Provider "%PROVIDER%" -Model "%MODEL%" -ApiKey "%API_KEY%" -Endpoint "%ENDPOINT%" -InstallDir "%INSTALL_DIR%" -Repository "%REPOSITORY%"
 set "INSTALL_EXIT=%ERRORLEVEL%"
 if /i "%REMOVE_PS_INSTALLER%"=="true" del /q "%PS_INSTALLER%" >nul 2>&1
