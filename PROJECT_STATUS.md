@@ -4,6 +4,11 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- 仓库配置包含 HTTPS Gitee 远端 `https://gitee.com/nl2sh/nl2sh.git`。Linux、PowerShell 和 CMD 一键安装文档新增显式 Gitee 入口：脚本与 Release 资产均从 Gitee 获取，通过公开 Release API 解析最新 tag，并继续使用 `SHA256SUMS` 校验 ZIP；来源由用户显式选择，不在 GitHub 失败后自动切换。Gitee 预编译安装要求镜像同步对应 Release 资产。
+- Gitee 安装路径验证：公开 Gitee Release API 的最新 tag 解析回归、`bash -n install-android.sh android-run-linux.sh pack-release.sh`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 和 `git diff --check` 通过；239 项测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。
+- 新增 Windows CMD 一键安装入口 `install-android.bat`：支持与 Linux 安装器一致的长参数，可从 CMD 下载后直接运行；批处理入口保留交互控制台，并复用 PowerShell 安装核心进行 HTTPS 下载、Release SHA-256 校验、解压、配置生成和 ADB TUI 启动。Linux、PowerShell 和 GitHub Actions 打包路径均已包含该入口，不改变 Android 安全确认或 PTY 执行边界。
+- Linux Android 一键安装在 `curl | bash` 读取完成后将启动器 stdin 重新连接到主机 controlling terminal，避免 ADB 因管道 stdin 拒绝远端 PTY；无 controlling terminal 时保留安装结果并给出交互式重启提示。该主机侧修复不改变设备安全确认、root 或 PTY 过滤逻辑。
+- Linux 管道安装修复验证：`bash -n install-android.sh android-run-linux.sh pack-release.sh`、伪终端中的管道 stdin 重连接回归、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 和 `git diff --check` 通过；239 项测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。
 - `v1.0.4` 已正式发布：GitHub Actions 的 helper、双 ABI Android、Termux 包、统一安装包、签名 APT 仓库和 Release job 全部通过；正式 Release 包含可复现的 `jadx-helper.jar`、摘要与元数据。使用正式 ARMv7 二进制且不设置 helper URL/路径时，API 28 设备在强确认后从默认 Release URL 下载、校验、缓存并成功反编译目标类。
 - `v1.0.4` 发布门禁：JADX helper 通过 Gradle Wrapper 8.9 在 Windows 与 Linux/JDK 17 构建为相同的可复现 JAR，固定 SHA-256 为 `b733944a9588abbafee1d9b9d77cb78c02bb95f056301f115c0fcb77307c7328`，并在 API 28 ARMv7 设备通过单类反编译。默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、239 项执行测试、Release workflow 的 actionlint、相关 Bash/PowerShell 语法、Android API 26 AArch64 与 ARMv7 release 构建均通过；1 项需外部 ima 凭据的 smoke 按设计忽略。
 - Android JADX helper 增加固定并校验发行包 SHA-256 的 Gradle Wrapper 8.9，以及 Windows PowerShell 构建入口 `jadx-helper/build-helper.ps1`；Windows 与 Bash 脚本均通过仓库 Wrapper 执行 release 构建，并把 APK 运行时条目重新封装为无时间戳、固定顺序和固定压缩方式的可复现 JAR。Windows 与 Linux 构建摘要一致，脚本校验单个 `classes.dex` 和 `com.nl2sh.jadx.Main` 入口并生成 SHA-256 与版本元数据，无需系统安装 Gradle；不改变安全确认或 PTY 路径。

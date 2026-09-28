@@ -148,6 +148,8 @@ curl -fsSL https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.
   | bash -s -- --provider deepseek --model deepseek-flash
 ```
 
+Linux 安装脚本在下载内容读取完成后会自动把启动阶段的标准输入重新连接到当前终端，因此上述管道形式仍可为 ADB 分配远端 PTY 并直接进入 TUI。如果当前环境没有 controlling terminal（例如非交互 CI），安装会保留已生成的目录并提示稍后从交互终端运行 `android-run-linux.sh`。
+
 Windows PowerShell：
 
 ```powershell
@@ -155,6 +157,34 @@ $env:NL2SH_API_KEY = "你的密钥"
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.ps1))) `
   -Provider deepseek -Model deepseek-flash
 ```
+
+Windows CMD（使用 Windows 自带的 `curl.exe` 下载批处理入口，再由它完成安装并启动）：
+
+```bat
+set "NL2SH_API_KEY=你的密钥"
+curl.exe -fsSL https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.bat -o "%TEMP%\install-nl2sh.bat" && call "%TEMP%\install-nl2sh.bat" --provider deepseek --model deepseek-flash
+```
+
+GitHub 访问受限时，可以显式从 [Gitee 镜像](https://gitee.com/nl2sh/nl2sh) 下载脚本和 Release 资产；该路径不是 GitHub 失败后的隐式切换：
+
+```bash
+export NL2SH_API_KEY='你的密钥'
+curl -fsSL https://gitee.com/nl2sh/nl2sh/raw/master/install-android.sh \
+  | bash -s -- --repository https://gitee.com/nl2sh/nl2sh --provider deepseek --model deepseek-flash
+```
+
+```powershell
+$env:NL2SH_API_KEY = "你的密钥"
+& ([scriptblock]::Create((irm https://gitee.com/nl2sh/nl2sh/raw/master/install-android.ps1))) `
+  -Repository https://gitee.com/nl2sh/nl2sh -Provider deepseek -Model deepseek-flash
+```
+
+```bat
+set "NL2SH_API_KEY=你的密钥"
+curl.exe -fsSL https://gitee.com/nl2sh/nl2sh/raw/master/install-android.bat -o "%TEMP%\install-nl2sh.bat" && call "%TEMP%\install-nl2sh.bat" --repository https://gitee.com/nl2sh/nl2sh --provider deepseek --model deepseek-flash
+```
+
+Gitee 安装器通过公开 Release API 解析最新 tag，下载同一 Release 中的 `nl2sh-android.zip` 和 `SHA256SUMS` 并完成相同的摘要校验。Gitee 镜像必须先同步对应 Release 资产；只同步源码无法完成预编译安装。
 
 支持 `openrouter`、`openai`、`deepseek`、`moonshot`/`kimi`、`siliconflow`、`ollama` 与 `custom`；自定义服务还需传 `--endpoint` / `-Endpoint`。API Key 也可作为 `--api-key` / `-ApiKey` 参数提供，但可能保留在命令历史中。
 

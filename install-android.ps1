@@ -37,8 +37,22 @@ New-Item -ItemType Directory -Path $TempDir | Out-Null
 try {
     $Archive = Join-Path $TempDir "nl2sh-android.zip"
     $Sums = Join-Path $TempDir "SHA256SUMS"
-    $DownloadBase = "$Repository/releases/latest/download"
-    Write-Host "Downloading the latest nl2sh Android release..."
+    $RepositoryUri = [Uri]$Repository
+    if ($RepositoryUri.Host -eq "gitee.com") {
+        $RepositoryPath = $RepositoryUri.AbsolutePath.Trim('/')
+        try {
+            $Release = Invoke-RestMethod -UseBasicParsing -Uri "https://gitee.com/api/v5/repos/$RepositoryPath/releases/latest"
+        } catch {
+            throw "failed to query the latest Gitee release; ensure the mirror has synchronized release assets: $($_.Exception.Message)"
+        }
+        if ([string]::IsNullOrWhiteSpace($Release.tag_name) -or $Release.tag_name -notmatch '^[A-Za-z0-9._-]+$') {
+            throw "the latest Gitee release returned an invalid or missing tag"
+        }
+        $DownloadBase = "$Repository/releases/download/$($Release.tag_name)"
+    } else {
+        $DownloadBase = "$Repository/releases/latest/download"
+    }
+    Write-Host "Downloading the latest nl2sh Android release from $Repository..."
     Invoke-WebRequest -UseBasicParsing -Uri "$DownloadBase/nl2sh-android.zip" -OutFile $Archive
     Invoke-WebRequest -UseBasicParsing -Uri "$DownloadBase/SHA256SUMS" -OutFile $Sums
     $ChecksumLine = Get-Content -LiteralPath $Sums | Where-Object { $_ -match '^[0-9a-fA-F]{64}\s+\*?nl2sh-android\.zip$' } | Select-Object -First 1

@@ -24,7 +24,7 @@
 ## Android 预编译部署优化 — 已实现
 
 - [x] Linux 与 Windows 启动器以主机和设备端实际 SHA-256 判断是否需要推送，推送后再次校验。
-- [x] 提供 Linux Bash 与 Windows PowerShell Bootstrap，校验最新 Release ZIP 后解压、生成最小 Provider 配置并启动。
+- [x] 提供 Linux Bash、Windows PowerShell 与 CMD Bootstrap，可显式从 GitHub 或 Gitee Release 下载并校验 ZIP，生成最小 Provider 配置后启动；Linux 管道安装在启动 TUI 前恢复 controlling terminal 输入。
 - [x] 配置只通过显式 `NL2SH_CONFIG_SOURCE` 部署，设备端保持 `0600`，普通启动不覆盖已有配置。
 
 ## Phase 0 项目初始化与工程基线 — 完成

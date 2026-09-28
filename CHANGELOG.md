@@ -5,10 +5,16 @@
 ### Added
 
 - Add bounded APK archive inspection, entry listing, and DEX class indexing tools. Single-class JADX decompilation requires strong confirmation and an Android DEX helper run with `app_process`; a local helper build project and hash-pinned on-demand download path are included.
+- Add a Windows CMD bootstrap that accepts the same long options as the Linux installer, downloads the PowerShell installation core when needed, and preserves the interactive console for ADB and the TUI.
+- Add explicit Gitee bootstrap commands for Linux, PowerShell, and CMD. Installers resolve the selected mirror's latest release and retain the same ZIP checksum verification without silently changing sources after a failure.
 
 ### Changed
 
 - Make the Android JADX helper compatible with API 28 ARMv7 by pinning the Android-compatible JADX 1.5.1 line, restricting work to the requested class, and supplying a private writable ART temporary directory. The helper continues to require strong confirmation and now rejects unexpected XML parsing.
+
+### Fixed
+
+- Keep the documented `curl | bash` Android bootstrap interactive by reconnecting the launcher input to the host controlling terminal after the installer has consumed the pipe, allowing ADB to allocate the TUI PTY.
 
 ## [1.0.3] - 2026-09-27
 

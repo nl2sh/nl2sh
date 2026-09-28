@@ -4,7 +4,7 @@
 
 nl2sh 是以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent，以多轮 Tool Calling 连接模型、本地安全引擎和真实 Android 执行结果。其部署单元是单个 stable Rust Android 可执行文件，内置 TUI、Web 服务和设备桥接入口；可选 A2A/MCP 网关运行在主机侧。配置、日志和发布辅助脚本不是直接 Android 部署的运行时依赖。终端交互以丰富 TUI 为主，同时提供 Web 多会话界面和单次 CLI 模式。“类 Hermes”不构成对 Hermes API、插件系统或功能集的兼容承诺。
 
-预编译包的主机启动器在选定 ABI 后分别计算主机文件与设备端实际 ELF 的 SHA-256；摘要一致时保留设备文件并直接启动，不一致时推送并再次校验。Bootstrap 脚本从 GitHub 最新 Release 同时下载 ZIP 与 `SHA256SUMS`，校验后解压，并可根据显式 Provider、模型、Endpoint 和 API Key 生成最小配置；只有显式设置 `NL2SH_CONFIG_SOURCE` 时启动器才覆盖设备配置，设备文件继续保持 `0600`。这些主机侧便利流程不改变设备内的 Agent 安全与确认链。
+预编译包的主机启动器在选定 ABI 后分别计算主机文件与设备端实际 ELF 的 SHA-256；摘要一致时保留设备文件并直接启动，不一致时推送并再次校验。Bootstrap 脚本从用户显式选择的 GitHub 或 Gitee 最新 Release 同时下载 ZIP 与 `SHA256SUMS`，校验后解压；Gitee 路径通过公开 Release API 解析最新 tag，不在 GitHub 失败后隐式切换来源。脚本可根据显式 Provider、模型、Endpoint 和 API Key 生成最小配置；Linux 脚本在 `curl | bash` 模式完成脚本读取后把启动器 stdin 重新连接到主机 controlling terminal，使 ADB 能为 TUI 分配远端 PTY。Windows CMD Bootstrap 作为交互批处入口，复用 PowerShell 安装核心执行 HTTPS 下载、SHA-256 校验和 ZIP 解压，并保留 CMD 控制台输入。只有显式设置 `NL2SH_CONFIG_SOURCE` 时启动器才覆盖设备配置，设备文件继续保持 `0600`。这些主机侧便利流程不改变设备内的 Agent 安全与确认链。
 
 ## 系统整体架构
 

@@ -111,6 +111,8 @@ curl -fsSL https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.
   | bash -s -- --provider deepseek --model deepseek-flash
 ```
 
+After consuming the downloaded script, the Linux installer reconnects the launcher's standard input to the current controlling terminal. The piped form can therefore still allocate an ADB PTY and enter the TUI. In a non-interactive environment without a controlling terminal, installation remains on disk and the script asks you to run `android-run-linux.sh` later from an interactive terminal.
+
 Or on Windows PowerShell:
 
 ```powershell
@@ -118,6 +120,34 @@ $env:NL2SH_API_KEY = "your-api-key"
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.ps1))) `
   -Provider deepseek -Model deepseek-flash
 ```
+
+Or from Windows Command Prompt (the batch entry point uses the built-in PowerShell installation core while retaining the interactive CMD console):
+
+```bat
+set "NL2SH_API_KEY=your-api-key"
+curl.exe -fsSL https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.bat -o "%TEMP%\install-nl2sh.bat" && call "%TEMP%\install-nl2sh.bat" --provider deepseek --model deepseek-flash
+```
+
+When GitHub access is restricted, explicitly download both the installer and release assets from the [Gitee mirror](https://gitee.com/nl2sh/nl2sh). This is a separate source selection, not a silent fallback after GitHub fails:
+
+```bash
+export NL2SH_API_KEY='your-api-key'
+curl -fsSL https://gitee.com/nl2sh/nl2sh/raw/master/install-android.sh \
+  | bash -s -- --repository https://gitee.com/nl2sh/nl2sh --provider deepseek --model deepseek-flash
+```
+
+```powershell
+$env:NL2SH_API_KEY = "your-api-key"
+& ([scriptblock]::Create((irm https://gitee.com/nl2sh/nl2sh/raw/master/install-android.ps1))) `
+  -Repository https://gitee.com/nl2sh/nl2sh -Provider deepseek -Model deepseek-flash
+```
+
+```bat
+set "NL2SH_API_KEY=your-api-key"
+curl.exe -fsSL https://gitee.com/nl2sh/nl2sh/raw/master/install-android.bat -o "%TEMP%\install-nl2sh.bat" && call "%TEMP%\install-nl2sh.bat" --repository https://gitee.com/nl2sh/nl2sh --provider deepseek --model deepseek-flash
+```
+
+The installer resolves the latest Gitee tag through its public release API, then downloads and verifies `nl2sh-android.zip` against `SHA256SUMS`. The corresponding release assets must be synchronized to Gitee; mirroring source code alone is insufficient for a prebuilt installation.
 
 Passing a key through the environment avoids storing it in shell history.
 

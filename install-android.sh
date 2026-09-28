@@ -22,7 +22,7 @@ Usage: install-android.sh [options]
   --api-key KEY         API key; prefer NL2SH_API_KEY to avoid shell history
   --endpoint URL        required for custom; optional override for other providers
   --install-dir PATH    extraction directory (default: ./nl2sh-android)
-  --repository URL      GitHub repository URL (default: official repository)
+  --repository URL      GitHub or Gitee repository URL (default: GitHub)
 EOF
 }
 
@@ -67,9 +67,27 @@ cleanup() { rm -rf -- "${TEMP_DIR}"; }
 trap cleanup EXIT
 ARCHIVE="${TEMP_DIR}/nl2sh-android.zip"
 SUMS="${TEMP_DIR}/SHA256SUMS"
-DOWNLOAD_BASE="${REPOSITORY}/releases/latest/download"
 
-echo "Downloading the latest nl2sh Android release..."
+release_download_base() {
+  local repository="$1"
+  if [[ "${repository}" == https://gitee.com/*/* ]]; then
+    local repository_path metadata tag
+    repository_path="${repository#https://gitee.com/}"
+    metadata="$(curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
+      "https://gitee.com/api/v5/repos/${repository_path}/releases/latest")" \
+      || die "failed to query the latest Gitee release; ensure the mirror has synchronized release assets"
+    tag="$(printf '%s' "${metadata}" | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p')"
+    [[ "${tag}" =~ ^[A-Za-z0-9._-]+$ ]] \
+      || die "the latest Gitee release returned an invalid or missing tag"
+    printf '%s/releases/download/%s' "${repository}" "${tag}"
+    return
+  fi
+  printf '%s/releases/latest/download' "${repository}"
+}
+
+DOWNLOAD_BASE="$(release_download_base "${REPOSITORY}")"
+
+echo "Downloading the latest nl2sh Android release from ${REPOSITORY}..."
 curl -fL --retry 3 --proto '=https' --tlsv1.2 -o "${ARCHIVE}" "${DOWNLOAD_BASE}/nl2sh-android.zip"
 curl -fL --retry 3 --proto '=https' --tlsv1.2 -o "${SUMS}" "${DOWNLOAD_BASE}/SHA256SUMS"
 EXPECTED_SHA256="$(awk '$2 == "nl2sh-android.zip" || $2 == "*nl2sh-android.zip" {print $1; exit}' "${SUMS}")"
@@ -110,4 +128,15 @@ umask 077
 chmod 600 "${CONFIG_FILE}"
 
 echo "Installed and verified: ${INSTALL_DIR}"
-NL2SH_CONFIG_SOURCE="${CONFIG_FILE}" exec "${INSTALL_DIR}/android-run-linux.sh"
+if [[ -t 0 ]]; then
+  NL2SH_CONFIG_SOURCE="${CONFIG_FILE}" exec "${INSTALL_DIR}/android-run-linux.sh"
+fi
+
+# `curl ... | bash` makes the downloaded script occupy stdin. The launcher and
+# nl2sh TUI need the host's controlling terminal instead, including for device
+# selection prompts, so reconnect stdin only after Bash has consumed the script.
+if exec 3</dev/tty; then
+  NL2SH_CONFIG_SOURCE="${CONFIG_FILE}" exec "${INSTALL_DIR}/android-run-linux.sh" <&3
+fi
+
+die "installation completed, but no controlling terminal is available; run ${INSTALL_DIR}/android-run-linux.sh from an interactive terminal"
