@@ -192,6 +192,8 @@ Gitee 安装器通过公开 Release API 解析最新 tag，下载同一 Release 
 
 无论是手工下载 Release 并解压，还是使用一键安装脚本，以后都不需要重新安装。保留主机上的 `nl2sh-android` 目录，连接设备并确认 `adb devices` 显示为 `device` 后，重新运行目录内的启动器即可：
 
+Windows 用户也可直接重跑同一条 CMD/PowerShell 一键安装命令：安装器检测到完整的旧目录后会直接复用并启动，而不再报“install directory already exists”。命令显式携带 Provider、模型或 Endpoint 时，只更新这些配置字段，其他 TUI 设置和已有 API Key 保持不变。
+
 ```bash
 cd /path/to/nl2sh-android
 ./android-run-linux.sh

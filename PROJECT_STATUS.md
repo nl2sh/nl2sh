@@ -4,6 +4,7 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- Windows CMD/PowerShell 一键安装现可幂等复用完整的已安装目录：检查 Windows launcher 与两个 ABI 程序后直接启动；本次显式传入 Provider/模型/Endpoint 时只合并更新对应 TOML 顶层字段，保留其他 TUI 设置，未提供新 API Key 时也保留旧 Key；无配置参数重跑时保留整份现有配置。不完整或非目录路径仍拒绝自动覆盖，避免破坏用户文件。
 - Windows CMD 一键安装在参数 `shift` 之前立即保存 BAT 所在目录，避免 `%0` 被后续 `--endpoint` 等参数取代后把 URL 误当本地路径；PowerShell 安装器的临时路径赋值与使用也已移出括号块，消除 CMD 早期展开造成的陈旧路径。
 - Windows CMD 一键安装修复批处理括号块的早期 `%VAR%` 展开问题：PowerShell 安装器 URL 现在于进入括号块前确定，Gitee/GitHub 远程 BAT 不再向 `curl.exe` 传入空 URL。修复不改变 Release 校验、ADB 设备选择或 TUI 交互路径。
 - 用户文档补充预编译运行脚本与一键安装完成后的日常使用：保留主机 `nl2sh-android` 目录并重复运行启动器、用 `ADB_SERIAL` 预选设备、默认保留设备配置、仅通过 `NL2SH_CONFIG_SOURCE` 显式重新部署配置，以及 TUI 常用命令、任务取消和安全退出方式。文档变更不影响 Android 执行、安全确认或 PTY 路径。

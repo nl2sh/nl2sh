@@ -8,6 +8,7 @@ set "API_KEY="
 set "ENDPOINT="
 set "INSTALL_DIR=%CD%\nl2sh-android"
 set "REPOSITORY=https://github.com/nl2sh/nl2sh"
+set "CONFIG_REQUESTED=false"
 
 :parse
 if "%~1"=="" goto :run
@@ -25,6 +26,7 @@ goto :usage_fail
 :arg_provider
 if "%~2"=="" goto :missing_value
 set "PROVIDER=%~2"
+set "CONFIG_REQUESTED=true"
 shift
 shift
 goto :parse
@@ -32,6 +34,7 @@ goto :parse
 :arg_model
 if "%~2"=="" goto :missing_value
 set "MODEL=%~2"
+set "CONFIG_REQUESTED=true"
 shift
 shift
 goto :parse
@@ -39,6 +42,7 @@ goto :parse
 :arg_api_key
 if "%~2"=="" goto :missing_value
 set "API_KEY=%~2"
+set "CONFIG_REQUESTED=true"
 shift
 shift
 goto :parse
@@ -46,6 +50,7 @@ goto :parse
 :arg_endpoint
 if "%~2"=="" goto :missing_value
 set "ENDPOINT=%~2"
+set "CONFIG_REQUESTED=true"
 shift
 shift
 goto :parse
@@ -92,7 +97,14 @@ if errorlevel 1 (
 )
 
 :installer_ready
+if /i "%CONFIG_REQUESTED%"=="false" goto :invoke_preserving_config
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PS_INSTALLER%" -Provider "%PROVIDER%" -Model "%MODEL%" -ApiKey "%API_KEY%" -Endpoint "%ENDPOINT%" -InstallDir "%INSTALL_DIR%" -Repository "%REPOSITORY%"
+goto :installer_finished
+
+:invoke_preserving_config
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PS_INSTALLER%" -Provider "%PROVIDER%" -Model "%MODEL%" -ApiKey "%API_KEY%" -Endpoint "%ENDPOINT%" -InstallDir "%INSTALL_DIR%" -Repository "%REPOSITORY%" -KeepExistingConfig
+
+:installer_finished
 set "INSTALL_EXIT=%ERRORLEVEL%"
 if /i "%REMOVE_PS_INSTALLER%"=="true" del /q "%PS_INSTALLER%" >nul 2>&1
 exit /b %INSTALL_EXIT%
