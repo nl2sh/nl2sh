@@ -22,13 +22,17 @@ MAX_MESSAGE_BYTES = 8192
 class A2ASettings:
     base_url: str
     token: str
+    allow_insecure_http: bool = False
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.base_url)
         if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path.rstrip("/"):
             raise ValueError("A2A URL must be an origin without credentials or a path")
         if parsed.scheme != "https" and not (
-            parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+            parsed.scheme == "http" and (
+                parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+                or self.allow_insecure_http
+            )
         ):
             raise ValueError("A2A URL must use HTTPS except on loopback")
         if not parsed.hostname or len(self.token) < 32:
@@ -201,6 +205,7 @@ def main() -> None:
     settings = A2ASettings(
         base_url=os.environ.get("NL2SH_A2A_URL", "http://127.0.0.1:8765"),
         token=os.environ.get("NL2SH_A2A_TOKEN", ""),
+        allow_insecure_http=os.environ.get("NL2SH_A2A_ALLOW_INSECURE_HTTP") == "1",
     )
     create_server(A2AClient(settings)).run(transport="stdio")
 

@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-这个可选的主机侧模块通过 A2A 1.0 JSON-RPC 接口开放 Android 设备上的 nl2sh Device Runtime。外部 Agent 可直接调用已注册的设备工具，也可选择咨询 nl2sh 内置 Agent。Android 端仍只需部署一个 Rust 可执行文件；Python 和 A2A SDK 运行在网关主机上。网关使用指定的 `adb` 设备序列号，通过受限的 `nl2sh bridge` JSON 接口通信，不开放任意 adb shell 命令接口。
+这个可选的主机侧模块通过 A2A 1.0 JSON-RPC 接口开放 Android 设备上的 nl2sh Device Runtime。外部 Agent 可直接调用已注册的设备工具，也可选择咨询 nl2sh 内置 Agent。Android 端仍只需部署一个 Rust 可执行文件；Python 和 A2A SDK 运行在网关主机上。网关使用指定的 `adb` 设备序列号，也支持无线 ADB `设备 IP:端口`，通过受限的 `nl2sh bridge` JSON 接口通信，不开放任意 adb shell 命令接口。设备端无需新增网络监听器。
 
 ## 启动
 
@@ -28,7 +28,26 @@ $env:NL2SH_A2A_TOKEN = & .\.venv\Scripts\python.exe -c 'import secrets; print(se
 
 `/data/local/tmp/...` 是 Android 设备路径，在 Windows 上也保持不变。后续 Codex 端配置还需使用这个令牌。
 
-公开的 Agent Card 位于 `http://127.0.0.1:8765/.well-known/agent-card.json`；JSON-RPC 接口位于 `/a2a`，请求必须携带 `Authorization: Bearer <token>`。其他机器需要访问时，可通过 HTTPS 反向代理发布这个仅监听本机的服务，并使用 `--advertised-url` 指定客户端可访问的地址。一个令牌代表一个受信任的使用者，不应共享给互不信任的客户端。nl2sh 原有 Web 界面使用独立的监听端口和访问策略。
+公开的 Agent Card 位于 `http://127.0.0.1:8765/.well-known/agent-card.json`；JSON-RPC 接口位于 `/a2a`，请求必须携带 `Authorization: Bearer <token>`。其他机器可通过 HTTPS 反向代理访问，或在可信私有网络显式设置 `--host 0.0.0.0 --advertised-url http://网关IP:8765 --allow-insecure-http` 直接访问。普通 HTTP 会在网络上传输 Bearer 令牌，只应在受信任的 LAN/VPN 内使用。Agent Card 中的地址必须是客户端实际可达的网关地址。一个令牌代表一个受信任的使用者，不应共享给互不信任的客户端。nl2sh 原有 Web 界面使用独立的监听端口和访问策略。
+
+## Docker Compose 与无线 ADB
+
+在**网关主机**的 `a2a_gateway/` 目录执行；设备上先部署兼容的 nl2sh 可执行文件和配置，并启用无线 ADB。经典无线 ADB 可先通过 USB 执行 `adb tcpip 5555`，然后使用 `设备IP:5555`；Android 无线调试配对模式使用设备显示的**连接端口**作为 `NL2SH_DEVICE_SERIAL`，配对端口只用于 `adb pair`。容器必须能访问设备的 ADB 端口。
+
+```sh
+cp .env.example .env
+chmod 600 .env
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+# 将生成的令牌填入 .env 的 NL2SH_A2A_TOKEN；填写设备 IP:端口。
+# Hermes 在其他主机时，设置 NL2SH_GATEWAY_URL=http://网关IP:8765
+# 并设置 NL2SH_GATEWAY_BIND=0.0.0.0。
+docker compose up -d --build
+docker compose logs -f gateway
+```
+
+对于需要配对码的无线调试，启动服务前可在同一目录运行 `docker compose run --rm --entrypoint adb gateway pair 设备IP:配对端口`，输入设备显示的配对码。Compose 将 ADB 密钥和 SQLite 任务库分别保存在命名卷中；重建容器后不需重新配对。网关在每次工具调用前执行 `adb connect 设备IP:连接端口`，连接失败时不会执行该次设备操作，也不会在回复丢失后自动重放写入。
+
+`.env.example` 明确开启容器内的 HTTP 监听，但默认仅将宿主端口发布到 `127.0.0.1`。只有将 `NL2SH_GATEWAY_BIND` 改为 `0.0.0.0` 才能由其他机器按网关 IP 访问；此时应限制可信 LAN/VPN 的访问，或改用 HTTPS 反向代理。`NL2SH_GATEWAY_URL` 应与 Hermes 配置中的来源地址完全一致。可用 `curl http://网关IP:8765/.well-known/agent-card.json` 检查公开卡片；`/a2a` 仍需要令牌。Docker 和无线 ADB 不改变设备本地审批，需在设备的交互终端运行 `bridge approvals`/`bridge approve`。Docker 守护进程和 Compose 可用时，再执行上述容器命令；本机 Python 启动方式仍可使用相同的 `设备IP:端口` 作为 `--serial`。
 
 客户端发送 `/inspect` 可获取固定的只读设备环境信息，发送 `/tools` 可获取可用工具目录，发送 `/invoke {"tool":"android.screen_dump","arguments":{}}` 可直接调用一次设备 Tool Runtime，发送普通问题则会启动可选的设备端 Agent 对话。直接调用跳过设备端 Agent 和模型请求。Agent 续问时使用相同的 A2A `contextId`。A2A 任务保存在网关的 SQLite 数据库中，Agent 对话回合保存在 nl2sh 的设备端私有会话目录中。确认成功前须检查直接调用结果的 `success` 或 Agent 结果的 `failed_tools`。
 
@@ -57,7 +76,7 @@ Windows 主机执行这些检查点时，应在 WSL 的 Linux 项目检出目录
 
 外部 Agent 可用 A2A 1.0 客户端连接经过鉴权的 `/a2a` 接口，或用 stdio MCP 客户端连接 `nl2sh-a2a-mcp`，并在适配器环境中设置 `NL2SH_A2A_URL`、`NL2SH_A2A_TOKEN`。MCP 适配器只需要 Python 与到网关的网络连接，不需要本机 `adb` 或设备端模型凭据。先用 `nl2sh_tools` 取得工具名称及参数 Schema，再通过 `nl2sh_invoke` 传入注册工具名称与结构化参数。视觉步骤可用 `nl2sh_read_screen`，可访问节点可用 `android.screen_dump`。外部 Agent 自己负责规划和生成语言；`nl2sh_ask` 会启动独立、可选的设备端内置 Agent，需设备端配置模型服务。
 
-Hermes Agent 可在运行主机的 Python 虚拟环境中安装本网关包，再把下面的配置加入 `~/.hermes/config.yaml`。将命令路径替换为该虚拟环境中的 `nl2sh-a2a-mcp` 可执行文件，并在 Hermes 私有的 `~/.hermes/.env` 或进程环境设置 `NL2SH_A2A_TOKEN`。Hermes 与 A2A 网关同机时可用示例中的 loopback 地址；分机运行时应使用网关对外公布的 HTTPS 来源地址。
+Hermes Agent 可在运行主机的 Python 虚拟环境中安装本网关包，再把下面的配置加入 `~/.hermes/config.yaml`。将命令路径替换为该虚拟环境中的 `nl2sh-a2a-mcp` 可执行文件，并在 Hermes 私有的 `~/.hermes/.env` 或进程环境设置 `NL2SH_A2A_TOKEN`。Hermes 与 A2A 网关同机时可用示例中的 loopback 地址；分机运行时首选 HTTPS。若网关按上面的可信私网 HTTP 方式发布，把 `NL2SH_A2A_URL` 改为 `http://网关IP:8765`，并在 Hermes MCP 服务的 `env` 中加入 `NL2SH_A2A_ALLOW_INSECURE_HTTP: "1"`；默认客户端会拒绝远程明文 HTTP。
 
 ```yaml
 mcp_servers:
@@ -72,6 +91,17 @@ mcp_servers:
       resources: false
       prompts: false
 ```
+
+Hermes 与网关分机、通过可信私网 IP 直连时，将上例的 `env` 改为：
+
+```yaml
+    env:
+      NL2SH_A2A_URL: "http://192.168.1.10:8765"
+      NL2SH_A2A_TOKEN: "${NL2SH_A2A_TOKEN}"
+      NL2SH_A2A_ALLOW_INSECURE_HTTP: "1"
+```
+
+其中 `192.168.1.10` 替换为网关主机 IP，必须与网关 `.env` 的 `NL2SH_GATEWAY_URL` 一致；Android 设备 IP 只填写在网关的 `NL2SH_DEVICE_SERIAL` 中。
 
 工具白名单让 Hermes 只看到直接调用路径，不加载可选的内置 Agent `nl2sh_ask`。210 秒 MCP 调用超时覆盖网关的 200 秒请求上限及设备端 120 秒审批窗口。修改配置后重启 Hermes 或重新加载 MCP 连接。以上字段和环境变量引用见 Hermes 官方 [MCP 配置参考](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference)。
 

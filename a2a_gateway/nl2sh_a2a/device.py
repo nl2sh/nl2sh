@@ -4,11 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import ipaddress
 import json
 from dataclasses import dataclass
 
 
 MAX_REPLY = 3 * 1024 * 1024
+
+
+def _tcp_serial(serial: str) -> bool:
+    host, separator, port = serial.rpartition(":")
+    if not separator or not port.isdecimal() or not 1 <= int(port) <= 65535:
+        return False
+    try:
+        return isinstance(ipaddress.ip_address(host), ipaddress.IPv4Address)
+    except ValueError:
+        return False
 
 
 async def _read_bounded(stream: asyncio.StreamReader) -> bytes:
@@ -28,12 +39,38 @@ class Device:
     binary: str = "/data/local/tmp/nl2sh"
     config: str = "/data/local/tmp/config.toml"
 
+    async def _connect_tcp(self) -> None:
+        process = await asyncio.create_subprocess_exec(
+            "adb", "connect", self.serial,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=15)
+        except BaseException:
+            if process.returncode is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+            await process.wait()
+            raise
+        detail = (stdout + stderr).decode(errors="replace").strip()[:500]
+        if process.returncode or any(marker in detail.lower() for marker in (
+            "failed to connect", "unable to connect", "cannot connect",
+        )):
+            raise RuntimeError(f"adb TCP connection failed: {detail or process.returncode}")
+
     async def call(self, operation: str, payload: dict | None = None) -> object:
         if operation not in {"inspect", "tools", "ask", "invoke"}:
             raise ValueError("unsupported device operation")
         request = json.dumps(payload, ensure_ascii=False).encode() if payload else b""
         if len(request) > 16 * 1024:
             raise ValueError("device request exceeds size limit")
+        if _tcp_serial(self.serial):
+            # Reconnect before each call, never replay an operation after a lost reply.
+            await self._connect_tcp()
         extra = ["--payload-base64", base64.urlsafe_b64encode(request).rstrip(b"=").decode()] if payload else []
         process = await asyncio.create_subprocess_exec(
             "adb", "-s", self.serial, "exec-out", self.binary,

@@ -4,6 +4,7 @@
 
 ### Added
 
+- A2A 网关支持 Docker Compose 部署、无线 ADB 设备 IP 连接，以及 Hermes 从其他主机通过网关 IP 调用；私网明文 HTTP 需显式启用，设备端确认链保持不变。
 - Add an optional Android Accessibility companion APK for Unicode text entry, live node inspection, semantic text/bounds node clicks, and bounded swipe/scroll gestures. Its Binder provider accepts shell/root callers only; nl2sh retains its existing approval boundary.
 - Add a direct registered Tool Runtime path for A2A/MCP callers and semantic `android.*` UI tools, preserving device-side risk assessment and confirmation. Direct calls can wait for a one-time local terminal decision; the gateway cannot approve actions. Screen capture can return a bounded MCP image block without retaining a screenshot file.
 

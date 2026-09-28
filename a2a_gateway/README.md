@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-This optional host-side module exposes the Android nl2sh Device Runtime through the A2A 1.0 JSON-RPC binding. External agents can call registered device tools directly or optionally consult nl2sh's built-in Agent. The Android deployment remains one Rust executable; Python and the A2A SDK run on the gateway host. The gateway uses an exact `adb` serial and a narrow `nl2sh bridge` JSON interface. It does not expose an arbitrary adb shell endpoint.
+This optional host-side module exposes the Android nl2sh Device Runtime through the A2A 1.0 JSON-RPC binding. External agents can call registered device tools directly or optionally consult nl2sh's built-in Agent. The Android deployment remains one Rust executable; Python and the A2A SDK run on the gateway host. The gateway uses an exact `adb` serial, including wireless ADB `device IP:port`, and a narrow `nl2sh bridge` JSON interface. It does not expose an arbitrary adb shell endpoint or add a device network listener.
 
 ## Start
 
@@ -28,7 +28,26 @@ $env:NL2SH_A2A_TOKEN = & .\.venv\Scripts\python.exe -c 'import secrets; print(se
 
 The `/data/local/tmp/...` paths are on Android and stay the same on Windows. Keep the token available for the Codex-side setup below.
 
-The public Agent Card is at `http://127.0.0.1:8765/.well-known/agent-card.json`; JSON-RPC is at `/a2a` and requires `Authorization: Bearer <token>`. For other machines, publish the loopback service through an HTTPS reverse proxy and pass its URL with `--advertised-url`. The single token represents one trusted owner; do not share it among mutually untrusted clients. The existing nl2sh Web UI has its own listener and access policy.
+The public Agent Card is at `http://127.0.0.1:8765/.well-known/agent-card.json`; JSON-RPC is at `/a2a` and requires `Authorization: Bearer <token>`. For other machines, use an HTTPS reverse proxy or explicitly bind to the network with `--host 0.0.0.0 --advertised-url http://GATEWAY_IP:8765 --allow-insecure-http` on a trusted private network. Plain HTTP carries the Bearer token over the network; use it only on a trusted LAN/VPN. The advertised URL must be reachable from the client. The single token represents one trusted owner; do not share it among mutually untrusted clients. The existing nl2sh Web UI has its own listener and access policy.
+
+## Docker Compose and wireless ADB
+
+Run these commands in `a2a_gateway/` on the **gateway host**. First deploy a compatible nl2sh binary and configuration to the Android device and enable wireless ADB. For classic TCP ADB, use `adb tcpip 5555` over USB first, then set `device IP:5555`. Android Wireless Debugging pairing uses its displayed **connection port** for `NL2SH_DEVICE_SERIAL`; the pairing port is only for `adb pair`. The container must be able to reach the device's ADB port.
+
+```sh
+cp .env.example .env
+chmod 600 .env
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+# Put the generated token in NL2SH_A2A_TOKEN and set the device IP:port in .env.
+# For Hermes on another host, set NL2SH_GATEWAY_URL=http://GATEWAY_IP:8765
+# and NL2SH_GATEWAY_BIND=0.0.0.0.
+docker compose up -d --build
+docker compose logs -f gateway
+```
+
+For Android Wireless Debugging with a pairing code, run `docker compose run --rm --entrypoint adb gateway pair DEVICE_IP:PAIRING_PORT` before starting the service, then enter the code shown on the device. Compose persists ADB keys and the SQLite task database in separate named volumes. The gateway runs `adb connect DEVICE_IP:CONNECTION_PORT` before every tool call; a failed connection prevents that call, and a lost reply never causes an automatic write replay.
+
+The example explicitly opts into HTTP inside the container, but publishes the host port only on `127.0.0.1` by default. Set `NL2SH_GATEWAY_BIND=0.0.0.0` only when the gateway host is reachable on a trusted LAN/VPN, or use an HTTPS reverse proxy. Set `NL2SH_GATEWAY_URL` to the exact origin configured in Hermes. Check the public card with `curl http://GATEWAY_IP:8765/.well-known/agent-card.json`; `/a2a` still requires the token. Docker and wireless ADB preserve device-local approval: use `bridge approvals` and `bridge approve` in an interactive device terminal. The non-Docker Python launch also accepts a device `IP:port` as `--serial`.
 
 Clients can send `/inspect` for fixed read-only environment facts, `/tools` for the available tool catalog, `/invoke {"tool":"android.screen_dump","arguments":{}}` for one direct Tool Runtime call, or a normal question for an optional device Agent turn. Direct calls skip the device Agent and its model request. Use the same A2A `contextId` for Agent follow-up messages. A2A tasks persist in the gateway SQLite database and Agent turns persist in nl2sh's private device session store. Check `success` in direct call results and `failed_tools` in Agent results before claiming that an action succeeded.
 
@@ -57,7 +76,7 @@ Run the gateway tests with `.venv/bin/python -m unittest discover -s tests -v` o
 
 Connect the external agent's A2A 1.0 client to the authenticated `/a2a` endpoint, or connect its stdio MCP client to `nl2sh-a2a-mcp` with `NL2SH_A2A_URL` and `NL2SH_A2A_TOKEN` in the adapter's environment. The MCP adapter needs Python and network access to the gateway, but no local `adb` or device model credentials. Use `nl2sh_tools` to read tool names and argument schemas, then `nl2sh_invoke` with a registered tool name and structured arguments. For a visual step, use `nl2sh_read_screen`; use `android.screen_dump` for accessible nodes. The external agent handles planning and language generation; `nl2sh_ask` starts the separate, optional built-in device Agent and requires a configured device model provider.
 
-For Hermes Agent, install this gateway package in a Python virtual environment on the Hermes host, then add the following entry to `~/.hermes/config.yaml`. Replace the command path with that environment's `nl2sh-a2a-mcp` executable. Set `NL2SH_A2A_TOKEN` in Hermes' private `~/.hermes/.env` or its process environment. The loopback URL works when Hermes and the A2A gateway run on the same host; use the gateway's advertised HTTPS origin when they run on different hosts.
+For Hermes Agent, install this gateway package in a Python virtual environment on the Hermes host, then add the following entry to `~/.hermes/config.yaml`. Replace the command path with that environment's `nl2sh-a2a-mcp` executable. Set `NL2SH_A2A_TOKEN` in Hermes' private `~/.hermes/.env` or its process environment. The loopback URL works when Hermes and the A2A gateway run on the same host; use the gateway's advertised HTTPS origin when they run on different hosts. For the trusted private-network HTTP setup above, set `NL2SH_A2A_URL` to `http://GATEWAY_IP:8765` and add `NL2SH_A2A_ALLOW_INSECURE_HTTP: "1"` to this MCP server's `env`; the client rejects remote plain HTTP by default.
 
 ```yaml
 mcp_servers:
@@ -72,6 +91,17 @@ mcp_servers:
       resources: false
       prompts: false
 ```
+
+When Hermes uses the gateway's IP on a trusted private network, replace that example's `env` with:
+
+```yaml
+    env:
+      NL2SH_A2A_URL: "http://192.168.1.10:8765"
+      NL2SH_A2A_TOKEN: "${NL2SH_A2A_TOKEN}"
+      NL2SH_A2A_ALLOW_INSECURE_HTTP: "1"
+```
+
+Replace `192.168.1.10` with the gateway host IP. This origin must match `NL2SH_GATEWAY_URL` in the gateway's `.env`; put the Android device IP only in the gateway's `NL2SH_DEVICE_SERIAL`.
 
 The tool allowlist keeps the optional `nl2sh_ask` Agent path out of Hermes' direct-tool workflow. The 210-second MCP timeout covers the gateway's 200-second request limit and the device's 120-second approval window. Restart Hermes or reload its MCP connections after changing the config. Hermes' [MCP configuration reference](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference) documents these keys and environment-variable references.
 

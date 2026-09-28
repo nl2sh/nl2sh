@@ -4,6 +4,7 @@
 
 ## Hermes 设备 Tool Runtime — 进行中
 
+- [x] A2A 网关支持 Docker Compose 部署、无线 ADB `设备IP:端口` 连接与跨主机 Hermes MCP 接入；明文私网 HTTP 需显式开启，ADB 密钥和任务库由命名卷持久化。
 - [x] 创建 `feature/hermes` 分支，保留内置 Agent，并增加直接工具调用的 bridge/A2A/MCP 路径。
 - [x] 注册通用 `android.*` UI 工具，复用设备端工具准备、安全评估和确认；文字/节点点击执行前重读 UI 树。
 - [x] 将当前节点所属包名纳入语义点击与 Unicode 输入的审批前后和 companion 最终执行校验。

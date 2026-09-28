@@ -1,0 +1,38 @@
+services:
+  gateway:
+    build: .
+    init: true
+    restart: unless-stopped
+    environment:
+      NL2SH_A2A_TOKEN: ${NL2SH_A2A_TOKEN:?set a random token of at least 32 characters}
+      NL2SH_A2A_ALLOW_INSECURE_HTTP: ${NL2SH_A2A_ALLOW_INSECURE_HTTP:-0}
+    command:
+      - --serial
+      - ${NL2SH_DEVICE_SERIAL:?set Android wireless ADB IP:port}
+      - --binary
+      - ${NL2SH_DEVICE_BINARY:-/data/local/tmp/nl2sh}
+      - --config
+      - ${NL2SH_DEVICE_CONFIG:-/data/local/tmp/config.toml}
+      - --db
+      - /data/tasks.db
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8765"
+      - --advertised-url
+      - ${NL2SH_GATEWAY_URL:?set the client-visible gateway origin}
+    ports:
+      - "${NL2SH_GATEWAY_BIND:-127.0.0.1}:${NL2SH_GATEWAY_PORT:-8765}:8765"
+    volumes:
+      - gateway-data:/data
+      - gateway-adb:/home/gateway/.android
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/.well-known/agent-card.json', timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  gateway-data:
+  gateway-adb:

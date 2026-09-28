@@ -119,6 +119,9 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_rejects_unsafe_urls_and_wrong_token(self):
         with self.assertRaises(ValueError):
             A2ASettings("http://example.com", "t" * 32)
+        self.assertEqual(A2ASettings("http://192.168.1.10:8765", "t" * 32,
+                                     allow_insecure_http=True).base_url,
+                         "http://192.168.1.10:8765")
         with self.assertRaises(ValueError):
             A2ASettings("https://example.com/path", "t" * 32)
         with self.assertRaises(ValueError):
@@ -135,6 +138,19 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(httpx.HTTPStatusError) as caught:
                 await wrong.send("/inspect")
             self.assertEqual(caught.exception.response.status_code, 401)
+
+    async def test_remote_ip_gateway_origin_matches_agent_card(self):
+        with tempfile.TemporaryDirectory() as directory:
+            url = "http://192.168.1.10:8765"
+            app = create_app(Settings(
+                FakeDevice(), "t" * 32, str(Path(directory) / "tasks.db"), url,
+            ))
+            client = A2AClient(
+                A2ASettings(url, "t" * 32, allow_insecure_http=True),
+                httpx.ASGITransport(app=app),
+            )
+            result = await client.send("/inspect")
+            self.assertEqual(result["result"]["kind"], "android_environment")
 
     async def test_agent_card_cannot_redirect_bearer_token(self):
         requests = []

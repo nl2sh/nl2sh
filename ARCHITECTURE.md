@@ -28,7 +28,7 @@ Root / su Layer
 Android Runtime
 ```
 
-可选 `a2a_gateway/` 是主机侧独立 Python 模块：A2A 1.0 Agent Card/JSON-RPC、Bearer 认证和 SQLite Task Store → 固定设备序列号的 `adb exec-out` → Android 单文件程序的 `bridge inspect|tools|ask|invoke`。`ask` 进入内置 Agent；`invoke` 将具名工具和结构化参数直接交给设备 Tool Runtime，不进行设备端模型请求。两条路径复用工具注册、准备、安全评估和执行边界。A2A `contextId` 映射到私有设备 Agent 会话。`ask` 的无终端确认器继续拒绝待确认操作；`invoke` 在私有一次性 Unix socket 上等待设备交互终端作出决定，超时或拒绝不执行。网关本身不提供批准接口。构建、交叉编译和候选部署是主机侧显式工作流，不作为远程 A2A 技能暴露；候选文件不会覆盖现有设备程序。网关默认仅监听 loopback，远程访问需 HTTPS 反向代理。
+可选 `a2a_gateway/` 是主机侧独立 Python 模块：A2A 1.0 Agent Card/JSON-RPC、Bearer 认证和 SQLite Task Store → 固定设备序列号的 `adb exec-out` → Android 单文件程序的 `bridge inspect|tools|ask|invoke`。设备序列号为 IPv4 `地址:端口` 时，网关在每次调用前建立无线 ADB 连接，不在回复丢失后重放操作。`ask` 进入内置 Agent；`invoke` 将具名工具和结构化参数直接交给设备 Tool Runtime，不进行设备端模型请求。两条路径复用工具注册、准备、安全评估和执行边界。A2A `contextId` 映射到私有设备 Agent 会话。`ask` 的无终端确认器继续拒绝待确认操作；`invoke` 在私有一次性 Unix socket 上等待设备交互终端作出决定，超时或拒绝不执行。网关本身不提供批准接口。构建、交叉编译和候选部署是主机侧显式工作流，不作为远程 A2A 技能暴露；候选文件不会覆盖现有设备程序。网关默认仅监听 loopback；网络监听与远程明文 HTTP 需要显式选择，远程客户端默认要求 HTTPS。Compose 镜像持久化 ADB 密钥和 SQLite 任务库，不在设备端添加网络服务。
 
 本地一次性审批的私有目录使用跨进程文件锁串行化请求计数与发布，最多同时保留八个待决请求。强制终止留下的 `live` 标记只有在对应 Unix socket 已不再监听时才清理；正常请求的目录和 socket 仍由 RAII 释放。审批者必须在设备交互终端查看完整动作，危险操作还要输入与请求 ID 绑定的二次确认短语。
 
