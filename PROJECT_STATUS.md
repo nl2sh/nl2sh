@@ -4,6 +4,7 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- Gitee `v1.0.4` Release 已创建并镜像 GitHub 正式发布的 12 个资产；公开 Release API 返回最新 tag `v1.0.4`，从 Gitee 实际下载的 `nl2sh-android.zip` SHA-256 为 `8e3743e8c6a4bc54476235200378a0bb6e9bfa27627f1f9c8466d7130b56498e`，与同源 `SHA256SUMS` 一致；Gitee raw 下载的 Linux 安装脚本可正常输出帮助。
 - 仓库配置包含 HTTPS Gitee 远端 `https://gitee.com/nl2sh/nl2sh.git`。Linux、PowerShell 和 CMD 一键安装文档新增显式 Gitee 入口：脚本与 Release 资产均从 Gitee 获取，通过公开 Release API 解析最新 tag，并继续使用 `SHA256SUMS` 校验 ZIP；来源由用户显式选择，不在 GitHub 失败后自动切换。Gitee 预编译安装要求镜像同步对应 Release 资产。
 - Gitee 安装路径验证：公开 Gitee Release API 的最新 tag 解析回归、`bash -n install-android.sh android-run-linux.sh pack-release.sh`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 和 `git diff --check` 通过；239 项测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。
 - 新增 Windows CMD 一键安装入口 `install-android.bat`：支持与 Linux 安装器一致的长参数，可从 CMD 下载后直接运行；批处理入口保留交互控制台，并复用 PowerShell 安装核心进行 HTTPS 下载、Release SHA-256 校验、解压、配置生成和 ADB TUI 启动。Linux、PowerShell 和 GitHub Actions 打包路径均已包含该入口，不改变 Android 安全确认或 PTY 执行边界。
