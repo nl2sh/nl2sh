@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Update Web turn, model-step and tool-call counts during execution and restore task statistics after failures, cancellation and restart.
+- Display provider-supplied reasoning separately, preserve intermediate tool-step commentary, and prevent protocol replay after reasoning is emitted.
+- Keep per-task total, model, tool and user-wait timing in Web history, saved sessions and exports.
+- Record Web conversation and tool events in the shared audit log with session IDs, credential redaction and shared file limits.
+- Prefer bounded, targeted Android log queries and narrow timed-out scans before retrying.
+
 ## [1.0.4] - 2026-09-28
 
 ### Added

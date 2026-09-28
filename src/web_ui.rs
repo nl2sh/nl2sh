@@ -3,6 +3,7 @@ use crate::{
     agent::{AgentRunner, ConfirmationDecision, Confirmer, QuestionAnswers, UserQuestion},
     config::{self, Config, ConfirmPolicy, ExecuteUserMode},
     file_references::{augment_file_references, file_suggestions},
+    history::HistoryLog,
     llm::{
         build_client, ConversationItem, ConversationMessage, LlmClient, LlmRequest, Role,
         TextDeltaSink, ToolRound,
@@ -10,7 +11,7 @@ use crate::{
     provider_metadata::build_metadata_client,
     security::SecurityAssessment,
     session_title::generate_title,
-    sessions::{SessionStore, WebCheckpoint, WebCheckpointEvent},
+    sessions::{SessionStore, WebCheckpoint, WebCheckpointEvent, WebPresentation, WebTaskMetrics},
     shell::{CommandExecutor, ExecutionResult, OutputSink, ShellExecutor, SystemRootProbe},
     tools::{android::environment::inspect_environment, Capability, ToolRegistry},
 };
@@ -39,6 +40,7 @@ use std::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex, OnceLock,
     },
+    time::Instant,
 };
 use tokio::{
     net::TcpListener,
@@ -90,6 +92,7 @@ struct WebSession {
     events: broadcast::Sender<String>,
     cancel: watch::Sender<bool>,
     terminal_clients: AtomicUsize,
+    audit: Mutex<Option<tokio::sync::mpsc::Sender<AuditEvent>>>,
 }
 
 struct SessionState {
@@ -105,6 +108,11 @@ struct SessionState {
     updated: u64,
     steps: usize,
     tool_calls: usize,
+    accepted_turns: usize,
+    task: WebTaskMetrics,
+    task_started: Option<Instant>,
+    phase_started: Instant,
+    token_base: (u64, u64),
     input_tokens: u64,
     output_tokens: u64,
     final_input_tokens: Option<u64>,
@@ -137,6 +145,11 @@ impl SessionState {
             updated: created,
             steps: 0,
             tool_calls: 0,
+            accepted_turns: 0,
+            task: WebTaskMetrics::default(),
+            task_started: None,
+            phase_started: Instant::now(),
+            token_base: (0, 0),
             input_tokens: 0,
             output_tokens: 0,
             final_input_tokens: None,
@@ -159,6 +172,7 @@ fn web_session(inner: SessionState) -> Arc<WebSession> {
         events,
         cancel,
         terminal_clients: AtomicUsize::new(0),
+        audit: Mutex::new(None),
     })
 }
 
@@ -186,12 +200,128 @@ fn unix_millis() -> u64 {
         .map_or(0, |duration| duration.as_millis() as u64)
 }
 
+fn task_metrics(inner: &SessionState) -> WebTaskMetrics {
+    let mut task = inner.task.clone();
+    task.steps = inner.steps;
+    task.tool_calls = inner.tool_calls;
+    if let Some(started) = inner.task_started {
+        task.total_ms = started.elapsed().as_millis() as u64;
+        let elapsed = inner.phase_started.elapsed().as_millis() as u64;
+        match inner.activity {
+            "thinking" => task.model_ms = task.model_ms.saturating_add(elapsed),
+            "tool" => task.tool_ms = task.tool_ms.saturating_add(elapsed),
+            "waiting" => task.waiting_ms = task.waiting_ms.saturating_add(elapsed),
+            _ => {}
+        }
+    }
+    task
+}
+
+fn presentation(inner: &SessionState) -> WebPresentation {
+    WebPresentation {
+        history: inner.history.clone(),
+        turns: inner.accepted_turns,
+        task: task_metrics(inner),
+        input_tokens: inner.input_tokens,
+        output_tokens: inner.output_tokens,
+        final_input_tokens: inner.final_input_tokens,
+    }
+}
+
 fn set_activity(inner: &mut SessionState, activity: &'static str, detail: Option<&str>) {
     if inner.activity != activity || inner.activity_detail.as_deref() != detail {
+        inner.task = task_metrics(inner);
+        inner.phase_started = Instant::now();
         inner.activity = activity;
         inner.activity_detail = detail.map(str::to_owned);
         inner.activity_since_ms = unix_millis();
     }
+}
+
+fn task_summary(inner: &SessionState) -> String {
+    let task = task_metrics(inner);
+    format!(
+        "本轮耗时 {:.1}s · 模型 {:.1}s · 工具 {:.1}s · 等待 {:.1}s · 步骤 {} · 工具 {}",
+        task.total_ms as f64 / 1000.0,
+        task.model_ms as f64 / 1000.0,
+        task.tool_ms as f64 / 1000.0,
+        task.waiting_ms as f64 / 1000.0,
+        inner.steps,
+        inner.tool_calls
+    )
+}
+
+fn finish_task(inner: &mut SessionState) {
+    set_activity(inner, "idle", None);
+    inner.task = task_metrics(inner);
+    inner.task_started = None;
+}
+
+enum AuditEvent {
+    Record(String, String),
+    Flush(oneshot::Sender<()>),
+}
+
+async fn flush_audit(session: &WebSession) {
+    let sender = session.audit.lock().ok().and_then(|value| value.clone());
+    if let Some(sender) = sender {
+        let (tx, rx) = oneshot::channel();
+        if sender.send(AuditEvent::Flush(tx)).await.is_ok() {
+            let _ = rx.await;
+        }
+    }
+}
+
+fn audit(session: &WebSession, event: &str, message: &str) {
+    let encoded = if let Ok(inner) = session.inner.lock() {
+        let mut message = message.to_owned();
+        for secret in &inner.redaction_secrets {
+            message = message.replace(secret, "[NL2SH CREDENTIAL REDACTED]");
+        }
+        let message = crate::limits::truncate_text(&message, 64 * 1024);
+        serde_json::json!({"session_id":inner.id,"message":message}).to_string()
+    } else {
+        return;
+    };
+    if let Ok(sender) = session.audit.lock() {
+        if let Some(sender) = sender.as_ref() {
+            if let Err(error) = sender.try_send(AuditEvent::Record(event.into(), encoded)) {
+                eprintln!("cannot queue Web audit event: {error}");
+            }
+        }
+    }
+}
+
+async fn start_audit(path: PathBuf, cfg: &Config, session: &WebSession) -> Result<()> {
+    let log_path = cfg.history_log_file.clone();
+    let event_limit = cfg.history_log_event_max_bytes;
+    let file_limit = cfg.history_log_max_bytes;
+    let log = tokio::task::spawn_blocking(move || {
+        HistoryLog::open_with_limits(&path, &log_path, event_limit, file_limit)
+    })
+    .await??;
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<AuditEvent>(128);
+    *session
+        .audit
+        .lock()
+        .map_err(|_| anyhow!("Web audit lock poisoned"))? = Some(tx);
+    tokio::spawn(async move {
+        while let Some(item) = rx.recv().await {
+            let (event, message) = match item {
+                AuditEvent::Record(event, message) => (event, message),
+                AuditEvent::Flush(done) => {
+                    let _ = done.send(());
+                    continue;
+                }
+            };
+            let log = log.clone();
+            match tokio::task::spawn_blocking(move || log.record(&event, &message)).await {
+                Ok(Ok(())) => {}
+                _ => eprintln!("cannot append Web audit event"),
+            }
+        }
+    });
+    Ok(())
 }
 
 fn checkpoint_event(inner: &mut SessionState, kind: &str, tool: Option<&str>) {
@@ -223,7 +353,7 @@ fn remember_redaction_secrets(inner: &mut SessionState, cfg: &Config) {
 
 async fn persist_web_session(state: &Shared, current: &WebSession) -> Result<()> {
     let _write = current.persist.lock().await;
-    let (id, title, turns, checkpoint, prior_secrets) = {
+    let (id, title, turns, checkpoint, prior_secrets, display) = {
         let inner = current
             .inner
             .lock()
@@ -239,6 +369,7 @@ async fn persist_web_session(state: &Shared, current: &WebSession) -> Result<()>
             inner.turns.clone(),
             checkpoint,
             inner.redaction_secrets.clone(),
+            presentation(&inner),
         )
     };
     let path = state.path.clone();
@@ -252,13 +383,13 @@ async fn persist_web_session(state: &Shared, current: &WebSession) -> Result<()>
             cfg.jev_api_key,
         ];
         secrets.extend(prior_secrets);
-        SessionStore::open(&path)?.save_web_state(
+        SessionStore::open(&path)?.save_web_observed(
             &id,
             &title,
             &turns,
             cfg.model_tool_output_max_bytes,
             &secrets,
-            checkpoint.as_ref(),
+            (checkpoint.as_ref(), display),
         )
     })
     .await??;
@@ -317,6 +448,7 @@ struct Snapshot {
     activity: &'static str,
     activity_detail: Option<String>,
     activity_elapsed_ms: u64,
+    task: WebTaskMetrics,
     can_retry: bool,
 }
 
@@ -333,6 +465,7 @@ struct ExportConversation {
     exported_unix_secs: u64,
     busy: bool,
     entries: Vec<WebEntry>,
+    task: WebTaskMetrics,
     checkpoint_status: Option<String>,
     checkpoint_events: Vec<WebCheckpointEvent>,
 }
@@ -634,6 +767,10 @@ fn web_entries(history: &[String]) -> Vec<WebEntry> {
                 ("user", text)
             } else if let Some(text) = line.strip_prefix("🤖 ") {
                 ("assistant", text)
+            } else if let Some(text) = line.strip_prefix("\u{1e}REASON:") {
+                ("reasoning", text)
+            } else if let Some(text) = line.strip_prefix("\u{1e}TASK:") {
+                ("task_summary", text)
             } else if let Some(text) = line.strip_prefix("… ") {
                 ("stream", text)
             } else if let Some(text) = line.strip_prefix("🔧 ") {
@@ -678,7 +815,7 @@ async fn get_state(
         entries: web_entries(&inner.history),
         busy: inner.busy,
         pending: inner.pending.clone(),
-        turns: inner.turns.len(),
+        turns: inner.accepted_turns,
         steps: inner.steps,
         tool_calls: inner.tool_calls,
         input_tokens: inner.input_tokens,
@@ -687,6 +824,7 @@ async fn get_state(
         activity: inner.activity,
         activity_detail: inner.activity_detail.clone(),
         activity_elapsed_ms: unix_millis().saturating_sub(inner.activity_since_ms),
+        task: task_metrics(&inner),
         can_retry: retryable_input(&inner).is_some(),
     }))
 }
@@ -707,6 +845,7 @@ async fn export_session(
             exported_unix_secs: unix_seconds(),
             busy: inner.busy,
             entries: web_entries(&inner.history),
+            task: task_metrics(&inner),
             checkpoint_status: inner.checkpoint.as_ref().map(|value| value.status.clone()),
             checkpoint_events: inner
                 .checkpoint
@@ -1024,7 +1163,7 @@ async fn get_sessions(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<Se
                 session.inner.lock().ok().map(|inner| SessionSummary {
                     id: inner.id.clone(),
                     title: inner.title.clone(),
-                    turns: inner.turns.len(),
+                    turns: inner.accepted_turns,
                     busy: inner.busy,
                     pending: inner.pending.is_some(),
                     created: inner.created,
@@ -1069,7 +1208,7 @@ async fn load_session(
             return Ok(Json(SessionSummary {
                 id: inner.id.clone(),
                 title: inner.title.clone(),
-                turns: inner.turns.len(),
+                turns: inner.accepted_turns,
                 busy: inner.busy,
                 pending: inner.pending.is_some(),
                 created: inner.created,
@@ -1087,7 +1226,10 @@ async fn load_session(
             store.load(&selection.name, usize::MAX, cfg.model_tool_output_max_bytes)?;
         let turns = saved_turns[saved_turns.len().saturating_sub(cfg.max_context_turns)..].to_vec();
         let mut checkpoint = store.load_web_checkpoint(&selection.name)?;
-        let mut history = render_turns(&turns);
+        let display = store.load_web_presentation(&selection.name)?;
+        let mut history = display
+            .as_ref()
+            .map_or_else(|| render_turns(&turns), |value| value.history.clone());
         if let Some(current) = checkpoint.as_mut() {
             if current.status != "completed" {
                 mark_unresolved_tools(&mut current.history);
@@ -1112,7 +1254,14 @@ async fn load_session(
                 )?;
             }
             if current.status != "completed" {
-                history.extend(current.history.clone());
+                if display.is_some() {
+                    mark_unresolved_tools(&mut history);
+                    if current.status == "interrupted" {
+                        history.push("⏹ 上次任务已中断，不会自动重试".into());
+                    }
+                } else {
+                    history.extend(current.history.clone());
+                }
             }
         }
         let current = web_session(SessionState {
@@ -1126,11 +1275,35 @@ async fn load_session(
             title_generated: info.title != "新会话",
             created: info.created_unix_secs,
             updated: info.updated_unix_secs,
-            steps: 0,
-            tool_calls: 0,
-            input_tokens: 0,
-            output_tokens: 0,
-            final_input_tokens: None,
+            steps: display.as_ref().map_or_else(
+                || {
+                    saved_turns.last().map_or(0, |turn| {
+                        turn.iter()
+                            .filter(|item| matches!(item, ConversationItem::Tools(_)))
+                            .count()
+                            + 1
+                    })
+                },
+                |value| value.task.steps,
+            ),
+            tool_calls: display.as_ref().map_or_else(
+                || {
+                    saved_turns
+                        .last()
+                        .map_or(0, |turn| turns_tool_count(std::slice::from_ref(turn)))
+                },
+                |value| value.task.tool_calls,
+            ),
+            accepted_turns: display.as_ref().map_or(info.turns, |value| value.turns),
+            task: display
+                .as_ref()
+                .map_or_else(WebTaskMetrics::default, |value| value.task.clone()),
+            task_started: None,
+            phase_started: Instant::now(),
+            token_base: (0, 0),
+            input_tokens: display.as_ref().map_or(0, |value| value.input_tokens),
+            output_tokens: display.as_ref().map_or(0, |value| value.output_tokens),
+            final_input_tokens: display.as_ref().and_then(|value| value.final_input_tokens),
             activity: "idle",
             activity_detail: None,
             activity_since_ms: unix_millis(),
@@ -1276,9 +1449,19 @@ async fn start_message(
             return Err(ApiError::conflict("this Agent session is already running"));
         }
         inner.busy = true;
+        inner.accepted_turns = inner.accepted_turns.saturating_add(1);
+        inner.steps = 0;
+        inner.tool_calls = 0;
+        inner.task = WebTaskMetrics {
+            timing_available: true,
+            ..WebTaskMetrics::default()
+        };
+        inner.task_started = Some(Instant::now());
+        inner.phase_started = Instant::now();
+        inner.token_base = (inner.input_tokens, inner.output_tokens);
         remember_redaction_secrets(&mut inner, &cfg);
         current.cancel.send_replace(false);
-        set_activity(&mut inner, "thinking", None);
+        set_activity(&mut inner, "idle", None);
         inner.updated = unix_seconds();
         inner.checkpoint_start = Some(inner.history.len());
         push(&mut inner, format!("> {text}"));
@@ -1292,12 +1475,16 @@ async fn start_message(
         drop(inner);
         current
     };
+    if let Err(error) = start_audit(state.path.clone(), &cfg, &current).await {
+        eprintln!("cannot open Web audit log: {error:#}");
+    }
+    audit(&current, "web_user", &text);
     if let Err(error) = persist_web_session(&state, &current).await {
         if let Ok(mut inner) = current.inner.lock() {
             inner.busy = false;
             inner.checkpoint = None;
             inner.checkpoint_start = None;
-            set_activity(&mut inner, "idle", None);
+            finish_task(&mut inner);
             push(&mut inner, format!("❌ 无法保存会话检查点：{error:#}"));
         }
         return Err(error.into());
@@ -1397,6 +1584,7 @@ async fn post_decision(
         .send(reply)
         .map_err(|_| anyhow!("request no longer active"))?;
     drop(inner);
+    audit(&current, "web_decision", &decision.action);
     notify(&current, "state");
     Ok("已提交".into())
 }
@@ -1516,6 +1704,17 @@ fn append_tool_round(lines: &mut Vec<String>, round: &ToolRound) {
     }
 }
 
+fn turns_tool_count(turns: &[Vec<ConversationItem>]) -> usize {
+    turns
+        .iter()
+        .flatten()
+        .map(|item| match item {
+            ConversationItem::Tools(round) => round.calls.len(),
+            _ => 0,
+        })
+        .sum()
+}
+
 fn render_turns(turns: &[Vec<ConversationItem>]) -> Vec<String> {
     let mut lines = Vec::new();
     for turn in turns {
@@ -1564,6 +1763,14 @@ fn mark_unresolved_tools(history: &mut [String]) {
 async fn run_message(state: Arc<Shared>, current: Arc<WebSession>, text: String) {
     let result = run_agent(state.clone(), current.clone(), text).await;
     let failed = result.is_err();
+    if let Err(error) = &result {
+        WebTextSink {
+            session: current.clone(),
+            state: None,
+        }
+        .record_generation();
+        audit(&current, "web_task_error", &format!("{error:#}"));
+    }
     if let Ok(mut inner) = current.inner.lock() {
         clear_live_tool_output(&mut inner);
         if let Err(error) = result {
@@ -1585,6 +1792,21 @@ async fn run_message(state: Arc<Shared>, current: Arc<WebSession>, text: String)
             push(&mut inner, "⏹ 停止请求已收到，已完成的结果已保留".into());
         }
     }
+    if let Ok(mut inner) = current.inner.lock() {
+        finish_task(&mut inner);
+        if failed {
+            let summary = task_summary(&inner);
+            push(&mut inner, format!("\u{1e}TASK:{summary}"));
+        }
+    }
+    let summary =
+        current.inner.lock().ok().map(|inner| {
+            serde_json::json!({"failed":failed,"task":task_metrics(&inner)}).to_string()
+        });
+    if let Some(summary) = summary {
+        audit(&current, "web_task_finished", &summary);
+    }
+    flush_audit(&current).await;
     if failed {
         if let Err(error) = persist_web_session(&state, &current).await {
             eprintln!("cannot save failed Web task checkpoint: {error:#}");
@@ -1663,6 +1885,7 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
         )
         .await?;
     let answer = result.final_text.clone();
+    audit(&current, "web_assistant", &answer);
     {
         let mut inner = current
             .inner
@@ -1681,15 +1904,12 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
         if let Some(checkpoint) = inner.checkpoint.as_mut() {
             checkpoint.status = "completed".into();
         }
-        inner.steps = inner.steps.saturating_add(result.steps);
-        inner.tool_calls = inner.tool_calls.saturating_add(result.tool_calls);
-        inner.input_tokens = inner
-            .input_tokens
-            .saturating_add(result.usage.input_tokens.unwrap_or(0));
-        inner.output_tokens = inner
-            .output_tokens
-            .saturating_add(result.usage.output_tokens.unwrap_or(0));
+        inner.steps = result.steps;
+        inner.tool_calls = result.tool_calls;
         inner.final_input_tokens = result.final_input_tokens;
+        finish_task(&mut inner);
+        let summary = task_summary(&inner);
+        push(&mut inner, format!("\u{1e}TASK:{summary}"));
         inner.updated = unix_seconds();
     }
     notify(&current, "state");
@@ -1706,7 +1926,6 @@ async fn run_agent(state: Arc<Shared>, current: Arc<WebSession>, text: String) -
         eprintln!("cannot clear completed Web checkpoint: {error:#}");
     }
     if let Ok(mut inner) = current.inner.lock() {
-        inner.busy = false;
         set_activity(&mut inner, "idle", None);
     }
     notify(&current, "state");
@@ -1858,6 +2077,28 @@ struct WebTextSink {
 }
 
 impl WebTextSink {
+    fn record_generation(&self) {
+        let lines = self
+            .session
+            .inner
+            .lock()
+            .ok()
+            .map(|inner| {
+                inner
+                    .history
+                    .iter()
+                    .rev()
+                    .take_while(|line| line.starts_with("… ") || line.starts_with("\u{1e}REASON:"))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for line in lines {
+            audit(&self.session, "web_model_output", &line);
+        }
+        self.schedule_checkpoint();
+    }
+
     fn schedule_checkpoint(&self) {
         if let Some(state) = &self.state {
             let state = state.clone();
@@ -1872,6 +2113,58 @@ impl WebTextSink {
 }
 
 impl TextDeltaSink for WebTextSink {
+    fn agent_progress(&self, steps: usize, tools: usize, usage: &crate::llm::Usage) {
+        if let Ok(mut inner) = self.session.inner.lock() {
+            inner.steps = steps;
+            inner.tool_calls = tools;
+            inner.input_tokens = inner
+                .token_base
+                .0
+                .saturating_add(usage.input_tokens.unwrap_or(0));
+            inner.output_tokens = inner
+                .token_base
+                .1
+                .saturating_add(usage.output_tokens.unwrap_or(0));
+        }
+        notify(&self.session, "progress");
+    }
+
+    fn begin(&self) {
+        if let Ok(mut inner) = self.session.inner.lock() {
+            // Keep previous tool-step commentary visible and stop merging generations.
+            if let Some(line) = inner
+                .history
+                .last_mut()
+                .filter(|line| line.starts_with("… "))
+            {
+                *line = format!("🤖 {}", &line["… ".len()..]);
+            }
+        }
+    }
+
+    fn reasoning_delta(&self, text: &str) {
+        if let Ok(mut inner) = self.session.inner.lock() {
+            let bounded = crate::limits::truncate_text(text, 4096);
+            if let Some(line) = inner
+                .history
+                .last_mut()
+                .filter(|line| line.starts_with("\u{1e}REASON:"))
+            {
+                line.push_str(&bounded);
+                *line = crate::limits::truncate_text(line, 16 * 1024);
+            } else {
+                push(&mut inner, format!("\u{1e}REASON:{bounded}"));
+            }
+        }
+        notify(&self.session, "reasoning");
+    }
+
+    fn end(&self, completed: bool) {
+        if completed {
+            self.record_generation();
+        }
+    }
+
     fn agent_activity(&self, activity: &'static str, detail: Option<&str>) {
         let mut changed = false;
         if let Ok(mut inner) = self.session.inner.lock() {
@@ -1885,6 +2178,7 @@ impl TextDeltaSink for WebTextSink {
         }
         notify(&self.session, "activity");
         if changed {
+            audit(&self.session, "web_activity", activity);
             self.schedule_checkpoint();
         }
     }
@@ -1908,8 +2202,23 @@ impl TextDeltaSink for WebTextSink {
         notify(&self.session, "delta");
     }
 
+    fn tool_requested(&self, call: &crate::llm::ToolCall) {
+        audit(
+            &self.session,
+            "web_tool_requested",
+            &serde_json::json!(call).to_string(),
+        );
+    }
+
     fn tool_started(&self, call_id: &str, name: &str) {
         if let Ok(mut inner) = self.session.inner.lock() {
+            if let Some(line) = inner
+                .history
+                .last_mut()
+                .filter(|line| line.starts_with("… "))
+            {
+                *line = format!("🤖 {}", &line["… ".len()..]);
+            }
             checkpoint_event(&mut inner, "tool_started", Some(name));
             push(
                 &mut inner,
@@ -1917,6 +2226,11 @@ impl TextDeltaSink for WebTextSink {
             );
             push(&mut inner, format!("{LIVE_TOOL_PENDING_PREFIX}{call_id}"));
         }
+        audit(
+            &self.session,
+            "web_tool_started",
+            &serde_json::json!({"call_id":call_id,"name":name}).to_string(),
+        );
         notify(&self.session, "tool_started");
         self.schedule_checkpoint();
     }
@@ -1944,6 +2258,7 @@ impl TextDeltaSink for WebTextSink {
             } else {
                 push(&mut inner, result);
             }
+            set_activity(&mut inner, "idle", None);
             checkpoint_event(
                 &mut inner,
                 if success {
@@ -1954,6 +2269,11 @@ impl TextDeltaSink for WebTextSink {
                 None,
             );
         }
+        audit(
+            &self.session,
+            "web_tool_finished",
+            &serde_json::json!({"call_id":call_id,"success":success,"output":output}).to_string(),
+        );
         notify(&self.session, "tool_finished");
         self.schedule_checkpoint();
     }
@@ -2063,6 +2383,11 @@ impl WebConfirmer {
                 None,
             );
         }
+        audit(
+            &self.session,
+            "web_waiting",
+            if is_approval { "approval" } else { "questions" },
+        );
         notify(&self.session, "pending");
         if let Some(state) = &self.state {
             if let Err(error) = persist_web_session(state, &self.session).await {
@@ -2095,6 +2420,183 @@ mod tests {
         matchers::{body_string_contains, method, path},
         Mock, MockServer, ResponseTemplate,
     };
+
+    #[test]
+    fn task_timing_separates_model_tools_and_waits_and_freezes_on_finish() {
+        let mut inner = SessionState::empty();
+        inner.task_started = Some(Instant::now() - std::time::Duration::from_secs(10));
+        inner.activity = "thinking";
+        inner.phase_started = Instant::now() - std::time::Duration::from_secs(2);
+        set_activity(&mut inner, "tool", Some("read_file"));
+        inner.phase_started = Instant::now() - std::time::Duration::from_secs(3);
+        set_activity(&mut inner, "waiting", None);
+        inner.phase_started = Instant::now() - std::time::Duration::from_secs(4);
+        finish_task(&mut inner);
+        let task = task_metrics(&inner);
+        assert!((2000..2200).contains(&task.model_ms));
+        assert!((3000..3200).contains(&task.tool_ms));
+        assert!((4000..4200).contains(&task.waiting_ms));
+        assert!((10000..10200).contains(&task.total_ms));
+        inner.phase_started = Instant::now() - std::time::Duration::from_secs(500);
+        assert_eq!(task_metrics(&inner).total_ms, task.total_ms);
+        assert_eq!(task_metrics(&inner).waiting_ms, task.waiting_ms);
+    }
+
+    #[tokio::test]
+    async fn live_progress_and_reasoning_survive_failed_task_restart_without_model_history(
+    ) -> Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let shared = state(path.clone());
+        let current = session(&shared, "web-test")?;
+        {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("lock"))?;
+            inner.busy = true;
+            inner.accepted_turns = 2;
+            inner.token_base = (10, 20);
+            inner.task_started = Some(Instant::now());
+            inner.checkpoint_start = Some(0);
+            inner.redaction_secrets = vec!["private-test-key".into()];
+            push(&mut inner, "> 原任务".into());
+            inner.checkpoint = Some(WebCheckpoint {
+                status: "failed".into(),
+                activity: "thinking".into(),
+                history: Vec::new(),
+                events: Vec::new(),
+            });
+        }
+        let sink = WebTextSink {
+            session: current.clone(),
+            state: None,
+        };
+        sink.agent_progress(
+            3,
+            2,
+            &Usage {
+                input_tokens: Some(100),
+                output_tokens: Some(40),
+            },
+        );
+        sink.reasoning_delta("检查 private-test-key");
+        sink.reasoning_delta(" 的结果");
+        sink.delta("中间说明");
+        sink.tool_started("call", "read_file");
+        sink.tool_finished("call", "失败证据", false);
+        let snapshot = get_state(
+            State(shared.clone()),
+            Query(StateQuery {
+                id: "web-test".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?
+        .0;
+        assert_eq!(
+            (snapshot.turns, snapshot.steps, snapshot.tool_calls),
+            (2, 3, 2)
+        );
+        assert_eq!((snapshot.input_tokens, snapshot.output_tokens), (110, 60));
+        assert!(snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.kind == "reasoning"));
+        assert!(snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.kind == "assistant" && entry.text == "中间说明"));
+        {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("lock"))?;
+            finish_task(&mut inner);
+            inner.busy = false;
+        }
+        persist_web_session(&shared, &current).await?;
+        let raw = std::fs::read_to_string(directory.path().join("sessions/web-test.json"))?;
+        assert!(!raw.contains("private-test-key"));
+        let restored = state(path.clone());
+        restored
+            .sessions
+            .lock()
+            .map_err(|_| anyhow!("lock"))?
+            .clear();
+        let _ = load_session(
+            State(restored.clone()),
+            Json(SessionSelection {
+                name: "web-test".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        let snapshot = get_state(
+            State(restored),
+            Query(StateQuery {
+                id: "web-test".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?
+        .0;
+        assert_eq!(
+            (snapshot.turns, snapshot.steps, snapshot.tool_calls),
+            (2, 3, 2)
+        );
+        assert_eq!((snapshot.input_tokens, snapshot.output_tokens), (110, 60));
+        assert!(snapshot.can_retry);
+        assert!(!snapshot.busy);
+        assert!(snapshot
+            .entries
+            .iter()
+            .any(|entry| entry.kind == "reasoning"));
+        assert!(SessionStore::open(&path)?
+            .load("web-test", 10, 1024)?
+            .is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn web_audit_identifies_sessions_and_redacts_model_and_tool_content() -> Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let shared = state(path.clone());
+        let current = session(&shared, "web-test")?;
+        let cfg = Config {
+            api_key: "private-test-key".into(),
+            ..Config::default()
+        };
+        {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("lock"))?;
+            remember_redaction_secrets(&mut inner, &cfg);
+        }
+        start_audit(path.clone(), &cfg, &current).await?;
+        audit(&current, "web_user", "任务 private-test-key");
+        let sink = WebTextSink {
+            session: current.clone(),
+            state: None,
+        };
+        sink.reasoning_delta("思考 private-test-key");
+        sink.delta("说明");
+        sink.end(true);
+        sink.tool_requested(&ToolCall {
+            id: "call".into(),
+            name: "read_file".into(),
+            arguments: serde_json::json!({"path":"private-test-key"}),
+        });
+        sink.tool_started("call", "read_file");
+        sink.tool_finished("call", "private-test-key 结果", true);
+        flush_audit(&current).await;
+        let raw = std::fs::read_to_string(directory.path().join(&cfg.history_log_file))?;
+        assert!(!raw.contains("private-test-key"));
+        assert!(raw.contains("CREDENTIAL REDACTED"));
+        for line in raw.lines() {
+            let record: serde_json::Value = serde_json::from_str(line)?;
+            let payload: serde_json::Value =
+                serde_json::from_str(record["message"].as_str().context("message")?)?;
+            assert_eq!(payload["session_id"], "web-test");
+        }
+        assert!(raw.contains("web_tool_requested"));
+        assert!(raw.contains("web_tool_finished"));
+        assert!(raw.contains("思考"));
+        Ok(())
+    }
 
     #[tokio::test]
     async fn model_check_uses_real_provider_request_without_a_session() -> Result<()> {
@@ -2297,6 +2799,7 @@ mod tests {
                 ResponseTemplate::new(200)
                     .insert_header("content-type", "text/event-stream")
                     .set_body_string(concat!(
+                        "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"先核对证据\"}}]}\n\n",
                         "data: {\"choices\":[{\"delta\":{\"content\":\"任务完成\"},\"finish_reason\":null}]}\n\n",
                         "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
                         "data: [DONE]\n\n"
@@ -2349,6 +2852,26 @@ mod tests {
         let store = SessionStore::open(&path)?;
         assert_eq!(store.load("web-test", 10, 1024)?.len(), 1);
         assert!(store.load_web_checkpoint("web-test")?.is_none());
+        let display = store
+            .load_web_presentation("web-test")?
+            .context("display")?;
+        assert_eq!(display.turns, 1);
+        assert_eq!(display.task.steps, 1);
+        assert_eq!(display.task.tool_calls, 0);
+        assert!(display.task.timing_available);
+        assert!(display
+            .history
+            .iter()
+            .any(|line| line.starts_with("\u{1e}TASK:")));
+        assert!(display
+            .history
+            .iter()
+            .any(|line| line.contains("先核对证据")));
+        let log = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
+        assert!(log.contains("web_user"));
+        assert!(log.contains("web_assistant"));
+        assert!(log.contains("web_task_finished"));
+
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {
                 if current
@@ -2670,6 +3193,7 @@ mod tests {
             id: "selected".into(),
             title: "当前会话".into(),
             exported_unix_secs: 1,
+            task: WebTaskMetrics::default(),
             busy: true,
             entries: web_entries(&["> 本轮问题".into(), "🤖 本轮回答".into()]),
             checkpoint_status: None,

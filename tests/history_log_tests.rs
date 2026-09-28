@@ -64,3 +64,21 @@ fn new_history_log_is_private() -> anyhow::Result<()> {
     assert_eq!(fs::metadata(path)?.permissions().mode() & 0o777, 0o600);
     Ok(())
 }
+
+#[test]
+fn independently_opened_logs_share_limits_and_clear_state() -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    let path = std::path::Path::new("shared.jsonl");
+    let first = HistoryLog::open_with_limits(&config, path, 160, 700)?;
+    let second = HistoryLog::open_with_limits(&config, path, 160, 700)?;
+    for _ in 0..20 {
+        first.record("first", &"a".repeat(80))?;
+        second.record("second", &"b".repeat(80))?;
+    }
+    assert!(fs::metadata(first.path())?.len() <= 700);
+    second.clear()?;
+    first.record("after", "continued")?;
+    assert!(fs::read_to_string(first.path())?.contains("continued"));
+    Ok(())
+}

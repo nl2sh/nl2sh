@@ -318,3 +318,40 @@ async fn auto_stream_never_replays_after_text_was_emitted() -> anyhow::Result<()
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn auto_stream_never_replays_after_reasoning_was_emitted() -> anyhow::Result<()> {
+    #[derive(Default)]
+    struct ReasoningSink(std::sync::Mutex<String>);
+    impl nl2sh::llm::TextDeltaSink for ReasoningSink {
+        fn delta(&self, _: &str) {}
+        fn reasoning_delta(&self, text: &str) {
+            if let Ok(mut value) = self.0.lock() {
+                value.push_str(text);
+            }
+        }
+    }
+    let server = MockServer::start().await;
+    Mock::given(method("POST")).and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).insert_header("content-type","text/event-stream")
+            .set_body_string("data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"partial reasoning\"}\n\n"))
+        .expect(1).mount(&server).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+    let client = build_client(&Config {
+        endpoint: format!("{}/v1", server.uri()),
+        api_type: ApiType::Auto,
+        ..Config::default()
+    })?;
+    let sink = ReasoningSink::default();
+    assert!(client.complete_stream(request(), &sink).await.is_err());
+    assert_eq!(
+        sink.0.lock().map_err(|_| anyhow::anyhow!("lock"))?.as_str(),
+        "partial reasoning"
+    );
+    Ok(())
+}

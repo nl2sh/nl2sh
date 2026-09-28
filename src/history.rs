@@ -2,10 +2,11 @@ use crate::limits::truncate_text;
 use anyhow::{Context, Result};
 use serde::Serialize;
 use std::{
+    collections::HashMap,
     fs::{File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock, Weak},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -20,6 +21,8 @@ pub struct HistoryLog {
     event_max_bytes: usize,
     file_max_bytes: u64,
 }
+
+static OPEN_LOGS: OnceLock<Mutex<HashMap<PathBuf, Weak<Mutex<HistoryState>>>>> = OnceLock::new();
 
 struct HistoryState {
     file: File,
@@ -53,6 +56,19 @@ impl HistoryLog {
         } else {
             crate::config::state_dir(config_path)?.join(configured_path)
         };
+        let mut logs = OPEN_LOGS
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .map_err(|_| anyhow::anyhow!("history registry lock is poisoned"))?;
+        logs.retain(|_, state| state.strong_count() > 0);
+        if let Some(state) = logs.get(&path).and_then(Weak::upgrade) {
+            return Ok(Self {
+                path,
+                state,
+                event_max_bytes,
+                file_max_bytes,
+            });
+        }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("cannot create history directory {}", parent.display()))?;
@@ -68,13 +84,15 @@ impl HistoryLog {
             .metadata()
             .context("cannot inspect history log size")?
             .len();
+        let state = Arc::new(Mutex::new(HistoryState {
+            file,
+            bytes,
+            full: bytes >= file_max_bytes,
+        }));
+        logs.insert(path.clone(), Arc::downgrade(&state));
         Ok(Self {
             path,
-            state: Arc::new(Mutex::new(HistoryState {
-                file,
-                bytes,
-                full: bytes >= file_max_bytes,
-            })),
+            state,
             event_max_bytes,
             file_max_bytes,
         })

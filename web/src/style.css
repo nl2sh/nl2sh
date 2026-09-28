@@ -293,3 +293,9 @@ button:disabled { opacity: .45; }
   .setup-steps li::before { width: 1.3rem; height: 1.3rem; }
   .config-row small { font-size: .78rem; }
 }
+
+.reasoning { margin: .5rem 0; border: 1px solid var(--border); border-radius: 8px; }
+.reasoning summary { cursor: pointer; padding: .6rem; color: var(--text-secondary); }
+.reasoning .message { border-bottom: 0; }
+.task-summary { padding: .6rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); font-size: .85rem; }
+.task-timing { flex-basis: 100%; overflow-wrap: anywhere; }

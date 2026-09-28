@@ -23,12 +23,53 @@ struct SessionDocument {
     turns: Vec<Vec<ConversationItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     web_checkpoint: Option<WebCheckpoint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    web_presentation: Option<WebPresentation>,
 }
 
 struct SaveMetadata<'a> {
     name: &'a str,
     title: &'a str,
     created_override: Option<u64>,
+    presentation: Option<WebPresentation>,
+}
+
+/// Display-only accounting for the current or most recent Web task.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebTaskMetrics {
+    /// Whether this task was measured; old sessions cannot reconstruct timing.
+    pub timing_available: bool,
+    /// Model requests started, including failed or cancelled requests.
+    pub steps: usize,
+    /// Admitted tool calls, including rejected calls.
+    pub tool_calls: usize,
+    /// Total wall-clock time, including user waits.
+    pub total_ms: u64,
+    /// Model request time, including transport retries.
+    pub model_ms: u64,
+    /// Tool handling time, excluding user waits.
+    pub tool_ms: u64,
+    /// Approval and supplemental-input wait time.
+    pub waiting_ms: u64,
+}
+
+/// Bounded Web display history and statistics, isolated from model context.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebPresentation {
+    /// Bounded display lines, including provider reasoning and task summaries.
+    pub history: Vec<String>,
+    /// Total user tasks accepted by this Web session.
+    pub turns: usize,
+    /// Current or most recent task counters and timing.
+    pub task: WebTaskMetrics,
+    /// Input tokens accumulated across the session.
+    pub input_tokens: u64,
+    /// Output tokens accumulated across the session.
+    pub output_tokens: u64,
+    /// Input token count of the last model request.
+    pub final_input_tokens: Option<u64>,
 }
 
 /// Diagnostic display state for one unfinished Web request; never used as model history.
@@ -140,11 +181,36 @@ impl SessionStore {
                 name,
                 title,
                 created_override: None,
+                presentation: None,
             },
             turns,
             tool_limit,
             secrets,
             checkpoint,
+        )
+    }
+
+    /// Saves Web diagnostics and display accounting together with complete model turns.
+    pub fn save_web_observed(
+        &self,
+        name: &str,
+        title: &str,
+        turns: &[Vec<ConversationItem>],
+        tool_limit: usize,
+        secrets: &[String],
+        display: (Option<&WebCheckpoint>, WebPresentation),
+    ) -> Result<()> {
+        self.save_web_state_with_metadata(
+            SaveMetadata {
+                name,
+                title,
+                created_override: None,
+                presentation: Some(display.1),
+            },
+            turns,
+            tool_limit,
+            secrets,
+            display.0,
         )
     }
 
@@ -160,6 +226,7 @@ impl SessionStore {
             name,
             title,
             created_override,
+            presentation,
         } = metadata;
         validate_name(name)?;
         let title = if title.trim().is_empty() {
@@ -202,6 +269,35 @@ impl SessionStore {
             .duration_since(UNIX_EPOCH)
             .map_or(0, |duration| duration.as_secs());
         let target = self.path(name);
+        let previous = fs::read(&target)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<SessionDocument>(&bytes).ok());
+        let mut web_presentation =
+            presentation.or_else(|| previous.and_then(|value| value.web_presentation));
+        if let Some(display) = web_presentation.as_mut() {
+            let secrets = secrets
+                .iter()
+                .filter(|secret| !secret.is_empty())
+                .collect::<Vec<_>>();
+            let mut bytes = 0usize;
+            let mut history = Vec::new();
+            for line in display.history.iter().rev().take(400) {
+                let mut line = line.clone();
+                redact_text(&mut line, &secrets);
+                let line = truncate_text(&line, 16 * 1024);
+                if bytes.saturating_add(line.len()) > 512 * 1024 {
+                    break;
+                }
+                bytes += line.len();
+                history.push(line);
+            }
+            let omitted = history.len() < display.history.len();
+            if omitted {
+                history.push("[NL2SH OUTPUT TRUNCATED: older Web display entries omitted]".into());
+            }
+            history.reverse();
+            display.history = history;
+        }
         let created_unix_secs = created_override.unwrap_or_else(|| {
             fs::read(&target)
                 .ok()
@@ -226,6 +322,7 @@ impl SessionStore {
             updated_unix_secs: now,
             turns: bounded,
             web_checkpoint,
+            web_presentation,
         };
         let encoded = serde_json::to_vec(&document).context("cannot encode session")?;
         if encoded.len() as u64 > MAX_SESSION_BYTES {
@@ -284,6 +381,21 @@ impl SessionStore {
             bail!("session identity or version is invalid")
         }
         Ok(document.web_checkpoint)
+    }
+
+    /// Loads Web display accounting without exposing it to the model.
+    pub fn load_web_presentation(&self, name: &str) -> Result<Option<WebPresentation>> {
+        validate_name(name)?;
+        let bytes = fs::read(self.path(name)).context("cannot read Web presentation")?;
+        if bytes.len() as u64 > MAX_SESSION_BYTES {
+            bail!("session exceeds its size limit")
+        }
+        let document: SessionDocument =
+            serde_json::from_slice(&bytes).context("invalid session data")?;
+        if document.version != 1 || document.name != name {
+            bail!("session identity or version is invalid")
+        }
+        Ok(document.web_presentation)
     }
 
     /// Lists saved sessions without reading unrelated files.
@@ -379,6 +491,7 @@ impl SessionStore {
                 name: new,
                 title: &info.title,
                 created_override: Some(info.created_unix_secs),
+                presentation: self.load_web_presentation(old)?,
             },
             &turns,
             MAX_SESSION_BYTES as usize,
@@ -556,6 +669,58 @@ fn private_new_file(path: &Path) -> Result<fs::File> {
 mod tests {
     use super::*;
     use crate::llm::{ConversationMessage, Role};
+
+    #[test]
+    fn web_presentation_is_bounded_redacted_and_preserved_by_title_and_rename() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let store = SessionStore::open(&directory.path().join("config.toml"))?;
+        let display = WebPresentation {
+            history: (0..400)
+                .map(|index| format!("{index} {} secret-key", "x".repeat(16000)))
+                .collect(),
+            turns: 7,
+            task: WebTaskMetrics {
+                steps: 3,
+                tool_calls: 2,
+                total_ms: 5000,
+                timing_available: true,
+                ..WebTaskMetrics::default()
+            },
+            ..WebPresentation::default()
+        };
+        store.save_web_observed(
+            "observed",
+            "title",
+            &[],
+            1024,
+            &["secret-key".into()],
+            (None, display),
+        )?;
+        let restored = store
+            .load_web_presentation("observed")?
+            .context("presentation")?;
+        assert_eq!(restored.turns, 7);
+        assert_eq!(restored.task.total_ms, 5000);
+        assert!(restored.history.len() < 400);
+        assert!(restored.history.iter().map(String::len).sum::<usize>() < 513 * 1024);
+        assert!(!restored
+            .history
+            .iter()
+            .any(|line| line.contains("secret-key")));
+        assert!(restored.history[0].contains("TRUNCATED"));
+        store.save_redacted_with_title("observed", "updated title", &[], 1024, &[])?;
+        store.rename("observed", "renamed")?;
+        assert_eq!(
+            store
+                .load_web_presentation("renamed")?
+                .context("renamed")?
+                .task
+                .steps,
+            3
+        );
+        assert!(store.load("renamed", 10, 1024)?.is_empty());
+        Ok(())
+    }
 
     #[test]
     fn saves_lists_loads_renames_and_deletes() -> Result<()> {

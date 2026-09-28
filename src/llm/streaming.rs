@@ -94,6 +94,13 @@ fn handle_event(
                 if let Some(delta) = value["delta"].as_str() {
                     sink.delta(delta);
                 }
+            } else if matches!(
+                value["type"].as_str(),
+                Some("response.reasoning_summary_text.delta" | "response.reasoning_text.delta")
+            ) {
+                if let Some(delta) = value["delta"].as_str() {
+                    sink.reasoning_delta(delta);
+                }
             } else if value["type"] == "response.completed" {
                 *responses_final = Some(responses::response(value["response"].clone())?);
             } else if value["type"] == "error" {
@@ -119,6 +126,12 @@ impl ChatStream {
             return Ok(());
         };
         let delta = &choice["delta"];
+        if let Some(reasoning) = delta["reasoning_content"]
+            .as_str()
+            .or_else(|| delta["reasoning"].as_str())
+        {
+            sink.reasoning_delta(reasoning);
+        }
         if let Some(text) = delta["content"].as_str() {
             self.text.push_str(text);
             sink.delta(text);
@@ -229,6 +242,72 @@ mod tests {
         )?;
         let result = stream.finish()?;
         assert!(result.tool_calls[0].argument_error().is_some());
+        Ok(())
+    }
+
+    #[derive(Default)]
+    struct ReasoningSink {
+        reasoning: Mutex<String>,
+        text: Mutex<String>,
+    }
+    impl TextDeltaSink for ReasoningSink {
+        fn delta(&self, text: &str) {
+            if let Ok(mut value) = self.text.lock() {
+                value.push_str(text);
+            }
+        }
+        fn reasoning_delta(&self, text: &str) {
+            if let Ok(mut value) = self.reasoning.lock() {
+                value.push_str(text);
+            }
+        }
+    }
+
+    #[test]
+    fn reasoning_is_forwarded_separately_from_answer_and_tool_arguments() -> Result<()> {
+        let sink = ReasoningSink::default();
+        let mut stream = ChatStream::default();
+        stream.push(
+            &serde_json::json!({"choices":[{"delta":{"reasoning_content":"先检查"}}]}),
+            &sink,
+        )?;
+        stream.push(&serde_json::json!({"choices":[{"delta":{"reasoning":"证据","content":"完成"},"finish_reason":"stop"}]}), &sink)?;
+        let result = stream.finish()?;
+        assert_eq!(result.text.as_deref(), Some("完成"));
+        assert_eq!(
+            *sink.reasoning.lock().map_err(|_| anyhow::anyhow!("lock"))?,
+            "先检查证据"
+        );
+        assert_eq!(
+            *sink.text.lock().map_err(|_| anyhow::anyhow!("lock"))?,
+            "完成"
+        );
+        assert!(result.tool_calls.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn responses_reasoning_summary_deltas_are_display_only() -> Result<()> {
+        let sink = ReasoningSink::default();
+        let mut chat = ChatStream::default();
+        let mut final_response = None;
+        handle_event(
+            "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"检查结果\"}",
+            ApiType::Responses,
+            &sink,
+            &mut chat,
+            &mut final_response,
+        )?;
+        assert_eq!(
+            *sink.reasoning.lock().map_err(|_| anyhow::anyhow!("lock"))?,
+            "检查结果"
+        );
+        assert!(sink
+            .text
+            .lock()
+            .map_err(|_| anyhow::anyhow!("lock"))?
+            .is_empty());
+        assert!(final_response.is_none());
         Ok(())
     }
 

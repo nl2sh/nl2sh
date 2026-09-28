@@ -13,12 +13,18 @@ const DIALECT_CHAT_COMPLETIONS: u8 = 2;
 pub trait TextDeltaSink: Send + Sync {
     /// Reports the Agent phase around a streaming request, when supported by the UI.
     fn agent_activity(&self, _activity: &'static str, _detail: Option<&str>) {}
+    /// Reports the current task step, admitted tools, and accumulated token usage.
+    fn agent_progress(&self, _steps: usize, _tools: usize, _usage: &super::Usage) {}
+    /// Appends provider-supplied reasoning or a reasoning summary for display only.
+    fn reasoning_delta(&self, _text: &str) {}
     /// Starts a new provider generation.
     fn begin(&self) {}
     /// Appends one text fragment in provider order.
     fn delta(&self, text: &str);
     /// Finishes the current generation. `completed` is false on failure/cancellation.
     fn end(&self, _completed: bool) {}
+    /// Reports a complete tool request for bounded diagnostics before preparation.
+    fn tool_requested(&self, _call: &super::ToolCall) {}
     /// Reports that one model-requested tool is about to execute.
     fn tool_started(&self, _call_id: &str, _name: &str) {}
     /// Reports the final bounded result of one model-requested tool.
@@ -295,6 +301,12 @@ impl<'a> TrackingSink<'a> {
 }
 
 impl TextDeltaSink for TrackingSink<'_> {
+    fn reasoning_delta(&self, text: &str) {
+        if !text.is_empty() {
+            self.emitted.store(1, Ordering::Release);
+        }
+        self.inner.reasoning_delta(text);
+    }
     fn delta(&self, text: &str) {
         if !text.is_empty() {
             self.emitted.store(1, Ordering::Release);

@@ -4,6 +4,9 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- Web 可观测性验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 与 `git diff --check` 通过；246 项 Rust 测试和 21 项前端测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。新增回归覆盖实时预算计数、思考内容隔离、协议禁止重放、分阶段计时与冻结、失败恢复、日志脱敏及共享限额。
+- Web 可观测性修复：会话轮次按接受任务累计，本轮步骤与工具计数由 Runner 实时推送，失败、取消和恢复后保留统计；输入区与每轮历史摘要区分总耗时、模型请求、工具处理及人工等待。Provider 返回的思考增量单独折叠显示，工具轮中间说明保留；思考内容和统计作为有界、脱敏显示状态保存，不进入模型上下文。Web 审计事件写入共享 JSONL 日志并标识会话、工具调用与耗时；同路径日志句柄共享限额和清空状态。Agent 提示优先使用有界定向日志查询，超时后先缩小扫描范围。未改变 Android 安全确认、Root 或 PTY 路径。
+
 - Linux 一键安装与 Windows 保持一致：完整已安装目录会直接复用并启动，显式 Provider/模型/Endpoint 只合并更新对应 TOML 顶层字段，未提供新 Key 时保留旧 API Key 及其他 TUI 设置，无参数重跑则完整保留配置。复用路径继续在 `curl | bash` 后恢复 controlling terminal，不完整目录仍失败关闭。
 - Linux 安装复用回归在隔离的完整双 ABI 目录中通过：自定义 Provider/模型/Endpoint 被更新，原 API Key 和 `max_agent_steps` 等其他配置保留，配置权限为 `0600`，且未进入 Release 下载路径。`bash -n install-android.sh android-run-linux.sh pack-release.sh`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 和 `git diff --check` 通过；239 项测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。
 - Windows CMD/PowerShell 一键安装现可幂等复用完整的已安装目录：检查 Windows launcher 与两个 ABI 程序后直接启动；本次显式传入 Provider/模型/Endpoint 时只合并更新对应 TOML 顶层字段，保留其他 TUI 设置，未提供新 API Key 时也保留旧 Key；无配置参数重跑时保留整份现有配置。不完整或非目录路径仍拒绝自动覆盖，避免破坏用户文件。

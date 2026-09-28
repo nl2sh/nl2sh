@@ -28,9 +28,15 @@ struct MockLlm {
 #[derive(Default)]
 struct ToolEventSink {
     events: Mutex<Vec<String>>,
+    progress: Mutex<Vec<(usize, usize)>>,
 }
 
 impl TextDeltaSink for ToolEventSink {
+    fn agent_progress(&self, steps: usize, tools: usize, _: &Usage) {
+        if let Ok(mut progress) = self.progress.lock() {
+            progress.push((steps, tools));
+        }
+    }
     fn delta(&self, _: &str) {}
 
     fn tool_started(&self, call_id: &str, name: &str) {
@@ -571,6 +577,13 @@ async fn streaming_sink_receives_tool_start_and_finish_in_order() -> Result<()> 
             .map_err(|_| anyhow::anyhow!("tool event lock poisoned"))?
             .as_slice(),
         ["started:1:execute_shell_command", "finished:1:true:true"]
+    );
+    assert_eq!(
+        sink.progress
+            .lock()
+            .map_err(|_| anyhow::anyhow!("lock"))?
+            .as_slice(),
+        [(1, 0), (1, 0), (1, 1), (2, 1), (2, 1)]
     );
     Ok(())
 }
