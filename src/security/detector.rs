@@ -58,11 +58,57 @@ fn has_mutating_redirection(command: &str) -> bool {
 
 fn shell_reparses_arguments(command: &str) -> bool {
     let value = command.to_ascii_lowercase();
-    [
-        " -c ", " -lc ", " -e ", "eval ", "system(", "| sh", "| bash", "| su",
-    ]
-    .iter()
-    .any(|marker| value.contains(marker))
+    if ["eval ", "system(", "| sh", "| bash", "| su"]
+        .iter()
+        .any(|marker| value.contains(marker))
+    {
+        return true;
+    }
+
+    // Bind code-execution options to known interpreters. In particular, grep's
+    // -E/-e/-c and sed's -e must not expose quoted patterns as shell redirections.
+    // This remains conservative token detection, not a complete shell parser.
+    let mut lexical = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(character, ';' | '&' | '|' | '(' | ')' | '`') {
+            lexical.push(' ');
+            lexical.push(character);
+            lexical.push(' ');
+        } else {
+            lexical.push(character);
+        }
+    }
+    // Inspect quoted code too: an interpreter may be nested inside a command
+    // substitution in a double-quoted argument.
+    let tokens: Vec<_> = lexical
+        .split_whitespace()
+        .map(|token| token.trim_matches(['\'', '"']))
+        .collect();
+    tokens.iter().enumerate().any(|(index, token)| {
+        let name = token.rsplit('/').next().unwrap_or(token);
+        let code_option = match name {
+            "sh" | "bash" | "dash" | "ash" | "ksh" | "mksh" | "zsh" | "su" => 'c',
+            "perl" | "ruby" | "node" | "nodejs" | "awk" | "gawk" | "lua" | "luajit" | "r"
+            | "rscript" => 'e',
+            name if name
+                .strip_prefix("python")
+                .is_some_and(|version| version.chars().all(|c| c.is_ascii_digit() || c == '.')) =>
+            {
+                'c'
+            }
+            _ => return false,
+        };
+        tokens[index + 1..]
+            .iter()
+            // Options may have values before -c/-e (e.g. bash --rcfile path -c).
+            // Stop at a compound-command boundary instead of the first value.
+            .take_while(|argument| !matches!(**argument, "--" | ";" | "&" | "|" | "(" | ")" | "`"))
+            .any(|argument| {
+                argument.strip_prefix('-').is_some_and(|options| {
+                    !options.starts_with('-') && options.contains(code_option)
+                })
+            })
+    })
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

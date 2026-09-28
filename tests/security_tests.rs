@@ -121,6 +121,62 @@ fn quoted_output_and_mount_listing_stay_read_only_without_hiding_writes() {
     }
 }
 
+const TOMBSTONE_QUERY: &str = r#"ls -la /data/tombstones/ 2>/dev/null | head -n 30; for f in /data/tombstones/tombstone_0*; do case "$f" in *.pb) continue;; esac; echo "=== $f"; grep -m3 -E "pid:|>>> |Cmdline|signal " "$f" | head -n 5; done"#;
+
+#[test]
+fn diagnostic_options_do_not_reparse_quoted_patterns() {
+    let cfg = Config::default();
+    for command in [
+        TOMBSTONE_QUERY,
+        r#"grep -E "pid:|>>> |Cmdline|signal " tombstone"#,
+        "grep -e '>>>' tombstone",
+        "grep -c '>>>' tombstone",
+        "sed -e 's/>>>/signal/g' tombstone",
+    ] {
+        let assessment = assess(command, &cfg);
+        assert_eq!(assessment.risk_level, RiskLevel::ReadOnly, "{command}");
+        assert!(!assessment.requires_confirmation, "{command}");
+        assert!(!assessment.requires_root, "{command}");
+    }
+    let strict = Config {
+        security_level: SecurityLevel::Strict,
+        ..cfg
+    };
+    let assessment = assess(TOMBSTONE_QUERY, &strict);
+    assert_eq!(assessment.risk_level, RiskLevel::ReadOnly);
+    assert!(assessment.requires_confirmation);
+}
+
+#[test]
+fn diagnostic_patterns_do_not_hide_real_or_reparsed_writes() {
+    let cfg = Config::default();
+    for command in [
+        format!("{TOMBSTONE_QUERY} > /data/local/tmp/output"),
+        r#"grep -E "$(echo x > /data/local/tmp/output)" tombstone"#.into(),
+        "grep -e '`echo x > /data/local/tmp/output`' tombstone > /data/local/tmp/result".into(),
+        "sh -c 'echo x > /data/local/tmp/output'".into(),
+        "/system/bin/sh -lc 'echo x > /data/local/tmp/output'".into(),
+        "env sh -x -c 'echo x > /data/local/tmp/output'".into(),
+        "bash --rcfile /data/local/tmp/bashrc -c 'echo x > /data/local/tmp/output'".into(),
+        "toybox sh -ec 'echo x > /data/local/tmp/output'".into(),
+        "true;sh -c 'echo x > /data/local/tmp/output'".into(),
+        r#"echo "$(sh -c 'echo x > /data/local/tmp/output')""#.into(),
+        r#"echo "`sh -c 'echo x > /data/local/tmp/output'`""#.into(),
+        r#"python3 -c 'open("/data/local/tmp/output", "w").write("x > y")'"#.into(),
+        r#"/usr/bin/python3.11 -c 'open("/data/local/tmp/output", "w").write("x > y")'"#.into(),
+        r#"perl -e 'open(my $f, ">", "/data/local/tmp/output"); print $f "x"'"#.into(),
+        r#"perl -I /data/local/tmp/lib -e 'open(my $f, ">", "/data/local/tmp/output")'"#.into(),
+        r#"node -e 'require("fs").writeFileSync("/data/local/tmp/output", "x > y")'"#.into(),
+        r#"lua -e 'io.open("/data/local/tmp/output", "w"):write("x > y")'"#.into(),
+        "eval 'echo x > /data/local/tmp/output'".into(),
+        "echo 'echo x > /data/local/tmp/output' | sh".into(),
+    ] {
+        let assessment = assess(&command, &cfg);
+        assert!(assessment.risk_level >= RiskLevel::Mutating, "{command}");
+        assert!(assessment.requires_confirmation, "{command}");
+    }
+}
+
 #[test]
 fn mutating_commands_inside_substitutions_still_require_confirmation() {
     let cfg = Config::default();

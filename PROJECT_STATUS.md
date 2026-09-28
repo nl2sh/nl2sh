@@ -4,6 +4,8 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- 修复 tombstone 只读查询误触修改审批：脚本执行选项仅与已知 shell/解释器关联，`grep -E/-e/-c` 与 `sed -e` 的引号内 `>>>` 不再被当作文件写入；真实重定向、脚本包装、eval、管道执行及命令替换仍需按风险确认，strict 继续确认只读操作。公共接口、Android 执行路径与 PTY 行为不变。
+- 安全分类修复验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`、Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 与 `git diff --check` 通过；248 项测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。新增回归覆盖完整 tombstone 循环、诊断选项、真实重定向、嵌套脚本执行、解释器参数与 strict 确认。
 - Web 可观测性验证：`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`、`npm test --prefix web`、`npm run build --prefix web`、Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features` 与 `git diff --check` 通过；246 项 Rust 测试和 21 项前端测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。新增回归覆盖实时预算计数、思考内容隔离、协议禁止重放、分阶段计时与冻结、失败恢复、日志脱敏及共享限额。
 - Web 可观测性修复：会话轮次按接受任务累计，本轮步骤与工具计数由 Runner 实时推送，失败、取消和恢复后保留统计；输入区与每轮历史摘要区分总耗时、模型请求、工具处理及人工等待。Provider 返回的思考增量单独折叠显示，工具轮中间说明保留；思考内容和统计作为有界、脱敏显示状态保存，不进入模型上下文。Web 审计事件写入共享 JSONL 日志并标识会话、工具调用与耗时；同路径日志句柄共享限额和清空状态。Agent 提示优先使用有界定向日志查询，超时后先缩小扫描范围。未改变 Android 安全确认、Root 或 PTY 路径。
 
