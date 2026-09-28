@@ -2,11 +2,11 @@
 
 [English](README.md)
 
-这个可选的主机侧模块通过 A2A 1.0 JSON-RPC 接口开放 Android 设备上的 nl2sh Agent。Android 端仍只需部署一个 Rust 可执行文件；Python 和 A2A SDK 运行在开发主机上。网关使用指定的 `adb` 设备序列号，通过受限的 `nl2sh bridge` JSON 接口通信，不开放任意 adb shell 命令接口。
+这个可选的主机侧模块通过 A2A 1.0 JSON-RPC 接口开放 Android 设备上的 nl2sh Device Runtime。外部 Agent 可直接调用已注册的设备工具，也可选择咨询 nl2sh 内置 Agent。Android 端仍只需部署一个 Rust 可执行文件；Python 和 A2A SDK 运行在网关主机上。网关使用指定的 `adb` 设备序列号，通过受限的 `nl2sh bridge` JSON 接口通信，不开放任意 adb shell 命令接口。
 
 ## 启动
 
-前提条件：Python 3.11 或更新版本、`adb`、已连接的 Android 设备、设备上兼容的 nl2sh 程序，以及已配置的 nl2sh 模型服务。在虚拟环境中安装网关：
+前提条件：Python 3.11 或更新版本、`adb`、已连接的 Android 设备，以及设备上兼容的 nl2sh 程序。直接调用 Tool Runtime 不需要设备端模型服务；只有可选的内置 Agent 咨询需要配置模型。在虚拟环境中安装网关：
 
 ```sh
 python3 -m venv .venv
@@ -30,9 +30,11 @@ $env:NL2SH_A2A_TOKEN = & .\.venv\Scripts\python.exe -c 'import secrets; print(se
 
 公开的 Agent Card 位于 `http://127.0.0.1:8765/.well-known/agent-card.json`；JSON-RPC 接口位于 `/a2a`，请求必须携带 `Authorization: Bearer <token>`。其他机器需要访问时，可通过 HTTPS 反向代理发布这个仅监听本机的服务，并使用 `--advertised-url` 指定客户端可访问的地址。一个令牌代表一个受信任的使用者，不应共享给互不信任的客户端。nl2sh 原有 Web 界面使用独立的监听端口和访问策略。
 
-客户端发送 `/inspect` 可获取固定的只读设备环境信息，发送 `/tools` 可获取可用工具目录，发送普通问题则会启动一次设备端 Agent 对话。续问时使用相同的 A2A `contextId`。A2A 任务保存在网关的 SQLite 数据库中，Agent 对话回合保存在 nl2sh 的设备端私有会话目录中。A2A 任务即使标记为完成，结果中的 `failed_tools` 仍可能列出被拒绝或执行失败的工具；确认操作成功前必须检查该字段。
+客户端发送 `/inspect` 可获取固定的只读设备环境信息，发送 `/tools` 可获取可用工具目录，发送 `/invoke {"tool":"android.screen_dump","arguments":{}}` 可直接调用一次设备 Tool Runtime，发送普通问题则会启动可选的设备端 Agent 对话。直接调用跳过设备端 Agent 和模型请求。Agent 续问时使用相同的 A2A `contextId`。A2A 任务保存在网关的 SQLite 数据库中，Agent 对话回合保存在 nl2sh 的设备端私有会话目录中。确认成功前须检查直接调用结果的 `success` 或 Agent 结果的 `failed_tools`。
 
-设备桥接入口会拒绝所有需要本地确认的操作，包括修改和危险命令。通过桥接入口调用时，即使本地配置使用 `unsafe` 或 `never`，也会在安全分类前至少提升至 `balanced` 和 `risk_only` 策略。这样仍保持 `LLM → Security → Confirmation → Execution` 安全链；A2A 调用方不能批准设备操作或改变该策略。需要确认的操作可由用户通过原有 TUI 或 Web 界面处理。网关限制请求大小和执行时间，但持有令牌的调用方仍可要求 Agent 查看设备账号有权读取的数据，因此应妥善保护令牌。
+当前 UI 后端使用 Android shell/uiautomator，可选安装并启用 [Accessibility companion](../android-bridge/README.md) 以支持中文等 Unicode 输入、实时节点树、语义节点点击和 swipe/scroll 手势。`android.scroll` 可省略坐标，按显示尺寸默认向下滚动，也可设置 `direction: "up"`。没有 companion 时，`android.input_text` 仅接受可打印 ASCII。操作后可再调用 `android.screen_dump` 或 `nl2sh_read_screen` 检查实际屏幕内容。
+
+直接 `/invoke` 调用遇到需要确认的操作时，最多等待 120 秒，让用户在另一个设备交互终端作出一次性决定。在设备上运行 `nl2sh --config /data/local/tmp/config.toml bridge approvals` 查看请求，再运行 `nl2sh --config /data/local/tmp/config.toml bridge approve REQUEST_ID`。审批命令展示完整操作和风险；危险操作要求再次输入精确短语。拒绝或超时均不执行。网关不暴露审批命令；旧的 Agent `/ask` 调用仍拒绝待确认操作。桥接调用会把本地 `unsafe`/`never` 设置至少提升到 `balanced`/`risk_only`，令牌持有者可请求设备账号有权读取的数据，应妥善保护令牌。
 
 ## 构建、部署并继续任务
 
@@ -51,9 +53,33 @@ Windows 主机执行这些检查点时，应在 WSL 的 Linux 项目检出目录
 
 运行网关测试：Unix 使用 `.venv/bin/python -m unittest discover -s tests -v`；Windows PowerShell 使用 `& .\.venv\Scripts\python.exe -m unittest discover -s tests -v`。
 
+## Hermes 等外部 Agent 的直接工具调用
+
+外部 Agent 可用 A2A 1.0 客户端连接经过鉴权的 `/a2a` 接口，或用 stdio MCP 客户端连接 `nl2sh-a2a-mcp`，并在适配器环境中设置 `NL2SH_A2A_URL`、`NL2SH_A2A_TOKEN`。MCP 适配器只需要 Python 与到网关的网络连接，不需要本机 `adb` 或设备端模型凭据。先用 `nl2sh_tools` 取得工具名称及参数 Schema，再通过 `nl2sh_invoke` 传入注册工具名称与结构化参数。视觉步骤可用 `nl2sh_read_screen`，可访问节点可用 `android.screen_dump`。外部 Agent 自己负责规划和生成语言；`nl2sh_ask` 会启动独立、可选的设备端内置 Agent，需设备端配置模型服务。
+
+Hermes Agent 可在运行主机的 Python 虚拟环境中安装本网关包，再把下面的配置加入 `~/.hermes/config.yaml`。将命令路径替换为该虚拟环境中的 `nl2sh-a2a-mcp` 可执行文件，并在 Hermes 私有的 `~/.hermes/.env` 或进程环境设置 `NL2SH_A2A_TOKEN`。Hermes 与 A2A 网关同机时可用示例中的 loopback 地址；分机运行时应使用网关对外公布的 HTTPS 来源地址。
+
+```yaml
+mcp_servers:
+  nl2sh_android:
+    command: "/path/to/nl2sh-a2a-mcp"
+    env:
+      NL2SH_A2A_URL: "http://127.0.0.1:8765"
+      NL2SH_A2A_TOKEN: "${NL2SH_A2A_TOKEN}"
+    timeout: 210
+    tools:
+      include: [nl2sh_inspect, nl2sh_tools, nl2sh_invoke, nl2sh_read_screen]
+      resources: false
+      prompts: false
+```
+
+工具白名单让 Hermes 只看到直接调用路径，不加载可选的内置 Agent `nl2sh_ask`。210 秒 MCP 调用超时覆盖网关的 200 秒请求上限及设备端 120 秒审批窗口。修改配置后重启 Hermes 或重新加载 MCP 连接。以上字段和环境变量引用见 Hermes 官方 [MCP 配置参考](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference)。
+
+例如先以 `{}` 调用 `android.screen_dump`，确认出现目标节点后，再以 `{"text":"搜索"}` 调用 `android.tap_text`。第二步需设备本地审批；操作后重新读取 UI 并检查直接结果的 `success`。这条流程不绑定具体 App，也不向外部 Agent 提供批准入口。
+
 ## 供 Codex 使用的 A2A→MCP 适配层
 
-同一个 Python 包还会安装 `nl2sh-a2a-mcp`，这是一个运行在本机、通过标准输入输出通信的 MCP 服务。它向网关发送带认证的 A2A 1.0 请求，本身不直接连接 Android 或 `adb`。它提供 `nl2sh_inspect`、`nl2sh_tools`、`nl2sh_ask` 和 `nl2sh_get_task` 四个工具。每次结果都包含 `task_id`、`context_id` 和任务 `state`；已完成的任务还包含设备返回结果。续问时将 `context_id` 传给 `nl2sh_ask`，声称操作成功前应检查 `result.failed_tools`。
+同一个 Python 包还会安装 `nl2sh-a2a-mcp`，这是一个运行在本机、通过标准输入输出通信的 MCP 服务。它向网关发送带认证的 A2A 1.0 请求，本身不直接连接 Android 或 `adb`。它提供 `nl2sh_inspect`、`nl2sh_tools`、`nl2sh_invoke`、`nl2sh_read_screen`、`nl2sh_ask` 和 `nl2sh_get_task` 六个工具。`nl2sh_read_screen` 返回视觉模型可读取的 MCP 图像块。每次结果都包含 `task_id`、`context_id` 和任务 `state`；已完成的任务还包含设备返回结果。续问时将 `context_id` 传给 `nl2sh_ask`，确认成功前应检查直接调用的 `result.success` 或 Agent 的 `result.failed_tools`。
 
 ### 在 Codex 所在机器安装
 

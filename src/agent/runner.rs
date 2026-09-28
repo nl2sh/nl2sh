@@ -638,38 +638,15 @@ impl AgentRunner<'_> {
         ctx: &mut ToolContext<'_>,
         call_id: &str,
     ) -> ToolResult {
-        let outcome: Result<crate::tools::ToolOutput> = async {
-            let assessment = metadata
-                .assessment_for(prepared_risk.unwrap_or(metadata.risk))
-                .context("prepared operation has no structured security assessment")?;
-            if assessment.requires_confirmation {
-                if preview.trim().is_empty() {
-                    bail!("mutating tool has no approval preview")
-                }
-                let started = Instant::now();
-                let decision = self.confirmer.confirm(preview, &assessment).await;
-                ctx.runtime.as_deref_mut().context("tool runtime unavailable")?
-                    .add_confirmation_time(started.elapsed());
-                match decision? {
-                    ConfirmationDecision::Approve
-                    | ConfirmationDecision::ApproveForTask
-                    | ConfirmationDecision::ApproveCaptured
-                    | ConfirmationDecision::ApproveInteractive => {}
-                    ConfirmationDecision::ApproveForRun if super::can_remember_approval(&assessment) => {}
-                    ConfirmationDecision::Edit(_) => {
-                        return Ok(crate::tools::ToolOutput::refused(
-                            "Tool not executed: edit is unavailable for a prepared operation; request a new call.",
-                        ));
-                    }
-                    ConfirmationDecision::Reject | ConfirmationDecision::ApproveForRun => {
-                        return Ok(crate::tools::ToolOutput::refused(
-                            "Tool not executed: user rejected the prepared operation.",
-                        ));
-                    }
-                }
-            }
-            operation.execute(ctx).await
-        }.await;
+        let outcome = crate::tools::runtime::execute_prepared_operation(
+            metadata,
+            prepared_risk,
+            preview,
+            operation,
+            ctx,
+            self.confirmer,
+        )
+        .await;
         match outcome {
             Ok(output) => ToolResult {
                 call_id: call_id.into(),

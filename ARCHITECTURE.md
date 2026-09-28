@@ -28,9 +28,17 @@ Root / su Layer
 Android Runtime
 ```
 
-可选 `a2a_gateway/` 是主机侧独立 Python 模块：A2A 1.0 Agent Card/JSON-RPC、Bearer 认证和 SQLite Task Store → 固定设备序列号的 `adb exec-out` → Android 单文件程序的 `bridge inspect|tools|ask`。`src/bridge` 只提供有界 JSON 输入输出和设备会话续接；Agent 决策、工具注册、安全分类与执行仍在 Rust 核心。A2A `contextId` 映射到私有设备会话；主机侧按会话串行处理消息。桥接确认器拒绝所有需要人工确认的操作，并把失败工具结果反馈给调用方。构建、交叉编译和候选部署是主机侧显式工作流，不作为远程 A2A 技能暴露；候选文件不会覆盖现有设备程序。网关默认仅监听 loopback，远程访问需 HTTPS 反向代理。
+可选 `a2a_gateway/` 是主机侧独立 Python 模块：A2A 1.0 Agent Card/JSON-RPC、Bearer 认证和 SQLite Task Store → 固定设备序列号的 `adb exec-out` → Android 单文件程序的 `bridge inspect|tools|ask|invoke`。`ask` 进入内置 Agent；`invoke` 将具名工具和结构化参数直接交给设备 Tool Runtime，不进行设备端模型请求。两条路径复用工具注册、准备、安全评估和执行边界。A2A `contextId` 映射到私有设备 Agent 会话。`ask` 的无终端确认器继续拒绝待确认操作；`invoke` 在私有一次性 Unix socket 上等待设备交互终端作出决定，超时或拒绝不执行。网关本身不提供批准接口。构建、交叉编译和候选部署是主机侧显式工作流，不作为远程 A2A 技能暴露；候选文件不会覆盖现有设备程序。网关默认仅监听 loopback，远程访问需 HTTPS 反向代理。
 
-同一 Python 包的可选 stdio MCP 适配层在编码 Agent 所在机器运行：MCP 工具 → Agent Card 同来源校验 → 带 Bearer 鉴权的 A2A JSON-RPC → 网关。它公开环境盘点、工具目录、咨询和任务查询，返回 A2A 任务与设备结果；不直接连接 adb，也不增加写入批准入口。
+本地一次性审批的私有目录使用跨进程文件锁串行化请求计数与发布，最多同时保留八个待决请求。强制终止留下的 `live` 标记只有在对应 Unix socket 已不再监听时才清理；正常请求的目录和 socket 仍由 RAII 释放。审批者必须在设备交互终端查看完整动作，危险操作还要输入与请求 ID 绑定的二次确认短语。
+
+同一 Python 包的可选 stdio MCP 适配层在编码 Agent 所在机器运行：MCP 工具 → Agent Card 同来源校验 → 带 Bearer 鉴权的 A2A JSON-RPC → 网关。它公开环境盘点、工具目录、直接工具调用、咨询和任务查询，返回 A2A 任务与设备结果；不直接连接 adb，也不增加写入批准入口。
+
+逻辑上分为 Agent Layer（TUI/Web/CLI 的内置 Agent）、Tool Runtime（注册、参数验证、风险评估、确认和执行）及 Platform Adapters（Android shell、可选 Accessibility companion、Termux 与开发主机条件路径）。直接工具调用只跳过 Agent Layer；安全与确认层仍在设备端。`android.*` 语义工具默认可使用 Android shell 的 `am`、`input`、`uiautomator` 和 `screencap`；应用启动使用限定包名的 MAIN/LAUNCHER Intent，不发送随机输入事件；可选 companion 通过 Android ContentProvider 的 Binder 调用提供实时节点树、按文字或 bounds 点击节点、Unicode 输入和单笔 swipe/scroll 手势，Manifest 的 DUMP 权限与 `Binder.getCallingUid()` 双重限制调用方为 shell/root。文字与节点点击在确认后重读完整 UI 树，核对节点所属包名、类名、资源 ID、文字、描述和 bounds；Accessibility 点击在 companion 内再次复核这些字段。Unicode 输入在确认前后及写入前核对焦点控件的包名、类名、资源 ID 和 bounds。缺失包名的语义写入目标会被拒绝。节点树截断或读取失败时不执行语义点击。手势在确认前固定坐标和时长，确认后重新计算并核对；companion 等待 Android 的完成或取消回调再返回结果，确认后不静默切换到 shell。无路径截图在 Android shell 的 `/data/local/tmp` 或 Termux HOME 建立私有临时目录，并以有界图片附件返回。Shell `input text` 只接受可打印 ASCII，并把字面量 `%s` 拆成独立输入命令以避免被 Android 解码为空格；Unicode 需要安装并启用 companion。远程调用方不能代替设备交互终端批准动作。
+
+Companion 的节点文字和描述最多展示 256 个字符，同时携带完整 UTF-16 内容的 SHA-256 摘要；`android.tap_text` 可以用调用方提供的全文匹配摘要，确认前后及 Accessibility 点击前也校验摘要，避免不同长文本共享展示前缀时误点。旧版本原生程序没有摘要时，companion 只接受不超过展示上限的节点文字和描述。
+
+Companion 的 UI 树同时按节点数和序列化字节数设限；Binder 回复达到预算时返回明确的部分树，语义查找和点击拒绝把部分树当作唯一性证据。原生端对 `content call` 等固定机器协议使用静默管道捕获，避免默认 PTY 影响较长的编码回复；普通交互命令的 PTY、进程组、超时和终端恢复路径不变。
 
 用户输入先成为内部对话消息。Provider 把统一请求映射为 Chat Completions 或 Responses JSON；Tool Call 被转换回内部类型。Agent 只能把 shell tool 交给安全引擎，确认完成后才能调用执行器。stdout、stderr、退出码、超时和错误被编码为 Tool Result，下一轮模型只能依据这些真实结果回答。
 
@@ -77,7 +85,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/tools/file/domain` | `FileToolExecutor`、结构化读取/搜索/补丁 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
 | `src/tools/audio` | WAV/Raw PCM DSP 与 Jev/通用 LLM 质量判断 | 音频 → Feature JSON、`needs_input` 或评分 | Raw PCM 元数据不得猜测；Jev 已配置时失败不回退；不上传原始音频 |
 | `src/tools/chart` | 有界图表规格校验及终端文字回退 | 模型提供的数值 → 结构化 Tool Result | 只读呈现，不采集或验证统计证据 |
-| `src/tools/android` | 固定参数诊断、只读环境盘点、UI bounds 输入、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；输入在确认前和执行前重读 UI 树；写入必须确认 |
+| `src/tools/android` | 固定参数诊断、只读环境盘点、语义 UI 操作、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；文字/节点点击在确认前和执行前重读 UI 树；写入必须确认 |
 | `src/tools/memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
@@ -92,7 +100,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/tools/ui` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
-| `src/bridge` | 固定环境盘点、工具目录和有界 JSON Agent 调用 | `bridge` CLI → JSON / 私有会话 | 只调用现有 Runner；无人值守确认一律拒绝；不开放任意 adb 命令 |
+| `src/bridge`、`src/tools/runtime` | 固定环境盘点、工具目录、有界 JSON Agent 调用和直接工具调用 | `bridge` CLI → JSON / 私有会话或工具结果 | 直接调用绕过 LLM 但保留工具安全链；无人值守确认一律拒绝；不开放任意 adb 命令 |
 | `a2a_gateway` | 主机侧 A2A Agent Card、JSON-RPC、鉴权、Task Store、adb 传输、stdio MCP 适配及显式构建部署 | MCP → A2A 消息 → Android bridge 结果 | 不在设备运行；不直接执行模型输出；部署仅到独立候选路径 |
 | `src/tools` | `Tool`、显式 `ToolRegistry`、风险/能力元数据、派生 schema 与 `PreparedToolCall` | 模型调用 → 预备动作 → 审批后有界结果 | 只用本地元数据定风险；修改预览必须在统一确认入口批准后执行 |
 | `crates/nl2sh-tool-macros` | 编译期 `#[tool]` 生成适配器与元数据 | 注解函数 → Rust Tool 实现 | 只在构建主机运行；不自动注册或授予执行权限 |
@@ -104,7 +112,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 
 公共 trait 允许测试以 mock 替换网络、执行、确认和 root 探测。依赖方向保持 `UI → Agent → abstractions`，security 与 shell 彼此通过调用参数协作，无循环依赖。
 
-模型可见工具由 Registry 显式注册，ima 按本地 `Capability` 条件暴露；参数类型通过 `schemars::JsonSchema` 派生定义。`Tool::prepare` 解析参数并构造预览与待执行动作；工具元数据声明风险下限，剪贴板、媒体和便签按实际参数升高单次风险。Agent 统一根据本地风险决定确认/强确认，再调用 `PreparedExecution::execute`。补丁和下载在确认前只准备 diff 或数据，截图、HTTP POST、输入注入与设备控制必须先显示预览；输入注入执行前重新校验当前 UI bounds。Shell 命令继续逐次经过原安全分类、编辑重评估、Root 与 PTY 回收路径。音频缺参问答与分析缓存、截图附件以及 Web 会话审批沿用既有行为。`define_tool!` 和构建期 `#[tool(...)]` 均只生成适配器，注册和权限仍需显式决定。
+模型可见工具由 Registry 显式注册，ima 按本地 `Capability` 条件暴露；参数类型通过 `schemars::JsonSchema` 派生定义。共用内部参数类型的 `android.*` 工具按各自操作收窄公开字段及必填项，准备阶段也拒绝无关字段，避免外部 Agent 按宽泛 Schema 误填。`Tool::prepare` 解析参数并构造预览与待执行动作；工具元数据声明风险下限，剪贴板、媒体和便签按实际参数升高单次风险。Agent 统一根据本地风险决定确认/强确认，再调用 `PreparedExecution::execute`。补丁和下载在确认前只准备 diff 或数据，截图、HTTP POST、输入注入与设备控制必须先显示预览；输入注入执行前重新校验当前 UI bounds。Shell 命令继续逐次经过原安全分类、编辑重评估、Root 与 PTY 回收路径。音频缺参问答与分析缓存、截图附件以及 Web 会话审批沿用既有行为。`define_tool!` 和构建期 `#[tool(...)]` 均只生成适配器，注册和权限仍需显式决定。
 
 Web 前端源码和 npm lockfile 保存在 `web/`；Cargo 的 `build.rs` 先把源码复制到 `OUT_DIR`，在副本中执行 `npm ci` 和 `npm run build`，再由 `rust-embed` 把产物编入单一可执行文件。构建需要 Node.js/npm，生成目录不进入版本控制或发布源码包；Android 运行时不依赖 Node.js。TUR 构建使用 Termux 提供的主机 Node 工具。
 

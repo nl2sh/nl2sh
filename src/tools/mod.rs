@@ -35,6 +35,7 @@ pub mod file;
 mod ima;
 pub mod memory;
 pub mod network;
+pub mod runtime;
 mod shell;
 pub mod ui;
 
@@ -314,6 +315,7 @@ impl ToolRegistry {
             Box::new(ImaReadTool),
         ];
         tools.extend(extended::builtin_tools());
+        tools.extend(android::tool::builtin_tools());
         Self {
             tools: tools
                 .into_iter()
@@ -356,7 +358,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 41);
+        assert_eq!(names.len(), 57);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()

@@ -27,6 +27,13 @@ async fn main() -> Result<()> {
             BridgeCommand::Ask { payload_base64 } => nl2sh::bridge::BridgeOperation::Ask {
                 payload_base64: payload_base64.clone(),
             },
+            BridgeCommand::Invoke { payload_base64 } => nl2sh::bridge::BridgeOperation::Invoke {
+                payload_base64: payload_base64.clone(),
+            },
+            BridgeCommand::Approvals => nl2sh::bridge::BridgeOperation::Approvals,
+            BridgeCommand::Approve { id } => {
+                nl2sh::bridge::BridgeOperation::Approve { id: id.clone() }
+            }
         };
         return nl2sh::bridge::run(operation, &path).await;
     }

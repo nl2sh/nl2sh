@@ -18,11 +18,30 @@ class FakeDevice:
             return {"kind": "android_environment", "status": "complete"}
         if operation == "tools":
             return [{"name": "inspect_android_environment"}]
+        if operation == "invoke":
+            return {"tool": payload["tool"], "success": True, "output": "direct"}
         self.sessions.append(payload["session"])
         return {"session": payload["session"], "answer": "ready"}
 
 
 class GatewayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_direct_tool_does_not_enter_agent_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            device = FakeDevice()
+            device.sessions = []
+            app = create_app(Settings(device, "x" * 32, str(Path(directory) / "tasks.db"), "http://127.0.0.1:8765"))
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post("/a2a", headers={"Authorization": "Bearer " + "x" * 32, "A2A-Version": "1.0"}, json={
+                    "jsonrpc": "2.0", "id": 1, "method": "SendMessage", "params": {"message": {
+                        "messageId": "direct-1", "role": "ROLE_USER",
+                        "parts": [{"text": '/invoke {"tool":"inspect_android_ui","arguments":{}}'}],
+                    }},
+                })
+                self.assertEqual(response.status_code, 200, response.text)
+                artifact = response.json()["result"]["task"]["artifacts"][0]["parts"][0]["text"]
+                self.assertEqual(json.loads(artifact)["output"], "direct")
+                self.assertEqual(device.sessions, [])
+
     async def test_card_auth_and_task(self):
         with tempfile.TemporaryDirectory() as directory:
             app = create_app(Settings(
@@ -34,6 +53,9 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
                 card = await client.get("/.well-known/agent-card.json")
                 self.assertEqual(card.status_code, 200)
                 self.assertEqual(card.json()["supportedInterfaces"][0]["protocolVersion"], "1.0")
+                self.assertEqual(card.json()["name"], "nl2sh Android Device Runtime")
+                self.assertEqual(card.json()["skills"][0]["id"], "invoke")
+                self.assertIn("without a device LLM", card.json()["description"])
                 request = {
                     "jsonrpc": "2.0", "id": 1, "method": "SendMessage",
                     "params": {"message": {

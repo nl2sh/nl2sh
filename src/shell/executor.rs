@@ -72,6 +72,11 @@ pub trait CommandExecutor: Send + Sync {
     ) -> Result<ExecutionResult> {
         self.execute(command, needs_root, interactive).await
     }
+
+    /// Captures a fixed internal machine protocol without a PTY or output sink.
+    async fn execute_machine(&self, command: &str, needs_root: bool) -> Result<ExecutionResult> {
+        self.execute_quiet(command, needs_root, false).await
+    }
 }
 /// Receives incremental command output without coupling shell code to a UI.
 pub trait OutputSink: Send + Sync {
@@ -159,7 +164,7 @@ impl ShellExecutor {
     /// This bypasses Agent classification because its input comes directly
     /// from the user, while retaining terminal suspension and child cleanup.
     pub async fn execute_user_shell(&self, command: &str) -> Result<ExecutionResult> {
-        self.execute_resolved(command, false, true, true, false)
+        self.execute_resolved(command, false, true, true, false, false)
             .await
     }
 
@@ -170,6 +175,7 @@ impl ShellExecutor {
         interactive: bool,
         force_pty: bool,
         quiet: bool,
+        force_pipe: bool,
     ) -> Result<ExecutionResult> {
         let (program, args) = resolve_invocation(
             command,
@@ -186,7 +192,7 @@ impl ShellExecutor {
             program,
             args,
             timeout_secs: timeout,
-            use_pty: force_pty || self.config.enable_pty,
+            use_pty: !force_pipe && (force_pty || self.config.enable_pty),
             interactive,
             output: if quiet {
                 Arc::new(NullOutput)
@@ -257,7 +263,7 @@ impl CommandExecutor for ShellExecutor {
         needs_root: bool,
         interactive: bool,
     ) -> Result<ExecutionResult> {
-        self.execute_resolved(command, needs_root, interactive, false, false)
+        self.execute_resolved(command, needs_root, interactive, false, false, false)
             .await
     }
 
@@ -267,7 +273,12 @@ impl CommandExecutor for ShellExecutor {
         needs_root: bool,
         interactive: bool,
     ) -> Result<ExecutionResult> {
-        self.execute_resolved(command, needs_root, interactive, false, true)
+        self.execute_resolved(command, needs_root, interactive, false, true, false)
+            .await
+    }
+
+    async fn execute_machine(&self, command: &str, needs_root: bool) -> Result<ExecutionResult> {
+        self.execute_resolved(command, needs_root, false, false, true, true)
             .await
     }
 }

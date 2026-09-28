@@ -2,11 +2,11 @@
 
 [简体中文](README.zh-CN.md)
 
-This optional host-side module exposes an Android nl2sh Agent through the A2A 1.0 JSON-RPC binding. The Android deployment remains one Rust executable; Python and the A2A SDK run on the development host. The gateway uses an exact `adb` serial and a narrow `nl2sh bridge` JSON interface. It does not expose an arbitrary adb shell endpoint.
+This optional host-side module exposes the Android nl2sh Device Runtime through the A2A 1.0 JSON-RPC binding. External agents can call registered device tools directly or optionally consult nl2sh's built-in Agent. The Android deployment remains one Rust executable; Python and the A2A SDK run on the gateway host. The gateway uses an exact `adb` serial and a narrow `nl2sh bridge` JSON interface. It does not expose an arbitrary adb shell endpoint.
 
 ## Start
 
-Prerequisites: Python 3.11+, `adb`, a connected Android device, a compatible nl2sh binary on the device, and a configured nl2sh model provider. Install the gateway in a virtual environment:
+Prerequisites: Python 3.11+, `adb`, a connected Android device, and a compatible nl2sh binary on the device. Direct Tool Runtime calls do not need a device model provider; only the optional built-in Agent consultation does. Install the gateway in a virtual environment:
 
 ```sh
 python3 -m venv .venv
@@ -30,9 +30,11 @@ The `/data/local/tmp/...` paths are on Android and stay the same on Windows. Kee
 
 The public Agent Card is at `http://127.0.0.1:8765/.well-known/agent-card.json`; JSON-RPC is at `/a2a` and requires `Authorization: Bearer <token>`. For other machines, publish the loopback service through an HTTPS reverse proxy and pass its URL with `--advertised-url`. The single token represents one trusted owner; do not share it among mutually untrusted clients. The existing nl2sh Web UI has its own listener and access policy.
 
-Clients can send `/inspect` for fixed read-only environment facts, `/tools` for the available tool catalog, or a normal question for a device Agent turn. Use the same A2A `contextId` for follow-up messages. A2A tasks persist in the gateway SQLite database and Agent turns persist in nl2sh's private device session store. An A2A task can complete with `failed_tools` in its result: that field reports tool denials or errors and must be checked before claiming a requested action succeeded.
+Clients can send `/inspect` for fixed read-only environment facts, `/tools` for the available tool catalog, `/invoke {"tool":"android.screen_dump","arguments":{}}` for one direct Tool Runtime call, or a normal question for an optional device Agent turn. Direct calls skip the device Agent and its model request. Use the same A2A `contextId` for Agent follow-up messages. A2A tasks persist in the gateway SQLite database and Agent turns persist in nl2sh's private device session store. Check `success` in direct call results and `failed_tools` in Agent results before claiming that an action succeeded.
 
-The device bridge always rejects requests that need local confirmation, including modifications and dangerous commands. For bridge calls, local `unsafe` and `never` confirmation settings are raised to the balanced risk policy before classification. This retains `LLM → Security → Confirmation → Execution`; an A2A caller cannot approve a device operation or change the policy. A human can use the existing TUI or Web interface for operations requiring confirmation. The gateway limits request size and execution time, but the authorized owner can still ask the Agent to inspect data the device account can read, so protect the bearer token.
+The UI backend uses Android shell/uiautomator and can optionally use the [Accessibility companion](../android-bridge/README.md) for Unicode input, live nodes, semantic node clicks, and swipe/scroll gestures. `android.scroll` can omit coordinates and defaults to a downward content scroll; use `direction: "up"` to reverse it. Without the companion, `android.input_text` accepts printable ASCII only. Verify the resulting UI with `android.screen_dump` or `nl2sh_read_screen` after an action.
+
+Direct `/invoke` calls that need confirmation wait up to 120 seconds for a one-time decision in a separate interactive device terminal. On the device, run `nl2sh --config /data/local/tmp/config.toml bridge approvals`, then `nl2sh --config /data/local/tmp/config.toml bridge approve REQUEST_ID`. The approval command displays the exact action and risk; dangerous actions require a second exact phrase. A rejected or expired request does not execute. The gateway does not expose approval commands. Legacy Agent `/ask` calls still reject operations needing confirmation. For bridge calls, local `unsafe` and `never` settings are raised to balanced/risk-only before classification. Protect the bearer token because authenticated callers can request readable device data.
 
 ## Build, deploy, and continue a task
 
@@ -51,9 +53,33 @@ On Windows, run these checkpoints in WSL from a Linux checkout with `adb`, Rust,
 
 Run the gateway tests with `.venv/bin/python -m unittest discover -s tests -v` on Unix or `& .\.venv\Scripts\python.exe -m unittest discover -s tests -v` in Windows PowerShell.
 
+## Direct tools for Hermes and other agents
+
+Connect the external agent's A2A 1.0 client to the authenticated `/a2a` endpoint, or connect its stdio MCP client to `nl2sh-a2a-mcp` with `NL2SH_A2A_URL` and `NL2SH_A2A_TOKEN` in the adapter's environment. The MCP adapter needs Python and network access to the gateway, but no local `adb` or device model credentials. Use `nl2sh_tools` to read tool names and argument schemas, then `nl2sh_invoke` with a registered tool name and structured arguments. For a visual step, use `nl2sh_read_screen`; use `android.screen_dump` for accessible nodes. The external agent handles planning and language generation; `nl2sh_ask` starts the separate, optional built-in device Agent and requires a configured device model provider.
+
+For Hermes Agent, install this gateway package in a Python virtual environment on the Hermes host, then add the following entry to `~/.hermes/config.yaml`. Replace the command path with that environment's `nl2sh-a2a-mcp` executable. Set `NL2SH_A2A_TOKEN` in Hermes' private `~/.hermes/.env` or its process environment. The loopback URL works when Hermes and the A2A gateway run on the same host; use the gateway's advertised HTTPS origin when they run on different hosts.
+
+```yaml
+mcp_servers:
+  nl2sh_android:
+    command: "/path/to/nl2sh-a2a-mcp"
+    env:
+      NL2SH_A2A_URL: "http://127.0.0.1:8765"
+      NL2SH_A2A_TOKEN: "${NL2SH_A2A_TOKEN}"
+    timeout: 210
+    tools:
+      include: [nl2sh_inspect, nl2sh_tools, nl2sh_invoke, nl2sh_read_screen]
+      resources: false
+      prompts: false
+```
+
+The tool allowlist keeps the optional `nl2sh_ask` Agent path out of Hermes' direct-tool workflow. The 210-second MCP timeout covers the gateway's 200-second request limit and the device's 120-second approval window. Restart Hermes or reload its MCP connections after changing the config. Hermes' [MCP configuration reference](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference) documents these keys and environment-variable references.
+
+For example, invoke `android.screen_dump` with `{}` and then `android.tap_text` with `{"text":"Search"}` when that exact node is present. The second call waits for local device approval. After any action, read the UI again and check the direct result's `success` value. This flow is app-independent and does not give the external agent an approval channel.
+
 ## A2A to MCP adapter for Codex
 
-The same Python package installs `nl2sh-a2a-mcp`, a local stdio MCP server. It sends authenticated A2A 1.0 requests to the gateway; it does not connect to Android or `adb` itself. It exposes `nl2sh_inspect`, `nl2sh_tools`, `nl2sh_ask`, and `nl2sh_get_task`. Each result includes `task_id`, `context_id`, and task `state`; completed tasks also include the device result. Reuse `context_id` with `nl2sh_ask` for follow-up questions, and check `result.failed_tools` before claiming success.
+The same Python package installs `nl2sh-a2a-mcp`, a local stdio MCP server. It sends authenticated A2A 1.0 requests to the gateway; it does not connect to Android or `adb` itself. It exposes `nl2sh_inspect`, `nl2sh_tools`, `nl2sh_invoke`, `nl2sh_read_screen`, `nl2sh_ask`, and `nl2sh_get_task`. `nl2sh_read_screen` returns an MCP image block for vision models. Each result includes `task_id`, `context_id`, and task `state`; completed tasks also include the device result. Reuse `context_id` with `nl2sh_ask` for follow-up questions, and check direct `result.success` or Agent `result.failed_tools` before claiming success.
 
 ### Install on the Codex machine
 

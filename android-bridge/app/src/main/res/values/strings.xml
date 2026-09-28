@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bridge_explanation">Enable nl2sh Android Bridge in Accessibility settings. It accepts device-local shell/root calls; nl2sh still requires its own confirmation before any action.</string>
+    <string name="open_accessibility_settings">Open Accessibility settings</string>
+    <string name="test_input_hint">Test Unicode input here</string>
+</resources>

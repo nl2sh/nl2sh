@@ -2,12 +2,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add an optional Android Accessibility companion APK for Unicode text entry, live node inspection, semantic text/bounds node clicks, and bounded swipe/scroll gestures. Its Binder provider accepts shell/root callers only; nl2sh retains its existing approval boundary.
+- Add a direct registered Tool Runtime path for A2A/MCP callers and semantic `android.*` UI tools, preserving device-side risk assessment and confirmation. Direct calls can wait for a one-time local terminal decision; the gateway cannot approve actions. Screen capture can return a bounded MCP image block without retaining a screenshot file.
+
 ### Changed
 
+- Give each `android.*` tool a focused argument schema with its required fields, and reject unrelated arguments before preparing an action.
+- Describe the A2A Agent Card and MCP tools as a direct Android Device Runtime, with built-in Agent consultation explicitly optional; document that direct calls require no device model provider.
 - Make `brush-parser` AST effects the primary shell classifier, split shell and domain policy modules, and keep built-in regex only for the fork-bomb signature. A command-bound in-process privilege broker rechecks approval and root plans before user shell execution; unknown syntax or dynamic code requires strong confirmation.
 
 ### Fixed
 
+- Bind semantic Android node clicks and Unicode focused input to the target app package across confirmation and the companion's final action; reject missing or changed package identity.
+- Launch Android packages through a package-scoped MAIN/LAUNCHER intent instead of Monkey's random event stream; treat `am start` errors printed with a zero exit status as failures.
+- Reclaim stale one-time device approval requests after an abrupt bridge exit, and serialize pending-limit checks with request publication across concurrent bridge processes.
+- Keep dense Accessibility UI trees within the Binder reply limit by returning a marked partial snapshot, and capture the companion's machine replies through quiet pipes even when ordinary shell commands use PTY.
+- Bind Accessibility semantic clicks to hashes of complete node text and descriptions, allowing exact `android.tap_text` lookup and bounds selection for long text while rejecting a changed value that shares the same displayed prefix.
+- Bound adb stdout/stderr and MCP A2A HTTP replies while streaming direct bridge results; terminate and reap the device subprocess as soon as either adb stream exceeds its limit.
+- Decode XML character references in uiautomator fallback UI nodes so semantic text matching sees the displayed text; report UI snapshot failures from `android.wait_text` immediately instead of treating them as a missing node.
+- Report a failed Android UI hierarchy read as a failed tool call instead of a successful empty screen result.
+- Recheck semantic tap node identity after approval and inside the Accessibility companion, so a replacement control at the same bounds is rejected. Mark truncated UI trees as partial and refuse to infer a unique target from them.
+- Bind companion Unicode input to the editable control focused at confirmation time and reject a changed target before writing text.
+- Derive default Android scroll coordinates from the display and reject Unicode shell text input explicitly; preserve literal `%s` instead of letting Android decode it as a space.
 - Give every Web approval or question request a distinct presentation identity so immediately consecutive prompts cannot inherit the previous dialog's submitted/disabled state.
 - Keep quoted diagnostic patterns such as `grep -E "pid:|>>> |Cmdline|signal "` read-only by binding code-execution options to known interpreters; real redirections and reparsed writes still require confirmation.
 - Update Web turn, model-step and tool-call counts during execution and restore task statistics after failures, cancellation and restart.

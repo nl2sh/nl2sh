@@ -34,6 +34,19 @@ pub enum BridgeCommand {
         #[arg(long)]
         payload_base64: String,
     },
+    /// Invoke one registered tool directly with base64url {tool,arguments} JSON.
+    Invoke {
+        /// Base64url without padding, containing {tool,arguments} JSON.
+        #[arg(long)]
+        payload_base64: String,
+    },
+    /// List pending direct-tool approvals on this device.
+    Approvals,
+    /// Approve or reject one pending direct-tool request from an interactive terminal.
+    Approve {
+        /// Request identifier printed by `bridge approvals`.
+        id: String,
+    },
 }
 impl From<ApiTypeArg> for nl2sh::config::ApiType {
     fn from(value: ApiTypeArg) -> Self {

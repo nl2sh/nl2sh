@@ -10,7 +10,7 @@ Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环�
 
 “类 Hermes”指的是自主 Agent 的产品形态和 Tool Calling 交互方式；nl2sh 专注 Android shell，不声称与 Hermes 的 API、插件或全部功能兼容。
 
-可选的主机侧 [A2A 网关](a2a_gateway/README.md) 和 stdio MCP 适配层让其他 Agent 发现并调用连接设备上的 nl2sh，支持环境盘点、工具目录、多轮咨询与任务查询。构建和独立候选版本部署是主机侧显式工作流，不作为远程 Agent 技能。设备端仍是单个 Rust 可执行文件；无人值守的 A2A/MCP 调用不能批准修改或危险操作。
+可选的主机侧 [A2A 网关](a2a_gateway/README.md) 和 stdio MCP 适配层让其他 Agent 发现并调用连接设备上的 nl2sh，支持环境盘点、工具目录、直接工具调用、截图视觉输入、多轮咨询与任务查询。直接调用跳过设备端 LLM，但继续经过本地安全分类和确认；需要确认时由设备交互终端作出一次性决定，网关无法代替用户批准。可选 [Android Accessibility companion](android-bridge/README.md) 提供 Unicode 输入、实时节点、语义点击和手势能力；完整 Android UI 自动化要求设备端程序以 shell/root UID 运行，普通 Termux UID 没有相关系统权限。构建和独立候选版本部署是主机侧显式工作流，不作为远程 Agent 技能。nl2sh 核心程序仍是单个 Rust 可执行文件。
 
 ## 特性与安全边界
 

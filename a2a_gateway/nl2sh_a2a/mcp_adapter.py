@@ -11,9 +11,10 @@ from urllib.parse import urlsplit
 
 import httpx
 from mcp.server import MCPServer
+from mcp.types import ImageContent, TextContent
 
 
-MAX_REPLY_BYTES = 512 * 1024
+MAX_REPLY_BYTES = 4 * 1024 * 1024
 MAX_MESSAGE_BYTES = 8192
 
 
@@ -42,11 +43,16 @@ class A2AClient:
         self.transport = transport
 
     async def _request(self, client: httpx.AsyncClient, method: str, url: str, **kwargs) -> dict:
-        response = await client.request(method, url, **kwargs)
-        response.raise_for_status()
-        if len(response.content) > MAX_REPLY_BYTES:
-            raise ValueError("A2A response exceeds size limit")
-        value = response.json()
+        chunks = []
+        size = 0
+        async with client.stream(method, url, **kwargs) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes():
+                size += len(chunk)
+                if size > MAX_REPLY_BYTES:
+                    raise ValueError("A2A response exceeds size limit")
+                chunks.append(chunk)
+        value = json.loads(b"".join(chunks))
         if not isinstance(value, dict):
             raise ValueError("A2A response must be an object")
         return value
@@ -128,10 +134,13 @@ class A2AClient:
 
 def create_server(client: A2AClient) -> MCPServer:
     server = MCPServer("nl2sh-a2a", instructions=(
-        "Use nl2sh_inspect for Android facts and nl2sh_tools for capabilities. "
-        "Use nl2sh_ask for device Agent consultation; preserve context_id for follow-ups. "
-        "Check result.failed_tools before claiming success. Device writes require local approval "
-        "and are rejected over this bridge."
+        "Use nl2sh_tools to discover device tool schemas, nl2sh_invoke to call the Tool Runtime "
+        "directly without a device LLM, and nl2sh_read_screen for visual evidence. "
+        "Use nl2sh_inspect for Android facts. nl2sh_ask is optional built-in Agent consultation "
+        "and requires a device model provider; preserve context_id for its follow-ups. "
+        "Check direct result.success or Agent result.failed_tools before claiming success. "
+        "Device writes wait for a one-time decision in a local device terminal; "
+        "the MCP caller cannot approve them."
     ))
 
     @server.tool(structured_output=True)
@@ -141,13 +150,44 @@ def create_server(client: A2AClient) -> MCPServer:
 
     @server.tool(structured_output=True)
     async def nl2sh_tools() -> dict[str, Any]:
-        """List the tools available to the connected nl2sh Agent."""
+        """List the connected device Tool Runtime tools and argument schemas."""
         return await client.send("/tools")
 
     @server.tool(structured_output=True)
     async def nl2sh_ask(message: str, context_id: str | None = None) -> dict[str, Any]:
-        """Ask the device Agent; reuse context_id for follow-ups and check failed_tools."""
+        """Optionally ask the built-in device Agent; requires a configured device model."""
         return await client.send(message, context_id)
+
+    @server.tool(structured_output=True)
+    async def nl2sh_invoke(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Invoke one registered device tool without a device LLM; local approval still applies."""
+        if not tool or len(tool) > 128 or not isinstance(arguments, dict):
+            raise ValueError("invalid tool request")
+        return await client.send("/invoke " + json.dumps(
+            {"tool": tool, "arguments": arguments}, ensure_ascii=False,
+        ))
+
+    @server.tool(structured_output=False)
+    async def nl2sh_read_screen() -> list[TextContent | ImageContent]:
+        """Capture the Android display and return an image visible to vision models."""
+        task = await client.send('/invoke {"tool":"android.read_screen","arguments":{}}')
+        result = task.get("result")
+        if not isinstance(result, dict) or not result.get("success"):
+            raise ValueError("device screenshot failed")
+        attachments = result.get("attachments")
+        if not isinstance(attachments, list) or len(attachments) != 1:
+            raise ValueError("device screenshot has no image attachment")
+        attachment = attachments[0]
+        if not isinstance(attachment, dict):
+            raise ValueError("device screenshot attachment is invalid")
+        mime_type = attachment.get("media_type")
+        data = attachment.get("base64_data")
+        if mime_type not in {"image/png", "image/jpeg"} or not isinstance(data, str) or len(data) > 3 * 1024 * 1024:
+            raise ValueError("device screenshot attachment exceeds image limits")
+        summary = {"task_id": task["task_id"], "state": task["state"],
+                   "tool": result.get("tool"), "output": result.get("output")}
+        return [TextContent(type="text", text=json.dumps(summary, ensure_ascii=False)),
+                ImageContent(type="image", data=data, mime_type=mime_type)]
 
     @server.tool(structured_output=True)
     async def nl2sh_get_task(task_id: str) -> dict[str, Any]:

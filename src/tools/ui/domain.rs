@@ -103,6 +103,7 @@ pub struct InspectAndroidUiArgs {
 
 #[derive(Debug, Clone, Serialize)]
 struct UiNode {
+    package: Option<String>,
     class: Option<String>,
     resource_id: Option<String>,
     text: Option<String>,
@@ -125,7 +126,7 @@ pub async fn inspect_android_ui(
     let (window, display) = remainder
         .split_once("---NL2SH_DISPLAY---")
         .unwrap_or((remainder, ""));
-    let all_nodes = parse_nodes(xml)?;
+    let (all_nodes, truncated) = parse_nodes(xml)?;
     let total_node_count = all_nodes.len();
     let nodes = if args.full {
         all_nodes
@@ -136,10 +137,11 @@ pub async fn inspect_android_ui(
             .collect()
     };
     serde_json::to_string_pretty(&serde_json::json!({
-        "status": if result.exit_code == Some(0) { "complete" } else if nodes.is_empty() { "failed" } else { "partial" },
+        "status": if result.exit_code == Some(0) && !truncated { "complete" } else if nodes.is_empty() { "failed" } else { "partial" },
         "node_count": nodes.len(),
         "total_node_count": total_node_count,
-        "mode": if args.full { "full" } else { "compact" },
+        "truncated": truncated,
+        "mode": if truncated { "partial" } else if args.full { "full" } else { "compact" },
         "nodes": nodes,
         "window": window.trim(),
         "display": display.trim(),
@@ -166,16 +168,22 @@ pub fn capture_command(path: &str) -> Result<String> {
     Ok(format!("screencap -p {}", shell_quote(&rendered)))
 }
 
-fn parse_nodes(xml: &str) -> Result<Vec<UiNode>> {
+fn parse_nodes(xml: &str) -> Result<(Vec<UiNode>, bool)> {
     let node = Regex::new(r"<node\s+([^>]+)/?>").context("invalid UI node parser")?;
     let attribute =
         Regex::new(r#"([a-zA-Z0-9_-]+)="([^"]*)""#).context("invalid UI attribute parser")?;
     let mut nodes = Vec::new();
-    for capture in node.captures_iter(xml).take(MAX_UI_NODES) {
+    let mut truncated = false;
+    for (index, capture) in node.captures_iter(xml).take(MAX_UI_NODES + 1).enumerate() {
+        if index == MAX_UI_NODES {
+            truncated = true;
+            break;
+        }
         let Some(attributes) = capture.get(1) else {
             continue;
         };
         let mut value = UiNode {
+            package: None,
             class: None,
             resource_id: None,
             text: None,
@@ -192,6 +200,7 @@ fn parse_nodes(xml: &str) -> Result<Vec<UiNode>> {
                 continue;
             };
             match name {
+                "package" => value.package = non_empty(content),
                 "class" => value.class = non_empty(content),
                 "resource-id" => value.resource_id = non_empty(content),
                 "text" => value.text = non_empty(content),
@@ -204,11 +213,62 @@ fn parse_nodes(xml: &str) -> Result<Vec<UiNode>> {
         }
         nodes.push(value);
     }
-    Ok(nodes)
+    Ok((nodes, truncated))
 }
 
 fn non_empty(value: &str) -> Option<String> {
-    (!value.is_empty()).then(|| value.to_owned())
+    (!value.is_empty()).then(|| decode_xml_entities(value))
+}
+
+fn decode_xml_entities(value: &str) -> String {
+    let mut decoded = String::with_capacity(value.len());
+    let mut remaining = value;
+    while let Some(start) = remaining.find('&') {
+        decoded.push_str(&remaining[..start]);
+        remaining = &remaining[start..];
+        // XML character references are short; bounding the scan also keeps
+        // app-controlled text with many ampersands linear to decode.
+        let Some(end) = remaining
+            .as_bytes()
+            .iter()
+            .take(13)
+            .position(|byte| *byte == b';')
+        else {
+            decoded.push('&');
+            remaining = &remaining[1..];
+            continue;
+        };
+        let entity = &remaining[1..end];
+        let character = match entity {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            _ => entity
+                .strip_prefix("#x")
+                .or_else(|| entity.strip_prefix("#X"))
+                .and_then(|number| u32::from_str_radix(number, 16).ok())
+                .or_else(|| {
+                    entity
+                        .strip_prefix('#')
+                        .and_then(|number| number.parse().ok())
+                })
+                .and_then(char::from_u32)
+                .filter(|character| {
+                    !character.is_control() || matches!(character, '\t' | '\n' | '\r')
+                }),
+        };
+        if let Some(character) = character {
+            decoded.push(character);
+            remaining = &remaining[end + 1..];
+        } else {
+            decoded.push('&');
+            remaining = &remaining[1..];
+        }
+    }
+    decoded.push_str(remaining);
+    decoded
 }
 
 fn shell_quote(value: &str) -> String {
@@ -221,12 +281,37 @@ mod tests {
 
     #[test]
     fn parses_bounded_accessibility_nodes() -> anyhow::Result<()> {
-        let nodes = parse_nodes(
-            r#"<hierarchy><node text="OK" resource-id="button" class="android.widget.Button" content-desc="confirm" clickable="true" focused="false" bounds="[1,2][3,4]" /></hierarchy>"#,
+        let (nodes, truncated) = parse_nodes(
+            r#"<hierarchy><node package="com.example.app" text="OK" resource-id="button" class="android.widget.Button" content-desc="confirm" clickable="true" focused="false" bounds="[1,2][3,4]" /></hierarchy>"#,
         )?;
         assert_eq!(nodes.len(), 1);
+        assert!(!truncated);
         assert_eq!(nodes[0].text.as_deref(), Some("OK"));
+        assert_eq!(nodes[0].package.as_deref(), Some("com.example.app"));
         assert!(nodes[0].clickable);
+        Ok(())
+    }
+
+    #[test]
+    fn reports_truncated_ui_tree() -> anyhow::Result<()> {
+        let xml = "<node text=\"item\" />".repeat(super::MAX_UI_NODES + 1);
+        let (nodes, truncated) = parse_nodes(&xml)?;
+        assert_eq!(nodes.len(), super::MAX_UI_NODES);
+        assert!(truncated);
+        Ok(())
+    }
+
+    #[test]
+    fn decodes_uiautomator_attribute_entities_once() -> anyhow::Result<()> {
+        let (nodes, truncated) = parse_nodes(
+            r#"<node text="A &amp; B &quot;中文&quot; &#x1F642;" content-desc="&lt;tag&gt; &apos; &#25991; &amp;lt; &unknown;" bounds="[1,2][3,4]" />"#,
+        )?;
+        assert!(!truncated);
+        assert_eq!(nodes[0].text.as_deref(), Some("A & B \"中文\" 🙂"));
+        assert_eq!(
+            nodes[0].content_description.as_deref(),
+            Some("<tag> ' 文 &lt; &unknown;")
+        );
         Ok(())
     }
 

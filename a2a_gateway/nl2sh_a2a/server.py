@@ -86,6 +86,13 @@ class DeviceAgent(AgentExecutor):
                 answer = await self.device.call("inspect")
             elif prompt == "/tools":
                 answer = await self.device.call("tools")
+            elif prompt.startswith("/invoke "):
+                request = json.loads(prompt[len("/invoke "):])
+                if not isinstance(request, dict) or set(request) != {"tool", "arguments"}:
+                    raise ValueError("tool request must contain tool and arguments")
+                if not isinstance(request["tool"], str) or not isinstance(request["arguments"], dict):
+                    raise ValueError("invalid tool request")
+                answer = await self.device.call("invoke", request)
             else:
                 session = "a2a-" + hashlib.sha256(context.context_id.encode()).hexdigest()[:32]
                 lock = self._session_locks.setdefault(session, asyncio.Lock())
@@ -119,8 +126,8 @@ def create_app(settings: Settings) -> Starlette:
         raise ValueError("A2A token must contain at least 32 characters")
     url = settings.advertised_url.rstrip("/")
     card = AgentCard(
-        name="nl2sh Android Agent",
-        description="Inspect the connected Android environment and consult the nl2sh Agent.",
+        name="nl2sh Android Device Runtime",
+        description="Invoke registered Android device tools directly without a device LLM; optionally consult nl2sh's built-in Agent.",
         version="0.1.0",
         supported_interfaces=[AgentInterface(
             url=f"{url}/a2a", protocol_binding="JSONRPC", protocol_version="1.0"
@@ -129,9 +136,10 @@ def create_app(settings: Settings) -> Starlette:
         default_input_modes=["text/plain"],
         default_output_modes=["text/plain"],
         skills=[
+            AgentSkill(id="invoke", name="Invoke device tool", description="Send /invoke followed by {tool,arguments} JSON to call the device Tool Runtime directly without a model request. Device approval rules still apply.", tags=["android", "tools"]),
             AgentSkill(id="inspect", name="Inspect device", description="Send /inspect for bounded read-only Android facts.", tags=["android", "diagnostics"]),
-            AgentSkill(id="tools", name="List capabilities", description="Send /tools for nl2sh's configured tool catalog.", tags=["android", "tools"]),
-            AgentSkill(id="consult", name="Consult nl2sh", description="Send text to the nl2sh Agent; use the same A2A context for follow-up questions. Unattended writes are rejected by the device.", tags=["android", "agent"]),
+            AgentSkill(id="tools", name="List capabilities", description="Send /tools for the device Tool Runtime catalog and argument schemas.", tags=["android", "tools"]),
+            AgentSkill(id="consult", name="Consult nl2sh Agent", description="Optionally send text to the built-in device Agent; this requires a device model provider. Use the same A2A context for follow-up questions. Unattended writes are rejected.", tags=["android", "agent"]),
         ],
         security_schemes={"bearer": SecurityScheme(http_auth_security_scheme=HTTPAuthSecurityScheme(scheme="bearer"))},
         security_requirements=[SecurityRequirement(schemes={"bearer": StringList(list=[])})],

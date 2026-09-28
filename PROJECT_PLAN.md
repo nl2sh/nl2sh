@@ -2,6 +2,23 @@
 
 状态以 2026-09-28 的代码、验证记录和公开发布状态为准；当前发布版本为 1.0.4。未完成项不会机械勾选。
 
+## Hermes 设备 Tool Runtime — 进行中
+
+- [x] 创建 `feature/hermes` 分支，保留内置 Agent，并增加直接工具调用的 bridge/A2A/MCP 路径。
+- [x] 注册通用 `android.*` UI 工具，复用设备端工具准备、安全评估和确认；文字/节点点击执行前重读 UI 树。
+- [x] 将当前节点所属包名纳入语义点击与 Unicode 输入的审批前后和 companion 最终执行校验。
+- [x] 为每个 `android.*` 工具公开对应字段与必填参数的 Schema，并在准备阶段拒绝无关参数。
+- [x] 建立设备交互终端的一次性审批通道；直接工具调用等待本地决定，修改类需确认、危险类需二次确认，网关不暴露批准入口。
+- [x] 直接工具结果保留 `view_screenshot` 的有界图片附件，A2A/MCP 传输限额覆盖其最大尺寸。
+- [x] 提供无持久截图文件的直接屏幕捕获与有界图片回传，MCP 将图片转为视觉模型可读取的图像内容块。
+- [x] 完成 Android shell 与可选 Accessibility companion 的通用 UI 后端：APK 提供 Unicode 输入、实时节点树、按文本或 bounds 点击、单笔 swipe/scroll；无 companion 时保留 uiautomator、input、am 和 screencap 路径，模拟器验证两种点击与手势后端。
+- [x] 在 Android API 26 模拟器验证 companion 中文输入、语义点击、手势、直接截图及 A2A/MCP 图像链路。
+- [x] Hermes Tool Runtime 通过 Android API 26 ARMv7 release 交叉编译，产物为 32 位 PIE ELF；设备运行验证仍单列。
+- [ ] 验证 companion 在 Android API 26+ 真机上的节点点击、手势、Unicode 输入、审批和失败恢复。
+- [x] 核对普通 Termux UID 的 Android 权限边界：系统拒绝 `content` CLI 外部 provider 访问、`input` 事件注入和 `screencap`；当前完整 UI 自动化要求 shell/root UID。
+- [ ] 若要让普通 Termux UID 使用 companion，设计显式本地授权与 Binder 客户端，不放宽现有 shell/root provider 的安全边界。
+- [ ] 在 Android API 26+ 真机验证 A2A/MCP 直接调用、审批、UI 操作及失败恢复。
+
 ## 独立 A2A 网关 — 已实现
 
 - [x] 主机侧独立 A2A 1.0 网关，支持 Agent Card、Bearer 认证、JSON-RPC、持久 Task 与同上下文续接。

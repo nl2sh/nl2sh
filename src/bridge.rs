@@ -1,5 +1,7 @@
 //! Narrow JSON interface used by a separately deployed A2A gateway.
 
+mod approval;
+
 use crate::{
     agent::{AgentRunner, ConfirmationDecision, Confirmer},
     config::{self, ConfirmPolicy, SecurityLevel},
@@ -7,7 +9,7 @@ use crate::{
     security::SecurityAssessment,
     sessions::SessionStore,
     shell::ShellExecutor,
-    tools::{android::environment::inspect_environment, builtin_tools},
+    tools::{android::environment::inspect_environment, builtin_tools, runtime::invoke},
 };
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
@@ -28,6 +30,18 @@ pub enum BridgeOperation {
         /// Base64url-encoded JSON request.
         payload_base64: String,
     },
+    /// Invoke a registered tool without an LLM request.
+    Invoke {
+        /// Base64url-encoded JSON request.
+        payload_base64: String,
+    },
+    /// List requests waiting for a local human decision.
+    Approvals,
+    /// Decide one request in an interactive local terminal.
+    Approve {
+        /// Opaque request identifier.
+        id: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -35,6 +49,13 @@ pub enum BridgeOperation {
 struct AskRequest {
     session: String,
     message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InvokeRequest {
+    tool: String,
+    arguments: serde_json::Value,
 }
 
 #[derive(Serialize)]
@@ -163,6 +184,47 @@ pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
                     failed_tools,
                 })?
             );
+        }
+        BridgeOperation::Invoke { payload_base64 } => {
+            if payload_base64.len() as u64 > MAX_REQUEST_BYTES * 2 {
+                bail!("bridge request exceeds size limit")
+            }
+            let bytes = URL_SAFE_NO_PAD
+                .decode(payload_base64)
+                .context("invalid bridge payload encoding")?;
+            if bytes.len() as u64 > MAX_REQUEST_BYTES {
+                bail!("bridge request exceeds size limit")
+            }
+            let request: InvokeRequest =
+                serde_json::from_slice(&bytes).context("invalid bridge tool request")?;
+            if request.tool.is_empty() || request.tool.len() > 128 {
+                bail!("invalid bridge tool name")
+            }
+            let mut cfg = config::load_or_default_unvalidated(path)?;
+            if cfg.security_level == SecurityLevel::Unsafe {
+                cfg.security_level = SecurityLevel::Balanced;
+            }
+            if cfg.execute_confirm_policy == ConfirmPolicy::Never {
+                cfg.execute_confirm_policy = ConfirmPolicy::RiskOnly;
+            }
+            let executor = ShellExecutor::new(cfg.clone());
+            let confirmer = approval::BridgeApprovalConfirmer::new(path)?;
+            let result = invoke(
+                &cfg,
+                &executor,
+                &confirmer,
+                &request.tool,
+                request.arguments,
+            )
+            .await?;
+            println!("{}", serde_json::to_string(&result)?);
+        }
+        BridgeOperation::Approvals => approval::list_pending(path)?,
+        BridgeOperation::Approve { id } => {
+            let path = path.to_path_buf();
+            tokio::task::spawn_blocking(move || approval::approve_interactive(&path, &id))
+                .await
+                .context("approval terminal worker failed")??;
         }
     }
     Ok(())

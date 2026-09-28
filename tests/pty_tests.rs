@@ -29,3 +29,18 @@ async fn pty_timeout_reaps_child() -> anyhow::Result<()> {
     assert!(result.timed_out);
     Ok(())
 }
+
+#[tokio::test]
+async fn machine_capture_uses_separate_pipes_even_when_pty_is_enabled() -> anyhow::Result<()> {
+    let executor = ShellExecutor::new(Config {
+        enable_pty: true,
+        ..Config::default()
+    });
+    let result = executor
+        .execute_machine("printf 'protocol-data'; printf 'diagnostic' >&2", false)
+        .await?;
+    assert_eq!(result.exit_code, Some(0));
+    assert_eq!(result.stdout, "protocol-data");
+    assert_eq!(result.stderr, "diagnostic");
+    Ok(())
+}
