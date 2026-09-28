@@ -4,6 +4,8 @@ Last Updated: 2026-09-28
 
 ## Recent Changes
 
+- Windows CMD 一键安装修复批处理括号块的早期 `%VAR%` 展开问题：PowerShell 安装器 URL 现在于进入括号块前确定，Gitee/GitHub 远程 BAT 不再向 `curl.exe` 传入空 URL。修复不改变 Release 校验、ADB 设备选择或 TUI 交互路径。
+- 用户文档补充预编译运行脚本与一键安装完成后的日常使用：保留主机 `nl2sh-android` 目录并重复运行启动器、用 `ADB_SERIAL` 预选设备、默认保留设备配置、仅通过 `NL2SH_CONFIG_SOURCE` 显式重新部署配置，以及 TUI 常用命令、任务取消和安全退出方式。文档变更不影响 Android 执行、安全确认或 PTY 路径。
 - Gitee `v1.0.4` Release 已创建并镜像 GitHub 正式发布的 12 个资产；公开 Release API 返回最新 tag `v1.0.4`，从 Gitee 实际下载的 `nl2sh-android.zip` SHA-256 为 `8e3743e8c6a4bc54476235200378a0bb6e9bfa27627f1f9c8466d7130b56498e`，与同源 `SHA256SUMS` 一致；Gitee raw 下载的 Linux 安装脚本可正常输出帮助。
 - 仓库配置包含 HTTPS Gitee 远端 `https://gitee.com/nl2sh/nl2sh.git`。Linux、PowerShell 和 CMD 一键安装文档新增显式 Gitee 入口：脚本与 Release 资产均从 Gitee 获取，通过公开 Release API 解析最新 tag，并继续使用 `SHA256SUMS` 校验 ZIP；来源由用户显式选择，不在 GitHub 失败后自动切换。Gitee 预编译安装要求镜像同步对应 Release 资产。
 - Gitee 安装路径验证：公开 Gitee Release API 的最新 tag 解析回归、`bash -n install-android.sh android-run-linux.sh pack-release.sh`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 和 `git diff --check` 通过；239 项测试通过，1 项需外部 ima 凭据的 smoke 按设计忽略。

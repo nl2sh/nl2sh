@@ -188,6 +188,46 @@ Gitee 安装器通过公开 Release API 解析最新 tag，下载同一 Release 
 
 支持 `openrouter`、`openai`、`deepseek`、`moonshot`/`kimi`、`siliconflow`、`ollama` 与 `custom`；自定义服务还需传 `--endpoint` / `-Endpoint`。API Key 也可作为 `--api-key` / `-ApiKey` 参数提供，但可能保留在命令历史中。
 
+### 安装完成后如何日常使用
+
+无论是手工下载 Release 并解压，还是使用一键安装脚本，以后都不需要重新安装。保留主机上的 `nl2sh-android` 目录，连接设备并确认 `adb devices` 显示为 `device` 后，重新运行目录内的启动器即可：
+
+```bash
+cd /path/to/nl2sh-android
+./android-run-linux.sh
+```
+
+```bat
+cd /d C:\path\to\nl2sh-android
+android-run-windows.bat
+```
+
+一键安装默认把目录建在执行安装命令时的当前目录下，即 `./nl2sh-android` 或 `%CD%\nl2sh-android`。启动器会重新选择 ADB 设备、确认 ABI 和 root/`su` 状态；设备端程序摘要没变时会直接启动，不重复推送。有多台设备时可每次选择，或预先设置 `ADB_SERIAL`：
+
+```bash
+ADB_SERIAL=192.168.1.20:5555 ./android-run-linux.sh
+```
+
+```bat
+set "ADB_SERIAL=192.168.1.20:5555"
+android-run-windows.bat
+```
+
+普通后续启动不会覆盖设备上现有的 `/data/local/tmp/config.toml`；在 TUI 中通过 `/config` 修改的配置可继续使用。只有需要重新把主机 `config.toml` 部署到设备时，才显式设置 `NL2SH_CONFIG_SOURCE`：
+
+```bash
+cd /path/to/nl2sh-android
+NL2SH_CONFIG_SOURCE="$PWD/config.toml" ./android-run-linux.sh
+```
+
+```bat
+cd /d C:\path\to\nl2sh-android
+set "NL2SH_CONFIG_SOURCE=%CD%\config.toml"
+android-run-windows.bat
+```
+
+进入 TUI 后直接输入任务并按 Enter；用 `/help` 查看帮助，用 `/config` 修改 Provider，用 `/sessions` 恢复会话，按 Ctrl+C 取消当前任务，按 Ctrl+Q 或输入 `/exit` 安全退出。下次使用时再运行同一启动器即可。
+
 ### 通过 GitHub Actions 自动发布
 
 仓库内置 `.github/workflows/release.yml`。推送 `v*` tag（如 `git tag v0.2.0 && git push origin v0.2.0`）会触发 GitHub Actions：并行交叉编译 `aarch64-linux-android`（arm64-v8a）与 `armv7-linux-androideabi`（armeabi-v7a），再把两种程序分别放入 `bin/arm64-v8a/` 和 `bin/armeabi-v7a/`，连同 Linux/BAT 启动脚本、Bash/PowerShell 安装脚本、`config.toml.example` 和 `使用说明.md` 合并为一份 `nl2sh-android.tar.gz` 与 `nl2sh-android.zip`，并附带 `SHA256SUMS` 发布到对应 tag 的 GitHub Release。Actions 页的 `workflow_dispatch` 可手动触发并生成草稿 Release（tag 通过输入指定）。

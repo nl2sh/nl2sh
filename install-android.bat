@@ -72,6 +72,8 @@ if errorlevel 1 (
 
 set "PS_INSTALLER=%~dp0install-android.ps1"
 set "REMOVE_PS_INSTALLER=false"
+set "PS_INSTALLER_URL=https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.ps1"
+if /i "%REPOSITORY%"=="https://gitee.com/nl2sh/nl2sh" set "PS_INSTALLER_URL=https://gitee.com/nl2sh/nl2sh/raw/master/install-android.ps1"
 if not exist "%PS_INSTALLER%" (
   where curl.exe >nul 2>&1
   if errorlevel 1 (
@@ -81,8 +83,6 @@ if not exist "%PS_INSTALLER%" (
   set "PS_INSTALLER=%TEMP%\nl2sh-install-%RANDOM%-%RANDOM%.ps1"
   set "REMOVE_PS_INSTALLER=true"
   echo Downloading the Windows installer...
-  set "PS_INSTALLER_URL=https://raw.githubusercontent.com/nl2sh/nl2sh/master/install-android.ps1"
-  if /i "%REPOSITORY%"=="https://gitee.com/nl2sh/nl2sh" set "PS_INSTALLER_URL=https://gitee.com/nl2sh/nl2sh/raw/master/install-android.ps1"
   curl.exe -fL --retry 3 --proto "=https" --tlsv1.2 -o "%PS_INSTALLER%" "%PS_INSTALLER_URL%"
   if errorlevel 1 (
     echo ERROR: failed to download install-android.ps1. 1>&2

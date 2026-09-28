@@ -11,10 +11,12 @@
 ### Changed
 
 - Make the Android JADX helper compatible with API 28 ARMv7 by pinning the Android-compatible JADX 1.5.1 line, restricting work to the requested class, and supplying a private writable ART temporary directory. The helper continues to require strong confirmation and now rejects unexpected XML parsing.
+- Document the normal post-install workflow for release archives and one-command installers, including repeat launches, device selection, configuration persistence, intentional redeployment, and safe TUI exit.
 
 ### Fixed
 
 - Keep the documented `curl | bash` Android bootstrap interactive by reconnecting the launcher input to the host controlling terminal after the installer has consumed the pipe, allowing ADB to allocate the TUI PTY.
+- Resolve the selected PowerShell installer URL before entering the CMD parenthesized block, preventing `%PS_INSTALLER_URL%` from expanding to an empty curl argument in the downloaded batch bootstrap.
 
 ## [1.0.3] - 2026-09-27
 

@@ -151,6 +151,46 @@ The installer resolves the latest Gitee tag through its public release API, then
 
 Passing a key through the environment avoids storing it in shell history.
 
+### Daily use after installation
+
+Whether you extracted a release manually or used a one-command installer, you do not need to reinstall nl2sh later. Keep the host-side `nl2sh-android` directory, connect the device, confirm that `adb devices` reports it as `device`, and run the launcher from that directory:
+
+```bash
+cd /path/to/nl2sh-android
+./android-run-linux.sh
+```
+
+```bat
+cd /d C:\path\to\nl2sh-android
+android-run-windows.bat
+```
+
+The one-command installer creates `./nl2sh-android` or `%CD%\nl2sh-android` under the directory from which it was run. On every launch, the script selects the ADB device again and checks its ABI and root/`su` state. If the device already has the same executable, its matching SHA-256 causes the upload to be skipped. For multiple devices, choose one when prompted or preselect it:
+
+```bash
+ADB_SERIAL=192.168.1.20:5555 ./android-run-linux.sh
+```
+
+```bat
+set "ADB_SERIAL=192.168.1.20:5555"
+android-run-windows.bat
+```
+
+Normal subsequent launches do not overwrite `/data/local/tmp/config.toml`; settings changed through `/config` in the TUI remain available. Set `NL2SH_CONFIG_SOURCE` only when you intentionally want to redeploy the host copy of `config.toml`:
+
+```bash
+cd /path/to/nl2sh-android
+NL2SH_CONFIG_SOURCE="$PWD/config.toml" ./android-run-linux.sh
+```
+
+```bat
+cd /d C:\path\to\nl2sh-android
+set "NL2SH_CONFIG_SOURCE=%CD%\config.toml"
+android-run-windows.bat
+```
+
+In the TUI, type a task and press Enter. Use `/help` for help, `/config` for provider settings, `/sessions` to restore conversations, Ctrl+C to cancel the active task, and Ctrl+Q or `/exit` to exit safely. Run the same launcher again the next time you want to use nl2sh.
+
 ## Termux installation
 
 The recommended Termux installation uses the Termux User Repository:
