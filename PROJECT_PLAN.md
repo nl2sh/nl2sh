@@ -14,6 +14,7 @@
 - [x] 直接工具结果保留 `view_screenshot` 的有界图片附件，A2A/MCP 传输限额覆盖其最大尺寸。
 - [x] 提供无持久截图文件的直接屏幕捕获与有界图片回传，MCP 将图片转为视觉模型可读取的图像内容块。
 - [x] 完成 Android shell 与可选 Accessibility companion 的通用 UI 后端：APK 提供 Unicode 输入、实时节点树、按文本或 bounds 点击、单笔 swipe/scroll；无 companion 时保留 uiautomator、input、am 和 screencap 路径，模拟器验证两种点击与手势后端。
+- [x] companion 增加可选输入方法 `nl2sh Keyboard`：`android.input_text` 在字段不上报任何文本动作时经 `InputConnection` 提交中文，后端在确认前固定为 `ACTION_SET_TEXT`、剪贴板或输入法之一，`mode: "replace"` 只由输入法通道清空后写入；shell/root 另可用 ADBKeyboard 风格广播直接输入。
 - [x] 在 Android API 26 模拟器验证 companion 中文输入、语义点击、手势、直接截图及 A2A/MCP 图像链路。
 - [x] Hermes Tool Runtime 通过 Android API 26 ARMv7 release 交叉编译，产物为 32 位 PIE ELF；设备运行验证仍单列。
 - [ ] 验证 companion 在 Android API 26+ 真机上的节点点击、手势、Unicode 输入、审批和失败恢复。

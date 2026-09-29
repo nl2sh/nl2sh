@@ -37,6 +37,9 @@ public final class BridgeProvider extends ContentProvider {
             request.put("action", method);
             if (extras != null) {
                 request.put("text", decode(extras.getString("text", "")));
+                request.put("text_b64", decode(extras.getString("text_b64", "")));
+                request.put("mode", decode(extras.getString("mode", "")));
+                request.put("field_id", decode(extras.getString("field_id", "")));
                 request.put("package", decode(extras.getString("package", "")));
                 request.put("bounds", decode(extras.getString("bounds", "")));
                 request.put("class", decode(extras.getString("class", "")));
@@ -49,7 +52,12 @@ public final class BridgeProvider extends ContentProvider {
                     request.put(coordinate, decode(extras.getString(coordinate, "")));
                 }
             }
-            reply = BridgeService.dispatch(request);
+            // IME actions stay available when only the keyboard is enabled: the input method is
+            // an independent service with its own approval-free authority, so it is never
+            // dispatched through the Accessibility service.
+            reply = method.startsWith("ime_")
+                    ? BridgeImeService.dispatch(request, true)
+                    : BridgeService.dispatch(request);
         } catch (JSONException failure) {
             reply = BridgeService.error("invalid request");
         }

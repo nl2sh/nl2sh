@@ -4,10 +4,35 @@ use crate::shell::CommandExecutor;
 use crate::tools::android::automation::GestureSpec;
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use schemars::JsonSchema;
+use serde::Deserialize;
 use serde_json::Value;
 
 const URI: &str = "content://com.nl2sh.bridge.ops";
 const MAX_REPLY: usize = 64 * 1024;
+
+/// How one Unicode write treats the text already in the focused control.
+///
+/// Also the model-visible `android.input_text` mode: clearing a field needs the companion input
+/// method, because the shell and accessibility paths can only insert characters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TextWriteMode {
+    /// Insert the text at the current cursor position.
+    #[default]
+    Append,
+    /// Clear the control first, then write the text.
+    Replace,
+}
+
+impl TextWriteMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Append => "append",
+            Self::Replace => "replace",
+        }
+    }
+}
 
 /// Check whether the enabled companion is available to the current shell UID.
 pub async fn probe(executor: &dyn CommandExecutor) -> Result<()> {
@@ -88,6 +113,57 @@ pub async fn paste_text(executor: &dyn CommandExecutor, text: &str, node: &Value
         ],
     )
     .await
+}
+
+/// Read the companion input method's current editor identity.
+///
+/// Unlike the accessibility probes this does not need the Accessibility service: the companion's
+/// input method is loaded as soon as the user selects it as the on-screen keyboard.
+pub async fn ime_status(executor: &dyn CommandExecutor) -> Result<Value> {
+    request(executor, "ime_status", &[]).await
+}
+
+/// Commit Unicode text through the companion input method's `InputConnection`.
+///
+/// The text is base64 encoded because `content call` transports it as a single argv string, and
+/// the editor `package`/`field_id` are re-checked inside the companion before the commit. This
+/// reaches fields that report neither `isEditable` nor `ACTION_PASTE`, and never touches the
+/// system clipboard the clipboard path needs.
+pub async fn ime_input_text(
+    executor: &dyn CommandExecutor,
+    text: &str,
+    mode: TextWriteMode,
+    target: &Value,
+) -> Result<Value> {
+    let package = target["package"].as_str().unwrap_or("");
+    let field_id = scalar_text(&target["field_id"]);
+    if package.is_empty() || field_id.is_empty() || text.len() > 4096 || text.contains('\0') {
+        bail!("invalid Android input method target")
+    }
+    request(
+        executor,
+        "ime_input_text",
+        &[
+            ("text_b64", &base64_text(text)),
+            ("mode", mode.as_str()),
+            ("package", package),
+            ("field_id", &field_id),
+        ],
+    )
+    .await
+}
+
+/// Read one scalar extra as the plain text the companion expects.
+pub(crate) fn scalar_text(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Number(number) => number.to_string(),
+        _ => String::new(),
+    }
+}
+
+fn base64_text(text: &str) -> String {
+    URL_SAFE_NO_PAD.encode(text.as_bytes())
 }
 
 /// Click a unique current accessibility node whose approved identity still matches.
@@ -254,7 +330,10 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_reply, encode_extra_value, paste_text, shell_quote};
+    use super::{
+        decode_reply, encode_extra_value, ime_input_text, paste_text, scalar_text, shell_quote,
+        TextWriteMode,
+    };
     use crate::shell::{CommandExecutor, ExecutionResult};
     use anyhow::{bail, Result};
     use async_trait::async_trait;
@@ -348,6 +427,50 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn ime_commit_binds_the_editor_and_encodes_the_text() -> Result<()> {
+        let executor = RecordingExecutor::default();
+        let target = json!({"package": "com.example.app", "field_id": 4242});
+        ime_input_text(&executor, "中文", TextWriteMode::Replace, &target).await?;
+        let command = executor
+            .captured
+            .lock()
+            .map_err(|_| anyhow::anyhow!("recording lock poisoned"))?
+            .pop()
+            .ok_or_else(|| anyhow::anyhow!("no command recorded"))?;
+        assert!(command.contains("--method ime_input_text"));
+        assert!(command.contains("mode:s:replace"));
+        assert!(command.contains("package:s:com.example.app"));
+        assert!(command.contains("field_id:s:4242"));
+        // `content call` carries the extra as one argv string, so the text travels base64 encoded.
+        let encoded = URL_SAFE_NO_PAD.encode("中文".as_bytes());
+        assert!(command.contains(&format!("text_b64:s:{encoded}")));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ime_commit_without_a_bound_editor_is_rejected() {
+        let executor = RecordingExecutor::default();
+        for target in [
+            json!({"package": "com.example.app"}),
+            json!({"field_id": 1}),
+            json!({"package": "", "field_id": 1}),
+        ] {
+            assert!(
+                ime_input_text(&executor, "中文", TextWriteMode::Append, &target)
+                    .await
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn editor_identity_extras_read_as_plain_text() {
+        assert_eq!(scalar_text(&json!(4242)), "4242");
+        assert_eq!(scalar_text(&json!("4242")), "4242");
+        assert_eq!(scalar_text(&json!(null)), "");
     }
 
     #[test]

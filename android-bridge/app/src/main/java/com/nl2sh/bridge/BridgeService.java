@@ -311,7 +311,32 @@ public final class BridgeService extends AccessibilityService {
                 .put("class", nonNull(focus.getClassName()))
                 .put("resource_id", nonNull(focus.getViewIdResourceName()))
                 .put("bounds", boundsText(rect))
-                .put("editable", focus.isEditable());
+                .put("editable", focus.isEditable())
+                .put("can_write", canWriteText(focus));
+    }
+
+    /**
+     * Whether the node, or its nearest editable ancestor, accepts a text write at all.
+     *
+     * Read-only probe: it reports the capability {@link #pasteText} depends on (ACTION_PASTE on
+     * the node, or an editable ancestor that also accepts ACTION_SET_TEXT) so the caller can pick
+     * a backend before asking for confirmation instead of switching one after it.
+     */
+    private static boolean canWriteText(AccessibilityNodeInfo focus) {
+        if (advertises(focus, AccessibilityNodeInfo.ACTION_PASTE)) {
+            return true;
+        }
+        AccessibilityNodeInfo ancestor = focus;
+        while ((ancestor = ancestor.getParent()) != null) {
+            if (ancestor.isEditable() || advertises(ancestor, AccessibilityNodeInfo.ACTION_PASTE)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean advertises(AccessibilityNodeInfo node, int action) {
+        return (node.getActions() & action) != 0;
     }
 
     private JSONObject clickNode(AccessibilityNodeInfo root, String text, boolean byText,
@@ -544,7 +569,8 @@ public final class BridgeService extends AccessibilityService {
         return "[" + rect.left + "," + rect.top + "][" + rect.right + "," + rect.bottom + "]";
     }
 
-    private static JSONObject success() throws JSONException {
+    /** Shared reply prefix for both companion services. */
+    static JSONObject success() throws JSONException {
         return new JSONObject().put("ok", true);
     }
 

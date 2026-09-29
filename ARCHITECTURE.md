@@ -40,6 +40,10 @@ Companion 的节点文字和描述最多展示 256 个字符，同时携带完�
 
 Companion 的 UI 树同时按节点数和序列化字节数设限；Binder 回复达到预算时返回明确的部分树，语义查找和点击拒绝把部分树当作唯一性证据。原生端对 `content call` 等固定机器协议使用静默管道捕获，避免默认 PTY 影响较长的编码回复；普通交互命令的 PTY、进程组、超时和终端恢复路径不变。
 
+Companion 同时提供可选输入方法 `nl2sh Keyboard`，让 `android.input_text` 能在字段既不报告 `isEditable` 也不报告任何文本动作时，经应用的 `InputConnection` 提交 Unicode 文字，与 ADBKeyboard 相同。用户在系统键盘设置中自行选择该键盘，程序不代改；nl2sh 不为每次写入改后端，确认前确定的动作只有三种：字段可编辑时用 `ACTION_SET_TEXT`，字段隐藏该标记但 `focused_target` 的只读 `can_write` 探针为真时用剪贴板粘贴，两者都不成立时用输入法提交。输入法动作在确认前后校验编辑器的包名与 field id，密码编辑器一律拒绝；接受提交却无法读回文字的窗口级连接（例如只暴露搜索框的 WebView）报失败而不是静默成功。`mode: "replace"` 表示先清空再写入，只有输入法通道能做到，shell 与无障碍路径在准备阶段直接拒绝。
+
+输入法的 shell 广播入口（`com.nl2sh.bridge.IME_TEXT` / `IME_TEXT_B64` / `IME_CLEAR`）由输入法服务在运行时注册，以 `android.permission.DUMP` 作为发送方权限，只接受 shell/root，且只有键盘已加载时存在；Android 会跳过发给后台应用的 manifest receiver，所以用上下文注册而不是 manifest 声明。该入口不经过 nl2sh 确认链，其权限等同 `adb shell` 本身，仅用于显式的本地调试。两个服务互相独立：只启用键盘即可输入中文，只启用无障碍即可使用树、点击和手势。
+
 用户输入先成为内部对话消息。Provider 把统一请求映射为 Chat Completions 或 Responses JSON；Tool Call 被转换回内部类型。Agent 只能把 shell tool 交给安全引擎，确认完成后才能调用执行器。stdout、stderr、退出码、超时和错误被编码为 Tool Result，下一轮模型只能依据这些真实结果回答。
 
 TUI 中以 `!` 开头的输入是显式本地命令：去掉前缀后不请求 Provider，而是直接进入同一 `Security → Confirmation → Execution` 边界，并在当前会话界面显示有界实时输出和退出状态。该输入与结果不加入模型上下文；修改、危险、Root 和用户编辑后的命令仍按完整规则重新分类及确认。交互式命令继续通过既有 PTY 挂起、恢复和清屏过滤路径执行。
@@ -85,7 +89,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/tools/file/domain` | `FileToolExecutor`、结构化读取/搜索/补丁 | 任意可访问路径 → 有界结果或待确认 diff | 路径不设工作区边界；写入必须先确认，不调用 shell |
 | `src/tools/audio` | WAV/Raw PCM DSP 与 Jev/通用 LLM 质量判断 | 音频 → Feature JSON、`needs_input` 或评分 | Raw PCM 元数据不得猜测；Jev 已配置时失败不回退；不上传原始音频 |
 | `src/tools/chart` | 有界图表规格校验及终端文字回退 | 模型提供的数值 → 结构化 Tool Result | 只读呈现，不采集或验证统计证据 |
-| `src/tools/android` | 固定参数诊断、只读环境盘点、语义 UI 操作、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；文字/节点点击在确认前和执行前重读 UI 树；写入必须确认 |
+| `src/tools/android` | 固定参数诊断、只读环境盘点、语义 UI 操作、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；文字/节点点击在确认前和执行前重读 UI 树；写入必须确认；Unicode 写入后端在确认前固定，不在确认后切换 |
 | `src/tools/memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |

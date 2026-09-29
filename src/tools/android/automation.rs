@@ -3,7 +3,7 @@
 use crate::{
     shell::CommandExecutor,
     tools::{
-        android::companion,
+        android::companion::{self, TextWriteMode},
         ui::domain::{inspect_android_ui, InspectAndroidUiArgs},
     },
 };
@@ -76,6 +76,9 @@ pub struct UiArgs {
     /// Content scroll direction when coordinates are omitted.
     #[serde(default)]
     pub direction: Option<ScrollDirection>,
+    /// Append to the focused control, or clear it first through the nl2sh keyboard.
+    #[serde(default)]
+    pub mode: Option<TextWriteMode>,
     /// Maximum wait time in milliseconds.
     #[serde(default)]
     pub timeout_ms: Option<u32>,
@@ -98,6 +101,11 @@ pub async fn prepare(name: &str, args: &UiArgs, executor: &dyn CommandExecutor) 
         "android.press_enter" => Ok("input keyevent 66".into()),
         "android.input_text" => {
             let value = required_text(args)?;
+            if args.mode == Some(TextWriteMode::Replace) {
+                // The shell path can only insert characters; clearing a field needs the
+                // companion input method, which owns the focused editor's whole content.
+                bail!("clearing a field requires the nl2sh keyboard input method");
+            }
             shell_input_text_command(value)
         }
         "android.tap" => {
