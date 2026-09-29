@@ -76,12 +76,21 @@ pub fn welcome_url() -> Option<&'static str> {
 /// Handle of the embedded server; its task lives until the runtime exits.
 pub struct WebServer {
     url: String,
+    task: tokio::task::JoinHandle<std::io::Result<()>>,
 }
 
 impl WebServer {
     /// Address shown in the terminal welcome message.
     pub fn url(&self) -> &str {
         &self.url
+    }
+
+    /// Waits until the HTTP server stops and reports task or serving errors.
+    pub async fn wait(&mut self) -> Result<()> {
+        (&mut self.task)
+            .await
+            .context("web interface task stopped unexpectedly")?
+            .context("web interface stopped unexpectedly")
     }
 }
 
@@ -565,10 +574,8 @@ async fn start_with_listener(path: PathBuf, listener: TcpListener) -> Result<Web
         sessions: Mutex::new(sessions),
     });
     let app = router(shared);
-    tokio::spawn(async move {
-        let _ = axum::serve(listener, app).await;
-    });
-    Ok(WebServer { url })
+    let task = tokio::spawn(async move { axum::serve(listener, app).await });
+    Ok(WebServer { url, task })
 }
 
 fn local_ipv4() -> Option<Ipv4Addr> {

@@ -4,6 +4,7 @@ Last Updated: 2026-09-29
 
 ## Recent Changes
 
+- 增加 `--web-only` 无终端启动模式：只启动内置 HTTP 服务并等待服务退出或 Ctrl+C，不初始化 TUI、raw mode、alternate screen 或 PTY，可配合 Android shell 的 `nohup` 与标准流重定向在 ADB 断开后继续运行。该参数拒绝与单次 instruction 或子命令组合；Web 工具继续经过原安全分类、浏览器审批、Root 能力绑定和捕获式执行路径。Linux 目标的 `cargo fmt --all -- --check`、`cargo check` 和 `cargo test` 通过；无标准输入的限时启动 smoke test 输出 Web URL 并持续运行至外部终止。
 - Accessibility 中文输入回退（今日头条/抖音这类 App 的根治）：目标字段不报 `isEditable` 时，`android.input_text` 改由 companion 新动作 `paste_text` 写系统剪贴板，并对同一身份节点（或沿父链找到的可编辑祖先）执行 `ACTION_PASTE`，失败再退 `ACTION_SET_TEXT`；准备阶段新增只读动作 `focused_target`（返回输入焦点节点身份但不要求 `isEditable`）用于定位粘贴目标，确认预览相应区分为 "append text"/"paste text"。点击与粘贴现在共用同一套节点身份匹配（`BridgeService.findNode`），包名/类名/resource_id/bounds/文本与描述哈希校验、Binder 仅接受 shell/root uid 均不变。验证：`cargo test --lib -- companion` 4 项通过（含新增的粘贴请求携带完整身份且 extra 值不含裸冒号、缺 bounds 被拒两项）；APK `assembleDebug` + `adb install -r`、`workflow prepare`（含全量 cargo test，aarch64 sha e9ca763f）与 `deploy` 通过。真机 Android 16 / API 36 一加 PIE110：直连 provider 调 `paste_text` 后回读输入框得 `搜索框，Android 开发`，回复 `backend=accessibility`（该框本身不吃 `ACTION_PASTE`，沿父链的可编辑祖先吃 `ACTION_SET_TEXT`）；随后今日头条全链路 `点搜索入口 → 聚焦输入框 → 输入 "Android 开发" → 点搜索按钮` 全部 ok，结果页读到 Android 底层/AOSP 开发、Android 17 等真实结果，而此前该链路恒定失败于 "focused editable non-password node is unavailable"。安全分类、审批边界、PTY 与终端恢复路径未改。
 - 验证环境备注：本机 `workflow prepare` 首次运行出现 `tests/tui_tests.rs` 失败，单独重跑该测试 7/7 通过、再次运行 prepare 亦通过，属该 PTY 用例在捕获输出环境下的偶发失败，与本次改动无关。
 

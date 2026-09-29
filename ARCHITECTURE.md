@@ -54,7 +54,7 @@ Provider 通过 SSE 将模型文本增量送入 Agent 的显示 sink；TUI 在�
 
 TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Theme`/`Palette` 向 Widget、Markdown、工具结果、确认界面和状态栏提供语义样式，禁止各渲染模块自行硬编码业务颜色。主题只影响显示，不得改变安全评估、确认策略、root 行为、日志内容或 Tool Result；颜色也不得作为风险信息的唯一载体。
 
-内置 Web 页面复用 `UI_DESIGN.md` 的 TrueColor 语义色板，通过 `web/src/style.css` 的 CSS 变量集中供页面及 Markdown 使用；浏览器不需要终端的 ANSI fallback。Web Markdown 围栏代码仅对已注册语言语法高亮，未知语言转义后按纯文本显示。Web/TUI 的视觉调整均不进入安全或执行边界。
+内置 Web 页面复用 `UI_DESIGN.md` 的 TrueColor 语义色板，通过 `web/src/style.css` 的 CSS 变量集中供页面及 Markdown 使用；浏览器不需要终端的 ANSI fallback。Web Markdown 围栏代码仅对已注册语言语法高亮，未知语言转义后按纯文本显示。Web/TUI 的视觉调整均不进入安全或执行边界。`--web-only` 在 HTTP 服务启动后直接等待服务或进程信号，不初始化 TUI、raw mode、alternate screen 或 PTY，适合由 Android shell 后台守护；Web 内的工具执行仍使用原有捕获式执行、安全分类和浏览器确认流程。
 
 Web 会话状态由 Agent Runner 经流式显示 sink 报告模型请求、逐步计数、Token 使用和工具调用阶段，审批入口单独报告等待阶段。会话轮次按接受的用户任务累计，本轮步骤按模型请求启动计数，本轮工具按预算准入计数，失败、取消与拒绝也保留已发生的计数。单调时钟分别累计模型请求（含传输重试）、工具处理（含准备和安全检查、排除人工等待）及审批/补充信息等待时间；总耗时还包含任务准备等本地开销。SSE 快照携带当前任务统计，浏览器每秒更新运行时长，完成后冻结并保存显示摘要。统计与有界显示历史作为独立 Web presentation 持久化，不进入模型上下文；旧快照缺失耗时则保持未知。
 

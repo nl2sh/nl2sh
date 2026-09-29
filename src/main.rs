@@ -16,6 +16,7 @@ use nl2sh::{
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    validate_cli(&cli)?;
     let path = match &cli.config {
         Some(p) => p.clone(),
         None => config::default_config_path()?,
@@ -36,6 +37,17 @@ async fn main() -> Result<()> {
             }
         };
         return nl2sh::bridge::run(operation, &path).await;
+    }
+    if cli.web_only {
+        let mut web = nl2sh::web_ui::start(path).await?;
+        println!("Web UI: {}", web.url());
+        tokio::select! {
+            result = web.wait() => result?,
+            result = tokio::signal::ctrl_c() => {
+                result.context("cannot listen for Ctrl+C")?;
+            }
+        }
+        return Ok(());
     }
     let mut cfg = load_runtime_config(&path, &cli)?;
     if matches!(cli.command, Some(Command::Update)) {
@@ -237,6 +249,13 @@ async fn main() -> Result<()> {
                 )),
         }
     }
+}
+
+fn validate_cli(cli: &Cli) -> Result<()> {
+    if cli.web_only && (cli.instruction.is_some() || cli.command.is_some()) {
+        anyhow::bail!("--web-only cannot be combined with an instruction or subcommand");
+    }
+    Ok(())
 }
 
 async fn run_update(cfg: &config::Config) -> Result<()> {
@@ -525,11 +544,24 @@ fn clean(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::clean;
+    use super::{clean, validate_cli};
+    use crate::cli::Cli;
+    use clap::Parser;
     #[test]
     fn cleans_only_known_command_wrappers() {
         assert_eq!(clean("```sh\nid\n```"), "id");
         assert_eq!(clean("Command: pwd"), "pwd");
         assert_eq!(clean("id\npwd"), "id");
+    }
+
+    #[test]
+    fn web_only_rejects_other_operations() {
+        let instruction =
+            Cli::try_parse_from(["nl2sh", "--web-only", "task"]).expect("CLI shape should parse");
+        assert!(validate_cli(&instruction).is_err());
+
+        let subcommand =
+            Cli::try_parse_from(["nl2sh", "--web-only", "update"]).expect("CLI shape should parse");
+        assert!(validate_cli(&subcommand).is_err());
     }
 }

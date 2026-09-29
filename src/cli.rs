@@ -79,6 +79,9 @@ pub struct Cli {
     pub ascii: bool,
     #[arg(long)]
     pub dry_run: bool,
+    /// Run only the browser UI without initializing a terminal interface.
+    #[arg(long)]
+    pub web_only: bool,
 }
 
 #[cfg(test)]
@@ -106,5 +109,13 @@ mod tests {
     fn parses_update_command() {
         let cli = Cli::try_parse_from(["nl2sh", "update"]).expect("update command should parse");
         assert!(matches!(cli.command, Some(Command::Update)));
+    }
+
+    #[test]
+    fn parses_web_only_mode() {
+        let cli = Cli::try_parse_from(["nl2sh", "--web-only"]).expect("valid CLI should parse");
+        assert!(cli.web_only);
+        assert!(cli.instruction.is_none());
+        assert!(cli.command.is_none());
     }
 }
