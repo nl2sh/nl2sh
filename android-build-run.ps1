@@ -1,3 +1,5 @@
+param([switch]$WebOnly)
+
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -7,6 +9,14 @@ $AndroidDir = if ($env:ANDROID_DIR) { $env:ANDROID_DIR } else { "/data/local/tmp
 $RemoteBinary = "$AndroidDir/nl2sh"
 $NdkDir = if ($env:ANDROID_NDK_HOME) { $env:ANDROID_NDK_HOME } elseif ($env:ANDROID_NDK_ROOT) { $env:ANDROID_NDK_ROOT } else { $null }
 $AdbArgs = @()
+
+function Start-WebOnly([bool]$UseSu) {
+    $LogFile = "$AndroidDir/nl2sh-web.log"
+    $RemoteCommand = "cd '$AndroidDir' && nohup '$RemoteBinary' --web-only >'$LogFile' 2>&1 </dev/null &"
+    if ($UseSu) { & adb @AdbArgs shell su -c $RemoteCommand } else { & adb @AdbArgs shell $RemoteCommand }
+    if ($LASTEXITCODE -ne 0) { throw "failed to start Web-only service" }
+    Write-Host "Web-only service started. Log: $LogFile"
+}
 
 foreach ($Command in @("adb", "cargo", "rustup")) {
     if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) { throw "$Command was not found in PATH" }
@@ -108,6 +118,7 @@ if ($LASTEXITCODE -ne 0) { throw "failed to make nl2sh executable" }
 
 if ($AdbIsRoot) {
     Write-Host "Starting $RemoteBinary through root adbd."
+    if ($WebOnly) { Start-WebOnly $false; exit 0 }
     Write-Host "Press Ctrl+Q in nl2sh to exit."
     & adb @AdbArgs shell -t env NL2SH_WINDOWS_SCROLL=1 $RemoteBinary
     exit $LASTEXITCODE
@@ -117,6 +128,7 @@ Write-Host "Trying Android su as a fallback..."
 & adb @AdbArgs shell su -c id *> $null
 if ($LASTEXITCODE -eq 0) {
     Write-Host "su access granted; starting $RemoteBinary as root."
+    if ($WebOnly) { Start-WebOnly $true; exit 0 }
     Write-Host "Press Ctrl+Q in nl2sh to exit."
     & adb @AdbArgs shell -t su -c "NL2SH_WINDOWS_SCROLL=1 $RemoteBinary"
     exit $LASTEXITCODE
@@ -130,6 +142,7 @@ if ($ConfigExists) {
     if ($LASTEXITCODE -ne 0) { throw "adb root and su are unavailable, and $RemoteConfig is not readable; permissions were left unchanged to protect the API key" }
 }
 Write-Warning "adb root and su are unavailable; starting as adb shell user."
+if ($WebOnly) { Start-WebOnly $false; exit 0 }
 Write-Host "Press Ctrl+Q in nl2sh to exit."
 & adb @AdbArgs shell -t env NL2SH_WINDOWS_SCROLL=1 $RemoteBinary
 exit $LASTEXITCODE

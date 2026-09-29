@@ -8,6 +8,7 @@ MODEL=""
 API_KEY=""
 ENDPOINT=""
 CONFIG_REQUESTED=false
+WEB_ONLY=false
 
 die() {
   echo "error: $*" >&2
@@ -24,6 +25,7 @@ Usage: install-android.sh [options]
   --endpoint URL        required for custom; optional override for other providers
   --install-dir PATH    extraction directory (default: ./nl2sh-android)
   --repository URL      GitHub or Gitee repository URL (default: GitHub)
+  --web-only           start the Web UI in the background without a TUI
 EOF
 }
 
@@ -35,10 +37,14 @@ while (($# > 0)); do
     --endpoint) [[ $# -ge 2 ]] || die "--endpoint requires a value"; ENDPOINT="$2"; CONFIG_REQUESTED=true; shift 2 ;;
     --install-dir) [[ $# -ge 2 ]] || die "--install-dir requires a value"; INSTALL_DIR="$2"; shift 2 ;;
     --repository) [[ $# -ge 2 ]] || die "--repository requires a value"; REPOSITORY="$2"; shift 2 ;;
+    --web-only) WEB_ONLY=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown option: $1" ;;
   esac
 done
+
+LAUNCH_ARGS=()
+[[ "${WEB_ONLY}" == false ]] || LAUNCH_ARGS+=(--web-only)
 
 command -v curl >/dev/null 2>&1 || die "curl was not found in PATH"
 API_KEY="${API_KEY:-${NL2SH_API_KEY:-}}"
@@ -124,10 +130,10 @@ if [[ -e "${INSTALL_DIR}" ]]; then
   fi
   echo "Existing verified installation found: ${INSTALL_DIR}"
   if [[ -t 0 ]]; then
-    NL2SH_CONFIG_SOURCE="${EXISTING_CONFIG}" exec "${INSTALL_DIR}/android-run-linux.sh"
+    NL2SH_CONFIG_SOURCE="${EXISTING_CONFIG}" exec "${INSTALL_DIR}/android-run-linux.sh" "${LAUNCH_ARGS[@]}"
   fi
   if exec 3</dev/tty; then
-    NL2SH_CONFIG_SOURCE="${EXISTING_CONFIG}" exec "${INSTALL_DIR}/android-run-linux.sh" <&3
+    NL2SH_CONFIG_SOURCE="${EXISTING_CONFIG}" exec "${INSTALL_DIR}/android-run-linux.sh" "${LAUNCH_ARGS[@]}" <&3
   fi
   die "installation is ready, but no controlling terminal is available; run ${INSTALL_DIR}/android-run-linux.sh from an interactive terminal"
 fi
@@ -185,14 +191,14 @@ write_installer_config "${CONFIG_FILE}" false
 
 echo "Installed and verified: ${INSTALL_DIR}"
 if [[ -t 0 ]]; then
-  NL2SH_CONFIG_SOURCE="${CONFIG_FILE}" exec "${INSTALL_DIR}/android-run-linux.sh"
+  NL2SH_CONFIG_SOURCE="${CONFIG_FILE}" exec "${INSTALL_DIR}/android-run-linux.sh" "${LAUNCH_ARGS[@]}"
 fi
 
 # `curl ... | bash` makes the downloaded script occupy stdin. The launcher and
 # nl2sh TUI need the host's controlling terminal instead, including for device
 # selection prompts, so reconnect stdin only after Bash has consumed the script.
 if exec 3</dev/tty; then
-  NL2SH_CONFIG_SOURCE="${CONFIG_FILE}" exec "${INSTALL_DIR}/android-run-linux.sh" <&3
+  NL2SH_CONFIG_SOURCE="${CONFIG_FILE}" exec "${INSTALL_DIR}/android-run-linux.sh" "${LAUNCH_ARGS[@]}" <&3
 fi
 
 die "installation completed, but no controlling terminal is available; run ${INSTALL_DIR}/android-run-linux.sh from an interactive terminal"

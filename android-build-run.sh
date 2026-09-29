@@ -4,6 +4,19 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANDROID_DIR="${ANDROID_DIR:-/data/local/tmp}"
 REMOTE_BINARY="${ANDROID_DIR}/nl2sh"
+WEB_ONLY=false
+
+usage() {
+  echo "Usage: android-build-run.sh [--web-only]"
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --web-only) WEB_ONLY=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
 
 restore_host_terminal() {
   # adb transports the remote TUI's control sequences to this terminal.  If
@@ -36,6 +49,18 @@ run_remote() {
     remote_command+=" ${quoted}"
   done
   "${ADB[@]}" shell -t "${remote_command}"
+}
+
+run_web_only() {
+  local privilege_prefix="$1"
+  local log_file="${ANDROID_DIR}/nl2sh-web.log"
+  local command="cd '${ANDROID_DIR}' && nohup '${REMOTE_BINARY}' --web-only >'${log_file}' 2>&1 </dev/null &"
+  if [[ "${privilege_prefix}" == "su" ]]; then
+    "${ADB[@]}" shell su -c "${command}"
+  else
+    "${ADB[@]}" shell "${command}"
+  fi
+  echo "Web-only service started. Log: ${log_file}"
 }
 
 die() {
@@ -145,6 +170,10 @@ echo "Pushing: ${LOCAL_BINARY} -> ${REMOTE_BINARY}"
 
 if [[ "${ADB_IS_ROOT}" == true ]]; then
   echo "Starting ${REMOTE_BINARY} through root adbd."
+  if [[ "${WEB_ONLY}" == true ]]; then
+    run_web_only root
+    exit $?
+  fi
   echo "Press Ctrl+Q in nl2sh to exit."
   run_remote "${REMOTE_BINARY}"
   exit $?
@@ -153,6 +182,10 @@ fi
 echo "Trying Android su as a fallback..."
 if "${ADB[@]}" shell su -c id >/dev/null 2>&1; then
   echo "su access granted; starting ${REMOTE_BINARY} as root."
+  if [[ "${WEB_ONLY}" == true ]]; then
+    run_web_only su
+    exit $?
+  fi
   echo "Press Ctrl+Q in nl2sh to exit."
   run_remote su -c "${REMOTE_BINARY}"
   exit $?
@@ -167,5 +200,9 @@ if "${ADB[@]}" shell test -e "${REMOTE_CONFIG}" \
 fi
 
 echo "warning: adb root and su are unavailable; starting as adb shell user." >&2
+if [[ "${WEB_ONLY}" == true ]]; then
+  run_web_only shell
+  exit $?
+fi
 echo "Press Ctrl+Q in nl2sh to exit."
 run_remote "${REMOTE_BINARY}"

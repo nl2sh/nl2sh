@@ -144,6 +144,16 @@ $env:ANDROID_NDK_HOME = "C:\Android\Sdk\ndk\28.2.13676358"
 
 默认推送到 `/data/local/tmp/nl2sh`。`android-build-run.sh` 与 `android-build-run.ps1` 会在没有设备时提示输入网络 ADB 地址、单设备自动选择、多设备按编号选择，并根据设备 ABI 自动选择 AArch64 或 ARMv7 Rust target；显式设置的 `RUST_TARGET` 与设备不匹配时会停止。可用 `ANDROID_DIR=/data/local/tmp/tools` 修改设备目录，也可用 `ADB_SERIAL=<serial>` 预选设备。脚本要求主机 `PATH` 中可找到 `adb`，设备端仅使用 Android 自带的 `mkdir`、`chmod` 和 shell。连接后会先执行 `adb root`、等待 adbd 重启并验证 `id -u`；root adbd 成功时，后续推送和启动均以 root 进行。设备不支持 `adb root` 时才尝试 `su -c`，两者都不可用且已有 `0600 config.toml` 不可读时会提前报错，不会放宽 API Key 配置文件权限。
 
+源码构建脚本也可直接后台启动 Web-only 模式；设备日志写入 `${ANDROID_DIR}/nl2sh-web.log`：
+
+```bash
+./android-build-run.sh --web-only
+```
+
+```powershell
+.\android-build-run.ps1 -WebOnly
+```
+
 预编译发布包同时包含 `bin/arm64-v8a/nl2sh` 与 `bin/armeabi-v7a/nl2sh`，无需 Rust 或 NDK。Linux 使用 `android-run-linux.sh`，Windows 双击 `android-run-windows.bat`；两者都会选择已连接的 ADB 设备、查询 ABI 并推送匹配程序，也支持 `ANDROID_DIR` 和 `ADB_SERIAL`：
 
 ```bash
@@ -155,6 +165,18 @@ chmod +x android-run-linux.sh bin/arm64-v8a/nl2sh bin/armeabi-v7a/nl2sh
 set ADB_SERIAL=device-serial
 android-run-windows.bat
 ```
+
+两种预编译启动器也接受 `--web-only`，完成部署后以 `nohup` 在设备后台启动并返回：
+
+```bash
+./android-run-linux.sh --web-only
+```
+
+```bat
+android-run-windows.bat --web-only
+```
+
+一键安装入口同样支持 Linux/CMD 的 `--web-only` 与 PowerShell 的 `-WebOnly`，并把选项传递给安装后的启动器。
 
 启动器会比较包内程序与设备端实际文件的 SHA-256；一致时直接启动，不再重复传输，摘要不同才推送并在推送后复核。只有显式设置 `NL2SH_CONFIG_SOURCE` 时才会把指定配置部署为设备端 `config.toml`，普通启动不会覆盖配置。
 

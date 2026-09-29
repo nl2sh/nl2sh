@@ -7,7 +7,8 @@ param(
     [string]$Endpoint = "",
     [string]$InstallDir = (Join-Path (Get-Location) "nl2sh-android"),
     [string]$Repository = "https://github.com/nl2sh/nl2sh",
-    [switch]$KeepExistingConfig
+    [switch]$KeepExistingConfig,
+    [switch]$WebOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -82,7 +83,7 @@ if (Test-Path -LiteralPath $InstallDir) {
     }
     Write-Host "Existing verified installation found: $InstallDir"
     $env:NL2SH_CONFIG_SOURCE = $ExistingConfig
-    & $ExistingLauncher
+    if ($WebOnly) { & $ExistingLauncher "--web-only" } else { & $ExistingLauncher }
     exit $LASTEXITCODE
 }
 
@@ -124,7 +125,7 @@ try {
     Write-InstallerConfig $ConfigFile $false
     Write-Host "Installed and verified: $InstallDir"
     $env:NL2SH_CONFIG_SOURCE = $ConfigFile
-    & (Join-Path $InstallDir "android-run-windows.bat")
+    if ($WebOnly) { & (Join-Path $InstallDir "android-run-windows.bat") "--web-only" } else { & (Join-Path $InstallDir "android-run-windows.bat") }
     exit $LASTEXITCODE
 } finally {
     Remove-Item -LiteralPath $TempDir -Recurse -Force -ErrorAction SilentlyContinue

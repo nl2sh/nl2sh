@@ -7,6 +7,21 @@ title nl2sh Android Launcher
 if not defined ANDROID_DIR set "ANDROID_DIR=/data/local/tmp"
 set "REMOTE_BINARY=%ANDROID_DIR%/nl2sh"
 set "REMOTE_CONFIG=%ANDROID_DIR%/config.toml"
+set "WEB_ONLY=false"
+
+:parse_args
+if "%~1"=="" goto :args_done
+if /i "%~1"=="--web-only" (
+  set "WEB_ONLY=true"
+  shift
+  goto :parse_args
+)
+if /i "%~1"=="-h" goto :usage
+if /i "%~1"=="--help" goto :usage
+echo ERROR: unknown option: %~1
+goto :fail
+
+:args_done
 
 where adb >nul 2>&1
 if errorlevel 1 (
@@ -118,6 +133,11 @@ if defined NL2SH_CONFIG_SOURCE (
 
 if "!ADB_IS_ROOT!"=="true" (
   echo Starting %REMOTE_BINARY% through root adbd.
+  if "!WEB_ONLY!"=="true" (
+    call :start_web_only false
+    set "RUN_EXIT=!ERRORLEVEL!"
+    goto :done
+  )
   echo Press Ctrl+Q in nl2sh to exit.
   adb -s "!SERIAL!" shell -t env NL2SH_WINDOWS_SCROLL=1 "%REMOTE_BINARY%"
   set "RUN_EXIT=!ERRORLEVEL!"
@@ -128,6 +148,11 @@ echo Trying Android su as a fallback...
 adb -s "!SERIAL!" shell su -c id >nul 2>&1
 if not errorlevel 1 (
   echo su access granted; starting %REMOTE_BINARY% as root.
+  if "!WEB_ONLY!"=="true" (
+    call :start_web_only true
+    set "RUN_EXIT=!ERRORLEVEL!"
+    goto :done
+  )
   echo Press Ctrl+Q in nl2sh to exit.
   adb -s "!SERIAL!" shell -t su -c "NL2SH_WINDOWS_SCROLL=1 %REMOTE_BINARY%"
   set "RUN_EXIT=!ERRORLEVEL!"
@@ -145,10 +170,31 @@ if not errorlevel 1 (
 )
 
 echo WARNING: adb root and su are unavailable; starting as adb shell user.
+if "!WEB_ONLY!"=="true" (
+  call :start_web_only false
+  set "RUN_EXIT=!ERRORLEVEL!"
+  goto :done
+)
 echo Press Ctrl+Q in nl2sh to exit.
 adb -s "!SERIAL!" shell -t env NL2SH_WINDOWS_SCROLL=1 "%REMOTE_BINARY%"
 set "RUN_EXIT=!ERRORLEVEL!"
 goto :done
+
+:start_web_only
+set "WEB_LOG=%ANDROID_DIR%/nl2sh-web.log"
+set "WEB_COMMAND=cd '%ANDROID_DIR%' && nohup '%REMOTE_BINARY%' --web-only ^>'%WEB_LOG%' 2^>^&1 ^</dev/null ^&"
+if /i "%~1"=="true" (
+  adb -s "!SERIAL!" shell su -c "!WEB_COMMAND!"
+) else (
+  adb -s "!SERIAL!" shell "!WEB_COMMAND!"
+)
+if errorlevel 1 exit /b 1
+echo Web-only service started. Log: !WEB_LOG!
+exit /b 0
+
+:usage
+echo Usage: android-run-windows.bat [--web-only]
+exit /b 0
 
 :select_device
 if defined ADB_SERIAL (
