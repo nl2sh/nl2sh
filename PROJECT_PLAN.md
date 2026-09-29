@@ -10,6 +10,7 @@
 - [x] 将当前节点所属包名纳入语义点击与 Unicode 输入的审批前后和 companion 最终执行校验。
 - [x] 为每个 `android.*` 工具公开对应字段与必填参数的 Schema，并在准备阶段拒绝无关参数。
 - [x] 建立设备交互终端的一次性审批通道；直接工具调用等待本地决定，修改类需确认、危险类需二次确认，网关不暴露批准入口。
+- [x] 增加默认关闭的 `bridge_auto_approve` 设备配置，使 A2A/MCP 的 `ask` 与 `invoke` 可显式自动批准所有风险等级；其他入口继续使用各自审批器。
 - [x] 直接工具结果保留 `view_screenshot` 的有界图片附件，A2A/MCP 传输限额覆盖其最大尺寸。
 - [x] 提供无持久截图文件的直接屏幕捕获与有界图片回传，MCP 将图片转为视觉模型可读取的图像内容块。
 - [x] 完成 Android shell 与可选 Accessibility companion 的通用 UI 后端：APK 提供 Unicode 输入、实时节点树、按文本或 bounds 点击、单笔 swipe/scroll；无 companion 时保留 uiautomator、input、am 和 screencap 路径，模拟器验证两种点击与手势后端。

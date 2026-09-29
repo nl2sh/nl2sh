@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add opt-in `bridge_auto_approve` for unattended A2A/MCP `ask` and `invoke` operations at every risk level; the default remains local approval or rejection.
 - Serve authenticated Streamable HTTP MCP at `/mcp` on the A2A gateway's existing port, reusing the stdio adapter's tools and device approval boundary.
 - A2A 网关支持 Docker Compose 部署、无线 ADB 设备 IP 连接，以及 Hermes 从其他主机通过网关 IP 调用；私网明文 HTTP 需显式启用，设备端确认链保持不变。
 - Add an optional Android Accessibility companion APK for Unicode text entry, live node inspection, semantic text/bounds node clicks, and bounded swipe/scroll gestures. Its Binder provider accepts shell/root callers only; nl2sh retains its existing approval boundary.

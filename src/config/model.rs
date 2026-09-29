@@ -175,6 +175,8 @@ pub struct Config {
     pub execute_confirm_policy: ConfirmPolicy,
     /// Safety posture.
     pub security_level: SecurityLevel,
+    /// Automatically approve operations received through the A2A/MCP bridge.
+    pub bridge_auto_approve: bool,
     /// Command execution identity mode.
     pub execute_user_mode: ExecuteUserMode,
     /// Enables real PTY execution instead of pipeline fallback.
@@ -259,6 +261,7 @@ impl Default for Config {
             interactive_execute_timeout_secs: 0,
             execute_confirm_policy: ConfirmPolicy::RiskOnly,
             security_level: SecurityLevel::Balanced,
+            bridge_auto_approve: false,
             execute_user_mode: ExecuteUserMode::Auto,
             enable_pty: true,
             ascii_symbols: false,

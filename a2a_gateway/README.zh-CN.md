@@ -55,7 +55,7 @@ docker compose logs -f gateway
 
 当前 UI 后端使用 Android shell/uiautomator，可选安装并启用 [Accessibility companion](../android-bridge/README.md) 以支持中文等 Unicode 输入、实时节点树、语义节点点击和 swipe/scroll 手势。`android.scroll` 可省略坐标，按显示尺寸默认向下滚动，也可设置 `direction: "up"`。没有 companion 时，`android.input_text` 仅接受可打印 ASCII。操作后可再调用 `android.screen_dump` 或 `nl2sh_read_screen` 检查实际屏幕内容。
 
-直接 `/invoke` 调用遇到需要确认的操作时，最多等待 120 秒，让用户在另一个设备交互终端作出一次性决定。在设备上运行 `nl2sh --config /data/local/tmp/config.toml bridge approvals` 查看请求，再运行 `nl2sh --config /data/local/tmp/config.toml bridge approve REQUEST_ID`。审批命令展示完整操作和风险；危险操作要求再次输入精确短语。拒绝或超时均不执行。网关不暴露审批命令；旧的 Agent `/ask` 调用仍拒绝待确认操作。桥接调用会把本地 `unsafe`/`never` 设置至少提升到 `balanced`/`risk_only`，令牌持有者可请求设备账号有权读取的数据，应妥善保护令牌。
+默认情况下，直接 `/invoke` 调用遇到需要确认的操作时，最多等待 120 秒，让用户在另一个设备交互终端作出一次性决定。在设备上运行 `nl2sh --config /data/local/tmp/config.toml bridge approvals` 查看请求，再运行 `nl2sh --config /data/local/tmp/config.toml bridge approve REQUEST_ID`。审批命令展示完整操作和风险；危险操作要求再次输入精确短语。拒绝或超时均不执行。网关不暴露审批命令；Agent `/ask` 默认仍拒绝待确认操作。在设备端 `config.toml` 中设置 `bridge_auto_approve = true` 后，A2A/MCP 的 `ask` 和 `invoke` 会自动批准所有等级的操作，包括危险与严重操作，无需设备本地确认；设备下次桥接调用读取配置后生效，不影响 TUI、Web 或 CLI。工具参数校验、风险分类、命令绑定和 root 能力检查仍执行。桥接调用会把本地 `unsafe`/`never` 设置至少提升到 `balanced`/`risk_only`。此时网关令牌持有者能以设备进程权限无人值守执行操作，只应交给完全信任的客户端。
 
 ## 构建、部署并继续任务
 

@@ -69,6 +69,8 @@ struct AskResponse {
 
 struct BridgeConfirmer;
 
+struct AutoApproveConfirmer;
+
 #[async_trait]
 impl Confirmer for BridgeConfirmer {
     async fn confirm(
@@ -77,6 +79,17 @@ impl Confirmer for BridgeConfirmer {
         _assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
         Ok(ConfirmationDecision::Reject)
+    }
+}
+
+#[async_trait]
+impl Confirmer for AutoApproveConfirmer {
+    async fn confirm(
+        &self,
+        _command: &str,
+        _assessment: &SecurityAssessment,
+    ) -> Result<ConfirmationDecision> {
+        Ok(ConfirmationDecision::Approve)
     }
 }
 
@@ -115,8 +128,6 @@ pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
             if !cfg.provider_is_configured() {
                 bail!("model provider is not configured")
             }
-            // Remote callers have no local confirmation channel. Preserve a
-            // mandatory confirmation requirement even for an unsafe local UI.
             if cfg.security_level == SecurityLevel::Unsafe {
                 cfg.security_level = SecurityLevel::Balanced;
             }
@@ -141,11 +152,18 @@ pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
             };
             let llm = build_client(&cfg)?;
             let executor = ShellExecutor::new(cfg.clone());
+            let auto_approve = AutoApproveConfirmer;
+            let reject = BridgeConfirmer;
+            let confirmer: &dyn Confirmer = if cfg.bridge_auto_approve {
+                &auto_approve
+            } else {
+                &reject
+            };
             let runner = AgentRunner {
                 config: &cfg,
                 llm: &llm,
                 executor: &executor,
-                confirmer: &BridgeConfirmer,
+                confirmer,
             };
             let outcome = runner.run_with_history(&request.message, &history).await?;
             let failed_tools = outcome
@@ -208,15 +226,18 @@ pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
                 cfg.execute_confirm_policy = ConfirmPolicy::RiskOnly;
             }
             let executor = ShellExecutor::new(cfg.clone());
-            let confirmer = approval::BridgeApprovalConfirmer::new(path)?;
-            let result = invoke(
-                &cfg,
-                &executor,
-                &confirmer,
-                &request.tool,
-                request.arguments,
-            )
-            .await?;
+            let auto_approve = AutoApproveConfirmer;
+            let local_approval = if cfg.bridge_auto_approve {
+                None
+            } else {
+                Some(approval::BridgeApprovalConfirmer::new(path)?)
+            };
+            let confirmer: &dyn Confirmer = match &local_approval {
+                Some(local) => local,
+                None => &auto_approve,
+            };
+            let result =
+                invoke(&cfg, &executor, confirmer, &request.tool, request.arguments).await?;
             println!("{}", serde_json::to_string(&result)?);
         }
         BridgeOperation::Approvals => approval::list_pending(path)?,
@@ -228,4 +249,61 @@ pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AutoApproveConfirmer, BridgeConfirmer};
+    use crate::{
+        agent::{ConfirmationDecision, Confirmer},
+        config::Config,
+        security::{RiskLevel, SecurityAssessment},
+        shell::ShellExecutor,
+        tools::runtime::invoke,
+    };
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn bridge_auto_approval_covers_critical_operations() -> anyhow::Result<()> {
+        let assessment = SecurityAssessment::from_policy(
+            RiskLevel::Critical,
+            Vec::new(),
+            true,
+            "critical operation".into(),
+            false,
+        );
+        assert!(assessment.requires_double_confirmation);
+        assert!(matches!(
+            BridgeConfirmer.confirm("command", &assessment).await?,
+            ConfirmationDecision::Reject
+        ));
+        assert!(matches!(
+            AutoApproveConfirmer.confirm("command", &assessment).await?,
+            ConfirmationDecision::Approve
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn bridge_auto_approval_executes_prepared_write() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("target.txt");
+        let config = Config::default();
+        let executor = ShellExecutor::new(config.clone());
+        let result = invoke(
+            &config,
+            &executor,
+            &AutoApproveConfirmer,
+            "apply_patch",
+            json!({
+                "path": path.to_string_lossy(),
+                "old_text": "",
+                "new_text": "approved"
+            }),
+        )
+        .await?;
+        assert!(result.success, "{}", result.output);
+        assert_eq!(std::fs::read_to_string(path)?, "approved");
+        Ok(())
+    }
 }
