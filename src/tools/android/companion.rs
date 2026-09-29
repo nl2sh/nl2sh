@@ -143,7 +143,10 @@ async fn request(
     let mut command = format!("content call --uri {URI} --method {method}");
     for (name, value) in extras {
         command.push_str(" --extra ");
-        command.push_str(&shell_quote(&format!("{name}:s:{value}")));
+        command.push_str(&shell_quote(&format!(
+            "{name}:s:{}",
+            encode_extra_value(value)
+        )));
     }
     let result = executor
         .execute_machine(&command, false)
@@ -155,7 +158,24 @@ async fn request(
             result.stderr
         )
     }
+    if result
+        .stdout
+        .trim_start()
+        .starts_with("usage: adb shell content")
+    {
+        bail!("Android Accessibility provider rejected the call arguments")
+    }
     decode_reply(&result.stdout)
+}
+
+/// Percent-encode `%` and `:` inside one extra value.
+///
+/// `content call --extra` parses `<name>:<type>:<value>` and rejects a value that contains a
+/// colon by printing its usage text **with exit code 0**; `resource_id` always contains one
+/// (`package:id/name`), so every identity-bound companion action failed as an "invalid reply".
+/// The companion percent-decodes these two characters before using them.
+fn encode_extra_value(value: &str) -> String {
+    value.replace('%', "%25").replace(':', "%3A")
 }
 
 fn decode_reply(output: &str) -> Result<Value> {
@@ -190,10 +210,24 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_reply, shell_quote};
+    use super::{decode_reply, encode_extra_value, shell_quote};
     use anyhow::Result;
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use serde_json::json;
+
+    #[test]
+    fn extra_values_survive_the_colon_delimited_binding_format() -> Result<()> {
+        // `content call --extra name:type:value` rejects a value containing ':' (exit code 0,
+        // usage text on stdout), and resource_id always contains one.
+        assert_eq!(
+            encode_extra_value("com.zhihu.android:id/input_text"),
+            "com.zhihu.android%3Aid/input_text"
+        );
+        assert!(!encode_extra_value("com.zhihu.android:id/input_text").contains(':'));
+        assert_eq!(encode_extra_value("100%"), "100%25");
+        assert_eq!(encode_extra_value("plain text 中文"), "plain text 中文");
+        Ok(())
+    }
 
     #[test]
     fn provider_reply_decodes_bounded_success_and_rejection() -> Result<()> {

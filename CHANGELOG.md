@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- Percent-encode `%` and `:` inside every Accessibility companion extra value and decode it in the companion. `content call --extra <name>:<type>:<value>` rejects a value containing a colon and prints its usage text **with exit code 0**, and `resource_id` always contains one (`package:id/name`), so every identity-bound companion action (`tap_node`, `tap_text`, `input_text`) failed as an "invalid reply" on vendor Android 12+. Report rejected call arguments as such instead of as an invalid reply.
 - Resolve the launcher activity and start that component explicitly in `android.launch_app`: the package-scoped `am start -p <package>` filter returns exit code 1 on vendor Android 12+ builds (reproduced on Android 16) even when the app declares a MAIN/LAUNCHER activity; the resolved component is validated to stay shell-safe before it is used.
 - Bind semantic Android node clicks and Unicode focused input to the target app package across confirmation and the companion's final action; reject missing or changed package identity.
 - Launch Android packages through a package-scoped MAIN/LAUNCHER intent instead of Monkey's random event stream; treat `am start` errors printed with a zero exit status as failures.

@@ -15,6 +15,11 @@ import org.json.JSONObject;
 public final class BridgeProvider extends ContentProvider {
     private static final int MAX_REPLY = 64 * 1024;
 
+    /** Reverse the caller's extra-value encoding: '%3A' -> ':' and '%25' -> '%'. */
+    private static String decode(String value) {
+        return value.replace("%3A", ":").replace("%25", "%");
+    }
+
     @Override
     public boolean onCreate() {
         return true;
@@ -31,17 +36,17 @@ public final class BridgeProvider extends ContentProvider {
         try {
             request.put("action", method);
             if (extras != null) {
-                request.put("text", extras.getString("text", ""));
-                request.put("package", extras.getString("package", ""));
-                request.put("bounds", extras.getString("bounds", ""));
-                request.put("class", extras.getString("class", ""));
-                request.put("resource_id", extras.getString("resource_id", ""));
-                request.put("node_text", extras.getString("node_text", ""));
-                request.put("description", extras.getString("description", ""));
-                request.put("text_hash", extras.getString("text_hash", ""));
-                request.put("description_hash", extras.getString("description_hash", ""));
+                request.put("text", decode(extras.getString("text", "")));
+                request.put("package", decode(extras.getString("package", "")));
+                request.put("bounds", decode(extras.getString("bounds", "")));
+                request.put("class", decode(extras.getString("class", "")));
+                request.put("resource_id", decode(extras.getString("resource_id", "")));
+                request.put("node_text", decode(extras.getString("node_text", "")));
+                request.put("description", decode(extras.getString("description", "")));
+                request.put("text_hash", decode(extras.getString("text_hash", "")));
+                request.put("description_hash", decode(extras.getString("description_hash", "")));
                 for (String coordinate : new String[] {"x", "y", "end_x", "end_y", "duration_ms"}) {
-                    request.put(coordinate, extras.getString(coordinate, ""));
+                    request.put(coordinate, decode(extras.getString(coordinate, "")));
                 }
             }
             reply = BridgeService.dispatch(request);
