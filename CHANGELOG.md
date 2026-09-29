@@ -11,6 +11,7 @@
 
 ### Changed
 
+- Let the gateway image build from a Docker Hub mirror through the `NL2SH_GATEWAY_BASE_IMAGE` Compose variable or the `GATEWAY_BASE_IMAGE` build argument, keeping `python:3.12-slim-bookworm` as the default base and the file free of vendor-specific registries.
 - Give each `android.*` tool a focused argument schema with its required fields, and reject unrelated arguments before preparing an action.
 - Describe the A2A Agent Card and MCP tools as a direct Android Device Runtime, with built-in Agent consultation explicitly optional; document that direct calls require no device model provider.
 - Make `brush-parser` AST effects the primary shell classifier, split shell and domain policy modules, and keep built-in regex only for the fork-bomb signature. A command-bound in-process privilege broker rechecks approval and root plans before user shell execution; unknown syntax or dynamic code requires strong confirmation.

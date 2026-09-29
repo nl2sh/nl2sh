@@ -4,6 +4,8 @@ Last Updated: 2026-09-29
 
 ## Recent Changes
 
+- A2A 网关基础镜像可替换：`Dockerfile` 的 `FROM` 改为由 `ARG GATEWAY_BASE_IMAGE` 决定，Compose 通过 `NL2SH_GATEWAY_BASE_IMAGE` 传入，默认值仍为 `python:3.12-slim-bookworm`，仓库不再绑定任何厂商镜像地址；无法访问 Docker Hub 的主机可用提供相同 Python 标签的镜像站点构建。本机以镜像站点的 3.14.6-slim 标签执行 `docker compose build`（构建日志确认基础镜像解析为该标签）与 `docker compose up -d` 成功，容器为 `healthy`；在容器内运行 `python -m unittest discover -s tests -q` 的 19 项测试通过，MCP 客户端经网关调用 `nl2sh_inspect` 返回 `TASK_STATE_COMPLETED` 与设备 API 34 事实。未设置该变量时 `docker compose config` 解析出的构建参数为上游默认标签（本机网络无法直连 Docker Hub 拉取该默认镜像，故构建走镜像站点）。网关协议、鉴权、设备端审批、安全分类与 PTY 路径未改。
+
 - A2A 网关在原有 8765 监听端口增加需相同 Bearer 令牌鉴权的 Streamable HTTP MCP `/mcp`，复用 stdio 适配器的六项工具；MCP 工具通过进程内 ASGI 访问原有 Agent Card 与 A2A JSON-RPC，不依赖网关外部公告地址回连。Compose 保持单容器和原有回环端口发布，Hermes 可通过 HTTP MCP URL 与鉴权 Header 接入；设备端安全分类、一次性本地审批、Android 可执行文件和 PTY 路径未改。Python `python -m unittest discover -s tests -q` 的 19 项测试、`cargo fmt --all -- --check`、`cargo check`、`cargo test --quiet` 与 `git diff --check` 通过；HTTP 回归覆盖未授权拒绝、工具发现、直接调用和屏幕图像块。
 - A2A 网关增加 Docker Compose 交付、无线 ADB IPv4 `设备IP:端口` 连接及跨主机 Hermes 接入。容器包含 Python 网关与 adb，命名卷保存 ADB 配对密钥和 SQLite 任务；每次调用前连接指定设备，连接失败不执行、不在回复丢失后重放。网关网络监听和 MCP 客户端远程明文 HTTP 均需显式配置；默认客户端仍要求 HTTPS，设备侧审批、安全分类和 PTY 路径不变。
 - 上述网关改动验证：Python `python -m unittest discover -s tests -q` 的 18 项测试通过，覆盖 TCP 连接前置、失败拒绝、远程 IP Agent Card/MCP 同源和明文 HTTP 显式配置；Rust `cargo fmt --all -- --check`、`cargo check`、`cargo test --quiet` 与 `git diff --check` 通过。

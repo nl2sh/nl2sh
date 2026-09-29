@@ -1,7 +1,11 @@
 services:
   gateway:
     # A2A /a2a and Streamable HTTP MCP /mcp share this listener.
-    build: .
+    build:
+      context: .
+      args:
+        # Override for a Docker Hub mirror; must serve the same Python tag as the default.
+        GATEWAY_BASE_IMAGE: ${NL2SH_GATEWAY_BASE_IMAGE:-python:3.12-slim-bookworm}
     init: true
     restart: unless-stopped
     environment:

@@ -47,6 +47,8 @@ docker compose logs -f gateway
 
 对于需要配对码的无线调试，启动服务前可在同一目录运行 `docker compose run --rm --entrypoint adb gateway pair 设备IP:配对端口`，输入设备显示的配对码。Compose 将 ADB 密钥和 SQLite 任务库分别保存在命名卷中；重建容器后不需重新配对。网关在每次工具调用前执行 `adb connect 设备IP:连接端口`，连接失败时不会执行该次设备操作，也不会在回复丢失后自动重放写入。
 
+无法访问 Docker Hub 的主机不必修改 `Dockerfile`：在 `.env` 设置 `NL2SH_GATEWAY_BASE_IMAGE`，或给 `docker build` 传 `--build-arg GATEWAY_BASE_IMAGE=...` 即可改用镜像站点。镜像需提供与默认 `python:3.12-slim-bookworm` 相同的 Python 标签。
+
 同一个 `gateway` 容器在 8765 端口提供 A2A 和 HTTP MCP，无需第二个 MCP 容器或外部 Docker 网络。`.env.example` 明确开启容器内的 HTTP 监听，但默认仅将宿主端口发布到 `127.0.0.1`。只有将 `NL2SH_GATEWAY_BIND` 改为 `0.0.0.0` 才能由其他机器按网关 IP 访问；此时应限制可信 LAN/VPN 的访问，或改用 HTTPS 反向代理。`NL2SH_GATEWAY_URL` 应与 A2A 客户端配置的来源地址完全一致。可用 `curl http://网关IP:8765/.well-known/agent-card.json` 检查公开卡片；`/a2a` 和 `/mcp` 仍需要令牌。Docker 和无线 ADB 不改变设备本地审批，需在设备的交互终端运行 `bridge approvals`/`bridge approve`。Docker 守护进程和 Compose 可用时，再执行上述容器命令；本机 Python 启动方式仍可使用相同的 `设备IP:端口` 作为 `--serial`。
 
 客户端发送 `/inspect` 可获取固定的只读设备环境信息，发送 `/tools` 可获取可用工具目录，发送 `/invoke {"tool":"android.screen_dump","arguments":{}}` 可直接调用一次设备 Tool Runtime，发送普通问题则会启动可选的设备端 Agent 对话。直接调用跳过设备端 Agent 和模型请求。Agent 续问时使用相同的 A2A `contextId`。A2A 任务保存在网关的 SQLite 数据库中，Agent 对话回合保存在 nl2sh 的设备端私有会话目录中。确认成功前须检查直接调用结果的 `success` 或 Agent 结果的 `failed_tools`。

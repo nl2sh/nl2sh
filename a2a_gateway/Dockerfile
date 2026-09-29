@@ -1,4 +1,8 @@
-FROM python:3.12-slim-bookworm
+# The base image is overridable so a host that builds through a Docker Hub mirror does not
+# need to edit this file (Compose: NL2SH_GATEWAY_BASE_IMAGE; plain build: --build-arg
+# GATEWAY_BASE_IMAGE=...). A mirror must serve the same Python tag as the default.
+ARG GATEWAY_BASE_IMAGE=python:3.12-slim-bookworm
+FROM ${GATEWAY_BASE_IMAGE}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends adb \
