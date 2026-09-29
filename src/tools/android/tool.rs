@@ -223,16 +223,32 @@ impl Tool for AndroidUiTool {
                 if value.is_empty() || value.len() > 1024 {
                     bail!("invalid Android UI text")
                 }
-                let focused = companion::focused_input(executor).await?;
-                let preview = format!(
-                    "Accessibility append text {value:?} to {} {} at {}",
-                    focused["class"].as_str().unwrap_or("unknown control"),
-                    focused["resource_id"].as_str().unwrap_or(""),
-                    focused["bounds"].as_str().unwrap_or("unknown bounds"),
-                );
-                accessibility = true;
-                target = Some(focused);
-                preview
+                // 字段报 isEditable 时走 ACTION_SET_TEXT；App 隐藏该标记时改走剪贴板粘贴。
+                match companion::focused_input(executor).await {
+                    Ok(focused) => {
+                        let preview = format!(
+                            "Accessibility append text {value:?} to {} {} at {}",
+                            focused["class"].as_str().unwrap_or("unknown control"),
+                            focused["resource_id"].as_str().unwrap_or(""),
+                            focused["bounds"].as_str().unwrap_or("unknown bounds"),
+                        );
+                        accessibility = true;
+                        target = Some(focused);
+                        preview
+                    }
+                    Err(_) => {
+                        let focused = companion::focused_target(executor).await?;
+                        let preview = format!(
+                            "Accessibility paste text {value:?} into {} {} at {}",
+                            focused["class"].as_str().unwrap_or("unknown control"),
+                            focused["resource_id"].as_str().unwrap_or(""),
+                            focused["bounds"].as_str().unwrap_or("unknown bounds"),
+                        );
+                        accessibility = true;
+                        target = Some(focused);
+                        preview
+                    }
+                }
             }
             "android.tap_text" if companion::probe(executor).await.is_ok() => {
                 let value = args.text.as_deref().context("text is required")?;
@@ -334,9 +350,24 @@ impl PreparedExecution for AndroidUiAction {
             }
             "android.input_text" if self.accessibility => {
                 let value = self.args.text.as_deref().context("text is required")?;
-                let focused = companion::focused_input(executor).await?;
-                verify_same_target(self.target.as_ref(), &focused)?;
-                serde_json::to_string(&companion::input_text(executor, value, &focused).await?)?
+                match companion::focused_input(executor).await {
+                    Ok(focused) => {
+                        verify_same_target(self.target.as_ref(), &focused)?;
+                        serde_json::to_string(
+                            &companion::input_text(executor, value, &focused).await?,
+                        )?
+                    }
+                    Err(_) => {
+                        // 目标字段不报 isEditable：粘贴进已确认的那个节点（身份由 companion 复核）。
+                        let target = self
+                            .target
+                            .as_ref()
+                            .context("Android UI paste target is missing")?;
+                        serde_json::to_string(
+                            &companion::paste_text(executor, value, target).await?,
+                        )?
+                    }
+                }
             }
             "android.tap_text" if self.accessibility => {
                 let value = self.args.text.as_deref().context("text is required")?;

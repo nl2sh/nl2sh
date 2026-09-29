@@ -2,6 +2,8 @@ package com.nl2sh.bridge;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -208,6 +210,11 @@ public final class BridgeService extends AccessibilityService {
                     .put("resource_id", nonNull(focus.getViewIdResourceName()))
                     .put("bounds", boundsText(rect));
         }
+        if ("focused_target".equals(action)) {
+            // Same identity as focused_input but without the isEditable requirement: apps such as
+            // Toutiao hide that flag on their search box while still accepting pasted text.
+            return focusedTarget(root);
+        }
         if ("input_text".equals(action)) {
             return inputText(root, request.optString("text", ""),
                     request.optString("package", ""),
@@ -233,6 +240,14 @@ public final class BridgeService extends AccessibilityService {
                     request.optString("description", ""),
                     request.optString("text_hash", ""),
                     request.optString("description_hash", ""), cancelled);
+        }
+        if ("paste_text".equals(action)) {
+            return pasteText(root, request.optString("text", ""),
+                    request.optString("package", ""), request.optString("class", ""),
+                    request.optString("resource_id", ""), request.optString("bounds", ""),
+                    request.optString("node_text", ""), request.optString("description", ""),
+                    request.optString("text_hash", ""), request.optString("description_hash", ""),
+                    cancelled);
         }
         return error("unsupported action");
     }
@@ -278,6 +293,27 @@ public final class BridgeService extends AccessibilityService {
                 && focus.isVisibleToUser() && focus.isEnabled() ? focus : null;
     }
 
+    /**
+     * Input-focused node identity without the isEditable requirement.
+     *
+     * Used only to locate a text field for {@link #pasteText}: the write still goes through
+     * ACTION_PASTE or an editable ancestor, never through an unverified node.
+     */
+    private static JSONObject focusedTarget(AccessibilityNodeInfo root) throws JSONException {
+        AccessibilityNodeInfo focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (focus == null || focus.isPassword() || !focus.isVisibleToUser() || !focus.isEnabled()) {
+            return error("focused Android UI node is unavailable");
+        }
+        Rect rect = new Rect();
+        focus.getBoundsInScreen(rect);
+        return success().put("status", "ready")
+                .put("package", nonNull(focus.getPackageName()))
+                .put("class", nonNull(focus.getClassName()))
+                .put("resource_id", nonNull(focus.getViewIdResourceName()))
+                .put("bounds", boundsText(rect))
+                .put("editable", focus.isEditable());
+    }
+
     private JSONObject clickNode(AccessibilityNodeInfo root, String text, boolean byText,
             String bounds, String packageName, String className, String resourceId, String nodeText,
             String description, String textHash, String descriptionHash,
@@ -286,6 +322,31 @@ public final class BridgeService extends AccessibilityService {
         if (byText && (text.isEmpty() || text.length() > 1024)) {
             return error("invalid text target");
         }
+        AccessibilityNodeInfo match;
+        try {
+            match = findNode(root, text, byText, bounds, packageName, className, resourceId,
+                    nodeText, description, textHash, descriptionHash);
+        } catch (MatchFailure failure) {
+            return error(failure.getMessage());
+        }
+        AccessibilityNodeInfo clickable = match;
+        while (clickable != null && !clickable.isClickable()) {
+            clickable = clickable.getParent();
+        }
+        if (cancelled.get()) {
+            return error("Accessibility request expired");
+        }
+        if (clickable == null || !clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            return error("Android UI node did not accept click");
+        }
+        return success().put("status", "complete").put("backend", "accessibility");
+    }
+
+    /** Locate one identity-matched visible node; the match rules are shared by click and paste. */
+    private static AccessibilityNodeInfo findNode(AccessibilityNodeInfo root, String text,
+            boolean byText, String bounds, String packageName, String className, String resourceId,
+            String nodeText, String description, String textHash, String descriptionHash)
+            throws MatchFailure {
         AccessibilityNodeInfo match = null;
         ArrayDeque<AccessibilityNodeInfo> pending = new ArrayDeque<>();
         pending.add(root);
@@ -306,7 +367,7 @@ public final class BridgeService extends AccessibilityService {
                     && matchesTextIdentity(description, descriptionHash,
                             node.getContentDescription())) {
                 if (match != null) {
-                    return error("Android UI node match is ambiguous");
+                    throw new MatchFailure("Android UI node match is ambiguous");
                 }
                 match = node;
             }
@@ -318,22 +379,67 @@ public final class BridgeService extends AccessibilityService {
             }
         }
         if (!pending.isEmpty()) {
-            return error("Android UI tree exceeds node limit");
+            throw new MatchFailure("Android UI tree exceeds node limit");
         }
         if (match == null) {
-            return error("Android UI node not found");
+            throw new MatchFailure("Android UI node not found");
         }
-        AccessibilityNodeInfo clickable = match;
-        while (clickable != null && !clickable.isClickable()) {
-            clickable = clickable.getParent();
+        return match;
+    }
+
+    /**
+     * Paste text into one identity-matched node through the system clipboard.
+     *
+     * Needed because `ACTION_SET_TEXT` (inputText) requires the node to report isEditable and
+     * several apps hide that flag, while the node itself still accepts ACTION_PASTE.
+     */
+    private JSONObject pasteText(AccessibilityNodeInfo root, String text, String packageName,
+            String className, String resourceId, String bounds, String nodeText, String description,
+            String textHash, String descriptionHash, AtomicBoolean cancelled) throws JSONException {
+        if (text.isEmpty() || text.getBytes(StandardCharsets.UTF_8).length > 4096) {
+            return error("text must contain 1-4096 UTF-8 bytes");
+        }
+        AccessibilityNodeInfo match;
+        try {
+            match = findNode(root, "", false, bounds, packageName, className, resourceId,
+                    nodeText, description, textHash, descriptionHash);
+        } catch (MatchFailure failure) {
+            return error(failure.getMessage());
+        }
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboard == null) {
+            return error("system clipboard is unavailable");
         }
         if (cancelled.get()) {
             return error("Accessibility request expired");
         }
-        if (clickable == null || !clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-            return error("Android UI node did not accept click");
+        clipboard.setPrimaryClip(ClipData.newPlainText("nl2sh", text));
+        AccessibilityNodeInfo target = match;
+        while (target != null && !target.isEditable()) {
+            target = target.getParent();
         }
-        return success().put("status", "complete").put("backend", "accessibility");
+        if (target == null) {
+            target = match;
+        }
+        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+        if (target.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+            return success().put("status", "complete").put("backend", "accessibility-paste");
+        }
+        Bundle arguments = new Bundle();
+        arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+        if (target.isEditable() && target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
+            return success().put("status", "complete").put("backend", "accessibility");
+        }
+        return error("Android UI node did not accept pasted text");
+    }
+
+    /** Identity-match failure carrying a reply-ready message. */
+    private static final class MatchFailure extends Exception {
+        private static final long serialVersionUID = 1L;
+
+        MatchFailure(String message) {
+            super(message);
+        }
     }
 
     private JSONObject snapshot(AccessibilityNodeInfo root) throws JSONException {

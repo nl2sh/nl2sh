@@ -46,6 +46,50 @@ pub async fn focused_input(executor: &dyn CommandExecutor) -> Result<Value> {
     request(executor, "focused_input", &[]).await
 }
 
+/// Read the input-focused node identity even when it does not report `isEditable`.
+///
+/// Apps such as Toutiao hide that flag on their search box; the node is still the right paste
+/// target, and the write itself goes through `paste_text`'s own action checks.
+pub async fn focused_target(executor: &dyn CommandExecutor) -> Result<Value> {
+    request(executor, "focused_target", &[]).await
+}
+
+/// Paste Unicode text into one identity-matched node through the system clipboard.
+///
+/// Used when the field hides `isEditable`, where `input_text`'s `ACTION_SET_TEXT` path cannot
+/// verify its target. The companion sets the clipboard, then pastes into the matched node or its
+/// editable ancestor.
+pub async fn paste_text(executor: &dyn CommandExecutor, text: &str, node: &Value) -> Result<Value> {
+    let bounds = node["bounds"]
+        .as_str()
+        .context("Android UI target has no bounds")?;
+    if text.is_empty() || text.len() > 4096 || text.contains('\0') || bounds.len() > 128 {
+        bail!("invalid Android Accessibility paste target")
+    }
+    request(
+        executor,
+        "paste_text",
+        &[
+            ("text", text),
+            ("package", node["package"].as_str().unwrap_or("")),
+            ("bounds", bounds),
+            ("class", node["class"].as_str().unwrap_or("")),
+            ("resource_id", node["resource_id"].as_str().unwrap_or("")),
+            ("node_text", node["text"].as_str().unwrap_or("")),
+            ("text_hash", node["text_hash"].as_str().unwrap_or("")),
+            (
+                "description",
+                node["content_description"].as_str().unwrap_or(""),
+            ),
+            (
+                "description_hash",
+                node["description_hash"].as_str().unwrap_or(""),
+            ),
+        ],
+    )
+    .await
+}
+
 /// Click a unique current accessibility node whose approved identity still matches.
 pub async fn tap_text(executor: &dyn CommandExecutor, text: &str, node: &Value) -> Result<Value> {
     let bounds = node["bounds"]
@@ -210,8 +254,10 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_reply, encode_extra_value, shell_quote};
-    use anyhow::Result;
+    use super::{decode_reply, encode_extra_value, paste_text, shell_quote};
+    use crate::shell::{CommandExecutor, ExecutionResult};
+    use anyhow::{bail, Result};
+    use async_trait::async_trait;
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use serde_json::json;
 
@@ -227,6 +273,81 @@ mod tests {
         assert_eq!(encode_extra_value("100%"), "100%25");
         assert_eq!(encode_extra_value("plain text 中文"), "plain text 中文");
         Ok(())
+    }
+
+    /// Records the machine-protocol command and answers like a ready companion.
+    #[derive(Default)]
+    struct RecordingExecutor {
+        captured: std::sync::Mutex<Vec<String>>,
+    }
+
+    #[async_trait]
+    impl CommandExecutor for RecordingExecutor {
+        async fn execute(
+            &self,
+            _command: &str,
+            _needs_root: bool,
+            _interactive: bool,
+        ) -> Result<ExecutionResult> {
+            bail!("the companion only speaks the machine protocol")
+        }
+
+        async fn execute_machine(
+            &self,
+            command: &str,
+            _needs_root: bool,
+        ) -> Result<ExecutionResult> {
+            self.captured
+                .lock()
+                .map_err(|_| anyhow::anyhow!("recording lock poisoned"))?
+                .push(command.to_owned());
+            let reply = URL_SAFE_NO_PAD.encode(serde_json::to_vec(
+                &json!({"ok": true, "status": "complete"}),
+            )?);
+            Ok(ExecutionResult {
+                stdout: format!("Result: Bundle[{{data={reply}}}]"),
+                stderr: String::new(),
+                exit_code: Some(0),
+                timed_out: false,
+                interrupted: false,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn paste_request_carries_node_identity_without_bare_colons() -> Result<()> {
+        let executor = RecordingExecutor::default();
+        let node = json!({
+            "package": "com.example.app",
+            "class": "android.widget.EditText",
+            "resource_id": "com.example.app:id/query",
+            "bounds": "[0,0][10,10]",
+            "text": "hint",
+            "text_hash": "AAA",
+            "content_description": "",
+            "description_hash": "",
+        });
+        paste_text(&executor, "中文", &node).await?;
+        let command = executor
+            .captured
+            .lock()
+            .map_err(|_| anyhow::anyhow!("recording lock poisoned"))?
+            .pop()
+            .ok_or_else(|| anyhow::anyhow!("no command recorded"))?;
+        assert!(command.contains("--method paste_text"));
+        assert!(command.contains("resource_id:s:com.example.app%3Aid/query"));
+        assert!(!command.contains("com.example.app:id/query"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn paste_target_without_bounds_is_rejected() {
+        let executor = RecordingExecutor::default();
+        assert!(
+            paste_text(&executor, "中文", &json!({"package": "com.example.app"}))
+                .await
+                .is_err()
+        );
     }
 
     #[test]
