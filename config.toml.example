@@ -40,6 +40,9 @@ execute_timeout_secs = 30
 interactive_execute_timeout_secs = 0
 execute_confirm_policy = "risk_only"
 security_level = "balanced"
+# Explicitly auto-approve all A2A/MCP bridge operations, including dangerous ones.
+# Only enable for a gateway whose Bearer token holders you fully trust.
+bridge_auto_approve = false
 execute_user_mode = "auto"
 enable_pty = true
 ascii_symbols = false
