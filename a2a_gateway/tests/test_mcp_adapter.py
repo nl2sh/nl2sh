@@ -10,8 +10,10 @@ import sys
 from pathlib import Path
 
 import httpx
+import httpx2
 from mcp import Client
 from mcp.client.stdio import StdioServerParameters
+from mcp.client.streamable_http import streamable_http_client
 import uvicorn
 
 from nl2sh_a2a.mcp_adapter import A2AClient, A2ASettings, MAX_REPLY_BYTES, create_server
@@ -38,6 +40,48 @@ class FakeDevice:
 
 
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_authenticated_http_mcp_calls_live_a2a_gateway(self):
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(128)
+        port = listener.getsockname()[1]
+        url = f"http://127.0.0.1:{port}"
+        token = "t" * 32
+        with tempfile.TemporaryDirectory() as directory:
+            device = FakeDevice()
+            app = create_app(Settings(device, token, str(Path(directory) / "tasks.db"),
+                                      "https://gateway.example"))
+            server = uvicorn.Server(uvicorn.Config(app, log_level="error"))
+            serving = asyncio.create_task(server.serve(sockets=[listener]))
+            try:
+                for _ in range(100):
+                    if server.started:
+                        break
+                    await asyncio.sleep(0.01)
+                self.assertTrue(server.started, "A2A gateway did not start")
+                async with httpx.AsyncClient() as unauthenticated:
+                    rejected = await unauthenticated.get(f"{url}/mcp")
+                    self.assertEqual(rejected.status_code, 401)
+                    rejected = await unauthenticated.get(
+                        f"{url}/mcp", headers={"Authorization": "Bearer " + "x" * 32},
+                    )
+                    self.assertEqual(rejected.status_code, 401)
+                async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}) as http_client:
+                    async with Client(streamable_http_client(f"{url}/mcp", http_client=http_client),
+                                      read_timeout_seconds=10) as client:
+                        tools = await client.list_tools()
+                        self.assertIn("nl2sh_invoke", {tool.name for tool in tools.tools})
+                        direct = await client.call_tool("nl2sh_invoke", {
+                            "tool": "inspect_android_ui", "arguments": {},
+                        })
+                        self.assertEqual(direct.structured_content["result"]["output"], "direct")
+                        screen = await client.call_tool("nl2sh_read_screen")
+                        self.assertEqual(screen.content[1].type, "image")
+                        self.assertEqual(device.sessions, [])
+            finally:
+                server.should_exit = True
+                await serving
+
     async def test_installed_stdio_entrypoint_calls_live_a2a_gateway(self):
         entrypoint = Path(sys.executable).with_name("nl2sh-a2a-mcp")
         self.assertTrue(entrypoint.is_file(), "install the gateway package in this Python environment")

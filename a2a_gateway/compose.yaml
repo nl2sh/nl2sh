@@ -1,5 +1,6 @@
 services:
   gateway:
+    # A2A /a2a and Streamable HTTP MCP /mcp share this listener.
     build: .
     init: true
     restart: unless-stopped

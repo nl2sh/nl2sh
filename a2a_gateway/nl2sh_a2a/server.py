@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
+
+import httpx
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
@@ -23,6 +26,7 @@ from starlette.authentication import SimpleUser
 from starlette.responses import PlainTextResponse
 
 from .device import Device
+from .mcp_adapter import A2AClient, A2ASettings, create_server
 
 
 @dataclass(frozen=True)
@@ -150,8 +154,26 @@ def create_app(settings: Settings) -> Starlette:
         task_store=DatabaseTaskStore(engine),
         agent_card=card,
     )
-    app = Starlette(routes=[
+    a2a_routes = [
         *create_agent_card_routes(card),
         *create_jsonrpc_routes(handler, rpc_url="/a2a"),
-    ])
+    ]
+    a2a_app = BearerAuth(Starlette(routes=a2a_routes), settings.token)
+    # Keep Agent Card discovery and JSON-RPC on the same configured origin without
+    # making an outbound network request from the HTTP MCP endpoint.
+    mcp_client = A2AClient(
+        A2ASettings(url, settings.token, allow_insecure_http=True),
+        httpx.ASGITransport(app=a2a_app),
+    )
+    mcp_app = create_server(mcp_client).streamable_http_app(host="0.0.0.0")
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        async with mcp_app.router.lifespan_context(mcp_app):
+            yield
+
+    app = Starlette(
+        routes=[*a2a_routes, *mcp_app.routes],
+        lifespan=lifespan,
+    )
     return BearerAuth(app, settings.token)

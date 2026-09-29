@@ -1,9 +1,10 @@
 # Project Status
 
-Last Updated: 2026-09-28
+Last Updated: 2026-09-29
 
 ## Recent Changes
 
+- A2A 网关在原有 8765 监听端口增加需相同 Bearer 令牌鉴权的 Streamable HTTP MCP `/mcp`，复用 stdio 适配器的六项工具；MCP 工具通过进程内 ASGI 访问原有 Agent Card 与 A2A JSON-RPC，不依赖网关外部公告地址回连。Compose 保持单容器和原有回环端口发布，Hermes 可通过 HTTP MCP URL 与鉴权 Header 接入；设备端安全分类、一次性本地审批、Android 可执行文件和 PTY 路径未改。Python `python -m unittest discover -s tests -q` 的 19 项测试、`cargo fmt --all -- --check`、`cargo check`、`cargo test --quiet` 与 `git diff --check` 通过；HTTP 回归覆盖未授权拒绝、工具发现、直接调用和屏幕图像块。
 - A2A 网关增加 Docker Compose 交付、无线 ADB IPv4 `设备IP:端口` 连接及跨主机 Hermes 接入。容器包含 Python 网关与 adb，命名卷保存 ADB 配对密钥和 SQLite 任务；每次调用前连接指定设备，连接失败不执行、不在回复丢失后重放。网关网络监听和 MCP 客户端远程明文 HTTP 均需显式配置；默认客户端仍要求 HTTPS，设备侧审批、安全分类和 PTY 路径不变。
 - 上述网关改动验证：Python `python -m unittest discover -s tests -q` 的 18 项测试通过，覆盖 TCP 连接前置、失败拒绝、远程 IP Agent Card/MCP 同源和明文 HTTP 显式配置；Rust `cargo fmt --all -- --check`、`cargo check`、`cargo test --quiet` 与 `git diff --check` 通过。
 - Hermes 跨应用目标绑定：uiautomator 与 Accessibility 节点树现在都携带所属包名；语义点击及 Unicode 焦点输入在确认前后核对包名，companion 在 `ACTION_CLICK`/`ACTION_SET_TEXT` 前再次校验，缺失包名时拒绝写入。新增相同控件换包名的 Rust 回归测试；Android API 26 x86_64 模拟器中，直接 `bridge invoke(android.screen_dump)` 分别从 companion 与 uiautomator 返回包名，伪造另一包名的 companion 点击及输入请求均被拒绝，输入框内容未改变；经本地强确认的 Accessibility 语义点击、Unicode 输入及 uiautomator 回退点击均成功。`cargo fmt --all -- --check`、`cargo check`、`cargo test`、`cargo clippy --all-targets -- -D warnings`、`git diff --check`、Android API 26 AArch64/ARMv7 `cargo check --no-default-features`、x86_64 release 构建、APK `assembleDebug`/`lintDebug` 和 A2A/MCP 十一项测试通过。旧原生二进制未传包名时 companion 的语义写入会失败，需要同步升级；PTY 与终端恢复路径未变。

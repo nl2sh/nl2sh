@@ -32,7 +32,7 @@ Android Runtime
 
 本地一次性审批的私有目录使用跨进程文件锁串行化请求计数与发布，最多同时保留八个待决请求。强制终止留下的 `live` 标记只有在对应 Unix socket 已不再监听时才清理；正常请求的目录和 socket 仍由 RAII 释放。审批者必须在设备交互终端查看完整动作，危险操作还要输入与请求 ID 绑定的二次确认短语。
 
-同一 Python 包的可选 stdio MCP 适配层在编码 Agent 所在机器运行：MCP 工具 → Agent Card 同来源校验 → 带 Bearer 鉴权的 A2A JSON-RPC → 网关。它公开环境盘点、工具目录、直接工具调用、咨询和任务查询，返回 A2A 任务与设备结果；不直接连接 adb，也不增加写入批准入口。
+同一 Python 包的 MCP 适配层既可作为编码 Agent 所在机器的 stdio 服务，也可由网关进程在 `/mcp` 提供 Streamable HTTP 服务。HTTP MCP 与 A2A 共用监听端口和 Bearer 令牌；网关内的 MCP 工具通过进程内 ASGI 传输执行 Agent Card 同来源校验及带 Bearer 鉴权的 A2A JSON-RPC，不依赖网关的外部公告地址回连。两种传输公开相同的环境盘点、工具目录、直接工具调用、咨询和任务查询，返回 A2A 任务与设备结果；MCP 不直接连接 adb，也不增加写入批准入口。
 
 逻辑上分为 Agent Layer（TUI/Web/CLI 的内置 Agent）、Tool Runtime（注册、参数验证、风险评估、确认和执行）及 Platform Adapters（Android shell、可选 Accessibility companion、Termux 与开发主机条件路径）。直接工具调用只跳过 Agent Layer；安全与确认层仍在设备端。`android.*` 语义工具默认可使用 Android shell 的 `am`、`input`、`uiautomator` 和 `screencap`；应用启动使用限定包名的 MAIN/LAUNCHER Intent，不发送随机输入事件；可选 companion 通过 Android ContentProvider 的 Binder 调用提供实时节点树、按文字或 bounds 点击节点、Unicode 输入和单笔 swipe/scroll 手势，Manifest 的 DUMP 权限与 `Binder.getCallingUid()` 双重限制调用方为 shell/root。文字与节点点击在确认后重读完整 UI 树，核对节点所属包名、类名、资源 ID、文字、描述和 bounds；Accessibility 点击在 companion 内再次复核这些字段。Unicode 输入在确认前后及写入前核对焦点控件的包名、类名、资源 ID 和 bounds。缺失包名的语义写入目标会被拒绝。节点树截断或读取失败时不执行语义点击。手势在确认前固定坐标和时长，确认后重新计算并核对；companion 等待 Android 的完成或取消回调再返回结果，确认后不静默切换到 shell。无路径截图在 Android shell 的 `/data/local/tmp` 或 Termux HOME 建立私有临时目录，并以有界图片附件返回。Shell `input text` 只接受可打印 ASCII，并把字面量 `%s` 拆成独立输入命令以避免被 Android 解码为空格；Unicode 需要安装并启用 companion。远程调用方不能代替设备交互终端批准动作。
 
@@ -101,7 +101,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
 | `src/bridge`、`src/tools/runtime` | 固定环境盘点、工具目录、有界 JSON Agent 调用和直接工具调用 | `bridge` CLI → JSON / 私有会话或工具结果 | 直接调用绕过 LLM 但保留工具安全链；无人值守确认一律拒绝；不开放任意 adb 命令 |
-| `a2a_gateway` | 主机侧 A2A Agent Card、JSON-RPC、鉴权、Task Store、adb 传输、stdio MCP 适配及显式构建部署 | MCP → A2A 消息 → Android bridge 结果 | 不在设备运行；不直接执行模型输出；部署仅到独立候选路径 |
+| `a2a_gateway` | 主机侧 A2A Agent Card、JSON-RPC、鉴权、Task Store、adb 传输、stdio/HTTP MCP 适配及显式构建部署 | MCP → A2A 消息 → Android bridge 结果 | 不在设备运行；HTTP MCP 需 Bearer 令牌；不直接执行模型输出；部署仅到独立候选路径 |
 | `src/tools` | `Tool`、显式 `ToolRegistry`、风险/能力元数据、派生 schema 与 `PreparedToolCall` | 模型调用 → 预备动作 → 审批后有界结果 | 只用本地元数据定风险；修改预览必须在统一确认入口批准后执行 |
 | `crates/nl2sh-tool-macros` | 编译期 `#[tool]` 生成适配器与元数据 | 注解函数 → Rust Tool 实现 | 只在构建主机运行；不自动注册或授予执行权限 |
 | `src/security` | `shell/{parser,analyzer,expansion,effects}`、`policy/{filesystem,android,privilege,network}`、特殊 regex/自定义规则、`SecurityAssessment` | 原始命令或结构化工具风险 → 风险和确认要求、命令绑定能力 | 不依赖 TUI、LLM 或执行器 |
