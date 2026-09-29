@@ -88,9 +88,7 @@ pub async fn prepare(name: &str, args: &UiArgs, executor: &dyn CommandExecutor) 
             let package = args.package.as_deref().context("package is required")?;
             validate_package(package)?;
             if name == "android.launch_app" {
-                Ok(format!(
-                    "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p {package}"
-                ))
+                Ok(launch_component(executor, package).await?)
             } else {
                 Ok(format!("am force-stop {package}"))
             }
@@ -112,6 +110,55 @@ pub async fn prepare(name: &str, args: &UiArgs, executor: &dyn CommandExecutor) 
         "android.tap_node" => Ok(prepare_tap(name, args, executor).await?.0),
         _ => bail!("unsupported Android UI action {name}"),
     }
+}
+
+/// Build an explicit `am start -n <component>` for the package's launcher activity.
+///
+/// `am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p <package>`
+/// only filters the intent by package, and vendor Android 12+ builds reject that filter with
+/// exit code 1 ("unable to resolve Intent") for apps whose launcher filter is not the
+/// resolver's default. Resolving the component first and starting it explicitly works on
+/// every API level and keeps the launched activity deterministic.
+async fn launch_component(executor: &dyn CommandExecutor, package: &str) -> Result<String> {
+    let resolved = executor
+        .execute_quiet(
+            &format!(
+                "cmd package resolve-activity --brief -a android.intent.action.MAIN -c \
+                 android.intent.category.LAUNCHER {package}"
+            ),
+            false,
+            false,
+        )
+        .await
+        .context("cannot resolve the package launcher activity")?;
+    if resolved.exit_code != Some(0) {
+        bail!("cannot resolve a launcher activity for {package}");
+    }
+    let component = resolved
+        .stdout
+        .lines()
+        .map(str::trim)
+        .find(|line| line.matches('/').count() == 1 && !line.contains(' '))
+        .with_context(|| format!("package {package} has no launcher activity"))?;
+    validate_component(component)?;
+    Ok(format!("am start -n {component}"))
+}
+
+/// Reject a resolved component that could change the shape of the executed command.
+fn validate_component(component: &str) -> Result<()> {
+    let (package, activity) = component
+        .split_once('/')
+        .context("resolved launcher component carries no activity")?;
+    validate_package(package)?;
+    if activity.is_empty()
+        || activity.starts_with('/')
+        || !component
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '$'))
+    {
+        bail!("resolved launcher component is not safe to execute")
+    }
+    Ok(())
 }
 
 /// Resolve a swipe or scroll into one bounded gesture on the current display.
@@ -376,24 +423,92 @@ fn bounds_center(bounds: &str) -> Result<(u32, u32)> {
 mod tests {
     use super::{
         bounds_center, full_text_hash, parse_display_size, prepare, select_unique_node,
-        shell_input_text_command, ui_node_is_absent, validate_package, UiArgs,
+        shell_input_text_command, ui_node_is_absent, validate_component, validate_package, UiArgs,
     };
-    use crate::{config::Config, shell::ShellExecutor};
+    use crate::shell::{CommandExecutor, ExecutionResult};
+    use anyhow::{bail, Result};
+    use async_trait::async_trait;
     use serde_json::json;
 
+    /// Answers the launcher-resolution probe with fixed output.
+    struct FakeResolve {
+        stdout: &'static str,
+        exit_code: Option<i32>,
+    }
+
+    #[async_trait]
+    impl CommandExecutor for FakeResolve {
+        async fn execute(
+            &self,
+            _command: &str,
+            _needs_root: bool,
+            _interactive: bool,
+        ) -> Result<ExecutionResult> {
+            bail!("launcher resolution must use quiet execution")
+        }
+
+        async fn execute_quiet(
+            &self,
+            command: &str,
+            needs_root: bool,
+            interactive: bool,
+        ) -> Result<ExecutionResult> {
+            if needs_root || interactive {
+                bail!("launcher resolution must stay non-root and noninteractive")
+            }
+            assert!(
+                command.starts_with("cmd package resolve-activity --brief"),
+                "unexpected launcher probe: {command}"
+            );
+            Ok(ExecutionResult {
+                stdout: self.stdout.to_owned(),
+                stderr: String::new(),
+                exit_code: self.exit_code,
+                timed_out: false,
+                interrupted: false,
+            })
+        }
+    }
+
     #[tokio::test]
-    async fn launch_app_uses_package_scoped_launcher_intent() -> anyhow::Result<()> {
-        let executor = ShellExecutor::new(Config::default());
+    async fn launch_app_starts_the_resolved_launcher_component() -> anyhow::Result<()> {
+        let executor = FakeResolve {
+            stdout: "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false\ncom.example.app/.MainActivity\n",
+            exit_code: Some(0),
+        };
         let args = UiArgs {
             package: Some("com.example.app".into()),
             ..UiArgs::default()
         };
         let command = prepare("android.launch_app", &args, &executor).await?;
-        assert_eq!(
-            command,
-            "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p com.example.app"
-        );
+        assert_eq!(command, "am start -n com.example.app/.MainActivity");
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn launch_app_fails_when_no_launcher_component_resolves() -> anyhow::Result<()> {
+        let executor = FakeResolve {
+            stdout: "priority=0 preferredOrder=0\n",
+            exit_code: Some(0),
+        };
+        let args = UiArgs {
+            package: Some("com.example.app".into()),
+            ..UiArgs::default()
+        };
+        assert!(prepare("android.launch_app", &args, &executor)
+            .await
+            .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn resolved_components_must_stay_shell_safe() {
+        assert!(validate_component("com.example.app/.MainActivity").is_ok());
+        assert!(validate_component("com.example.app/.ui.Main$Inner").is_ok());
+        assert!(validate_component("com.example.app/.Main;id").is_err());
+        assert!(validate_component("com.example.app/").is_err());
+        assert!(validate_component("com.example.app").is_err());
+        assert!(validate_component("com.example.app/.Main\nrm -rf /").is_err());
     }
     #[test]
     fn validates_semantic_ui_targets() {

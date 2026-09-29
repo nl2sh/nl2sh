@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- Resolve the launcher activity and start that component explicitly in `android.launch_app`: the package-scoped `am start -p <package>` filter returns exit code 1 on vendor Android 12+ builds (reproduced on Android 16) even when the app declares a MAIN/LAUNCHER activity; the resolved component is validated to stay shell-safe before it is used.
 - Bind semantic Android node clicks and Unicode focused input to the target app package across confirmation and the companion's final action; reject missing or changed package identity.
 - Launch Android packages through a package-scoped MAIN/LAUNCHER intent instead of Monkey's random event stream; treat `am start` errors printed with a zero exit status as failures.
 - Reclaim stale one-time device approval requests after an abrupt bridge exit, and serialize pending-limit checks with request publication across concurrent bridge processes.
