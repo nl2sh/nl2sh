@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'preact/hooks';
 import {api} from './api';
+export {FilePanel} from './fileBrowser';
 import {ConfigEditor} from './configEditor';
 import {displayTerminalResponse} from './terminalOutput';
 import type {InstalledApp} from './types';
@@ -23,14 +24,6 @@ export function ActivityBar({active,select,create}:{active:Panel|null;select:(pa
 
 export function PanelHeading({title,minimize}:{title:string;minimize:()=>void}){
   return <header class="panel-heading"><h2>{title}</h2><button type="button" class="panel-minimize" onClick={minimize} aria-label={`最小化${title}`} title={`最小化${title}`}>−</button></header>
-}
-
-export function FilePanel({usePath}:{usePath:(path:string)=>void}){
-  const[path,setPath]=useState('.'),[revision,setRevision]=useState(0),[entries,setEntries]=useState<string[]>([]),[error,setError]=useState(''),[loading,setLoading]=useState(false);
-  useEffect(()=>{let active=true;setLoading(true);setError('');api.fileSuggestions(path).then(items=>{if(active)setEntries(items)}).catch(e=>{if(active)setError(String(e))}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[path,revision]);
-  const normalized=path.replace(/\/$/,'');
-  const parent=path==='/'||path==='.'||path==='~'?null:normalized.slice(0,normalized.lastIndexOf('/'))|| (path.startsWith('/')?'/':'.');
-  return <div class="panel-body file-panel"><p class="panel-path" title={path}>{path}</p><div class="panel-actions"><button onClick={()=>setPath(parent||'.')} disabled={!parent}>上一级</button><button onClick={()=>setPath('/')}>根目录</button><button onClick={()=>setPath('~')}>主目录</button><button onClick={()=>setRevision(value=>value+1)}>刷新</button></div>{loading&&<p class="muted">正在读取…</p>}{error&&<p class="bad">{error}</p>}<div class="panel-list">{entries.map(entry=><div key={entry} class="file-item"><button class="panel-list-item" title={entry} onClick={()=>entry.endsWith('/')?setPath(entry):usePath(entry)}><span aria-hidden="true">{entry.endsWith('/')?'▸':'·'}</span><span>{entry.replace(/\/$/,'').split('/').pop()||entry}</span></button><button class="file-insert" type="button" aria-label={`将 ${entry} 填入对话输入框`} title="将路径填入对话输入框" onClick={()=>usePath(entry)}>→</button></div>)}{!loading&&!error&&entries.length===0&&<p class="muted">此目录没有可显示的文件</p>}</div><p class="panel-hint">点击名称浏览文件夹，点击右侧箭头将路径填入对话。</p></div>
 }
 
 export function ConfigPanel({onSaved}:{onSaved:()=>Promise<void>}){

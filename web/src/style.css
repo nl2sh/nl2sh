@@ -337,6 +337,35 @@ button:disabled { opacity: .45; }
 .file-item .panel-list-item span:last-child { min-width: 0; overflow-wrap: anywhere; }
 .file-insert { flex: none; width: 30px; padding: 0; border: 0; background: transparent; color: var(--text-secondary); font-size: 1.1rem; }
 .file-insert:hover { color: var(--accent); background: var(--background); }
+.file-item { border-bottom: 1px solid var(--border); }
+.file-item .panel-list-item { align-items: center; }
+.file-item .panel-list-item:disabled { opacity: 1; cursor: default; }
+.file-icon { width: 1.6rem; text-align: center; font-size: 1.15rem; }
+.file-details { display: flex; flex-direction: column; min-width: 0; gap: .18rem; }
+.file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-details small { color: var(--text-secondary); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-preview { width: min(1000px, 94vw); display: flex; flex-direction: column; overflow: hidden; }
+.file-preview h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; font-size: 1rem; }
+.file-preview-meta { color: var(--text-secondary); margin: .5rem 0; font-size: .8rem; }
+.file-preview img, .file-preview video { display: block; max-width: 100%; max-height: 70vh; margin: auto; object-fit: contain; }
+.file-preview pre { overflow: auto; min-height: 0; max-height: 70vh; margin: .3rem 0 0; padding: .8rem; background: var(--background); border: 1px solid var(--border); border-radius: 6px; white-space: pre; font: .8rem/1.5 ui-monospace, monospace; }
+.file-preview pre.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.file-preview pre .hljs-keyword, .file-preview pre .hljs-selector-tag, .file-preview pre .hljs-literal { color: var(--special); }
+.file-preview pre .hljs-string, .file-preview pre .hljs-addition { color: var(--success); }
+.file-preview pre .hljs-number, .file-preview pre .hljs-attr, .file-preview pre .hljs-attribute { color: var(--warning); }
+.file-preview pre .hljs-comment, .file-preview pre .hljs-quote { color: var(--text-muted); }
+.file-preview pre .hljs-variable, .file-preview pre .hljs-title, .file-preview pre .hljs-built_in { color: var(--cyan); }
+.file-preview pre .hljs-type, .file-preview pre .hljs-meta { color: var(--accent); }
+.file-wrap { display: inline-flex !important; align-items: center; gap: .4rem; margin: .25rem 0 !important; font-size: .8rem; }
+.audio-preview { min-height: 0; overflow: auto; }
+.audio-preview audio { width: 100%; }
+.pcm-controls { margin-top: .8rem; padding-top: .7rem; border-top: 1px solid var(--border); }
+.pcm-controls h3 { margin: 0; font-size: .95rem; }
+.pcm-controls .panel-hint { margin: .4rem 0; }
+.pcm-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .5rem; }
+.pcm-fields label { min-width: 0; margin: .3rem 0; font-size: .8rem; }
+.pcm-fields input, .pcm-fields select { display: block; width: 100%; min-width: 0; margin-top: .3rem; padding: .5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--background); color: var(--text-primary); }
+@media (max-width: 650px) { .pcm-fields { grid-template-columns: 1fr; } }
 .panel-count, .panel-hint { color: var(--text-secondary); font-size: .8rem; }
 .panel-hint { margin: .6rem .7rem; }
 .tool-catalog .catalog-categories { flex-wrap: wrap; max-height: 92px; overflow-y: auto; }

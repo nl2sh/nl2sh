@@ -45,6 +45,7 @@ tempfile = "3"
 shell-words = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "signal", "sync", "time", "io-util", "net", "fs"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["io"] }
 tower-http = { version = "0.6", features = ["set-header"] }
 toml = "0.8"
 url = "2"
