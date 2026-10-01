@@ -1,8 +1,10 @@
 # Project Status
 
-Last Updated: 2026-09-29
+Last Updated: 2026-10-01
 
 ## Recent Changes
+
+- v1.0.5 发布准备：将已实现的 `--web-only` 模式纳入 Android Release 产物，供独立安装助手后台启动 Web 界面。此提交只调整版本和发布记录；`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets` 与 `RUST_TARGET=armv7-linux-androideabi ./cross-compile.sh` 通过。安全确认、Android 执行和 PTY 路径均未改。
 
 - Android 主机脚本贯通可选 Web-only 启动：`android-build-run.sh --web-only`、`android-build-run.ps1 -WebOnly`、Linux/Windows 预编译启动器及三种安装入口均可在部署后通过设备端 `nohup` 启动 Web 服务，不申请 ADB PTY，并把输出写入 `${ANDROID_DIR}/nl2sh-web.log`；默认无参数行为仍为交互式 TUI。root adbd、`su` 回退、配置权限检查及 Web 内安全确认链保持不变。`bash -n`、三个 Bash 入口的帮助/参数解析、`cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 通过；Rust 测试包含 225 项有效库测试、5 项主程序测试和全部集成/PTY/TUI 回归，1 项显式凭据 smoke 按设计忽略。
 - 增加 `--web-only` 无终端启动模式：只启动内置 HTTP 服务并等待服务退出或 Ctrl+C，不初始化 TUI、raw mode、alternate screen 或 PTY，可配合 Android shell 的 `nohup` 与标准流重定向在 ADB 断开后继续运行。该参数拒绝与单次 instruction 或子命令组合；Web 工具继续经过原安全分类、浏览器审批、Root 能力绑定和捕获式执行路径。Linux 目标的 `cargo fmt --all -- --check`、`cargo check` 和 `cargo test` 通过；无标准输入的限时启动 smoke test 输出 Web URL 并持续运行至外部终止。

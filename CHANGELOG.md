@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-10-01
+
+- Publish the Android Web-only launcher support introduced after v1.0.4, so release binaries accept `--web-only` for background startup.
+
 ### Added
 
 - Add `--web-only` to run the embedded Web UI without initializing the TUI, allowing a redirected Android shell process to remain available after ADB disconnects.
