@@ -681,6 +681,7 @@ type ApiResult<T> = std::result::Result<T, ApiError>;
 
 fn router(state: Arc<Shared>) -> Router {
     Router::new()
+        .route("/api/version", get(|| async { env!("CARGO_PKG_VERSION") }))
         .route("/api/state", get(get_state))
         .route("/api/config", get(get_config).post(save_config))
         .route("/api/config/validate", post(validate_config))
@@ -3579,6 +3580,13 @@ mod http_tests {
             .port()
             .context("web URL lacks port")?;
         let base = format!("http://127.0.0.1:{port}");
+        let version = client
+            .get(format!("{base}/api/version"))
+            .send()
+            .await?
+            .text()
+            .await?;
+        assert_eq!(version, env!("CARGO_PKG_VERSION"));
         let initial_quick: serde_json::Value = client
             .get(format!("{base}/api/quick-settings"))
             .send()

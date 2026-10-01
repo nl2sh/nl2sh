@@ -4,6 +4,7 @@ Last Updated: 2026-10-01
 
 ## Recent Changes
 
+- v1.0.6：Web 左侧 logo 下显示正在运行的程序版本，版本由只读 `/api/version` 从 Cargo 包元数据返回；Web 侧栏、文件预览等功能纳入本次发布。`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings` 和 Android API 26 AArch64/ARMv7 release 交叉编译通过；ELF 分别使用 `/system/bin/linker64` 与 `/system/bin/linker`。该显示接口不参与 Agent 安全分类、审批、Android 执行或 PTY。
 - Web 文件预览增加代码语法高亮与自动换行切换；MP3、WAV、M4A/AAC、Ogg、FLAC 可尝试由浏览器直接播放，WAV/Raw PCM 还可按采样率、声道与采样格式参数播放。WAV 头部参数自动填入，Raw PCM 参数由用户选择；参数播放限 32 MiB，在浏览器内解码，不改变 Agent 文件工具或确认链。`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check`、`cargo test --quiet` 和 `git diff --check` 通过；新增前端回归覆盖 WAV 头部、PCM 解码和高亮转义。一次全量测试中的既有异步时序用例失败后，单独重跑及完整重跑均通过。
 - Web 文件列表改为专用只读目录接口，显示文件夹/文件类型图标、修改时间和大小；图片、视频、常见文本及代码文件可在弹窗预览，视频支持 HTTP Range，未支持的格式与超限文件保留路径插入操作。预览接口按格式和大小限制读取，文本固定以纯文本展示；Agent 安全与确认链、PTY 路径不变。Linux 目标的 `npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check` 和 `cargo test` 通过；新增回归覆盖目录元数据、文件类型、分段读取及不支持格式。
 - Web 左侧导航改为固定垂直图标栏，会话、文件、应用、工具、安全终端与配置共用相邻内容区及最小化按钮；会话列表的展开状态仍被记住，收起后可从图标栏新建会话。文件列表复用有界只读候选接口，文件和目录右侧箭头将路径填入对话输入框；各页面可拖动分隔条调整并分别记住宽度，桌面布局保证对话最小宽度，窄屏使用覆盖式面板。应用列表复用普通用户、非 PTY 的固定只读 Android 应用枚举；工具目录、终端和配置从顶栏移入侧栏，原弹窗关闭按钮移除。对话、安全评估、审批和命令执行链未改。Linux 目标的 `npm run build`、`npm test`、`cargo fmt --all -- --check`、`cargo check`、`cargo test` 与 `git diff --check` 通过。

@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'preact/hooks';
-import {api} from './api';
+import {api,getVersion} from './api';
 export {FilePanel} from './fileBrowser';
 import {ConfigEditor} from './configEditor';
 import {displayTerminalResponse} from './terminalOutput';
@@ -19,7 +19,9 @@ const panels:{id:Panel;label:string;path:string}[]=[
 ];
 
 export function ActivityBar({active,select,create}:{active:Panel|null;select:(panel:Panel)=>void;create:()=>void}){
-  return <nav class="activity-bar" aria-label="左侧菜单"><img src="/logo.png" alt="nl2sh"/>{panels.map(panel=><button key={panel.id} type="button" title={panel.label} aria-label={panel.label} aria-pressed={active===panel.id} onClick={()=>select(panel.id)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={panel.path}/></svg></button>)}<button class="activity-new-session" type="button" title="新建会话" aria-label="新建会话" onClick={create}>＋</button></nav>
+  const[version,setVersion]=useState('');
+  useEffect(()=>{let active=true;getVersion().then(value=>{if(active)setVersion(value)}).catch(()=>{});return()=>{active=false}},[]);
+  return <nav class="activity-bar" aria-label="左侧菜单"><img src="/logo.png" alt="nl2sh"/>{version&&<small class="activity-version" title={`nl2sh v${version}`}>v{version}</small>}{panels.map(panel=><button key={panel.id} type="button" title={panel.label} aria-label={panel.label} aria-pressed={active===panel.id} onClick={()=>select(panel.id)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={panel.path}/></svg></button>)}<button class="activity-new-session" type="button" title="新建会话" aria-label="新建会话" onClick={create}>＋</button></nav>
 }
 
 export function PanelHeading({title,minimize}:{title:string;minimize:()=>void}){

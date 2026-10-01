@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-10-01
+
+### Added
+
+- Show the running program version below the Web sidebar logo.
+- Add bounded file browsing with file type, size, and modified time, plus previews for common images, video, text, code, and audio files. WAV and Raw PCM can be decoded with selected format parameters.
+
+### Changed
+
+- Move Web sessions, files, installed apps, tools, terminal, and configuration into a persistent left activity bar with resizable panels.
+
 ## [1.0.5] - 2026-10-01
 
 - Publish the Android Web-only launcher support introduced after v1.0.4, so release binaries accept `--web-only` for background startup.

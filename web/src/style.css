@@ -304,7 +304,8 @@ button:disabled { opacity: .45; }
 .shell { grid-template-columns: 52px var(--panel-width, 280px) 6px minmax(0, 1fr); }
 .shell.sidebar-collapsed { grid-template-columns: 52px minmax(0, 1fr); }
 .activity-bar { display: flex; flex-direction: column; align-items: center; gap: .25rem; padding: .6rem .3rem; background: var(--background-alt); border-right: 1px solid var(--border); }
-.activity-bar img { width: 36px; height: 36px; object-fit: contain; margin-bottom: .65rem; }
+.activity-bar img { width: 36px; height: 36px; object-fit: contain; }
+.activity-version { max-width: 100%; margin-bottom: .45rem; color: var(--text-secondary); font-size: .62rem; line-height: 1.2; white-space: nowrap; }
 .activity-bar button { position: relative; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; background: transparent; color: var(--text-secondary); }
 .activity-bar button svg { width: 21px; height: 21px; }
 .activity-bar button:hover, .activity-bar button[aria-pressed="true"] { color: var(--accent); background: var(--background); }
