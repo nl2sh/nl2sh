@@ -299,3 +299,69 @@ button:disabled { opacity: .45; }
 .reasoning .message { border-bottom: 0; }
 .task-summary { padding: .6rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); font-size: .85rem; }
 .task-timing { flex-basis: 100%; overflow-wrap: anywhere; }
+
+/* The activity bar stays visible while its adjacent panel is minimized. */
+.shell { grid-template-columns: 52px var(--panel-width, 280px) 6px minmax(0, 1fr); }
+.shell.sidebar-collapsed { grid-template-columns: 52px minmax(0, 1fr); }
+.activity-bar { display: flex; flex-direction: column; align-items: center; gap: .25rem; padding: .6rem .3rem; background: var(--background-alt); border-right: 1px solid var(--border); }
+.activity-bar img { width: 36px; height: 36px; object-fit: contain; margin-bottom: .65rem; }
+.activity-bar button { position: relative; display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 0; background: transparent; color: var(--text-secondary); }
+.activity-bar button svg { width: 21px; height: 21px; }
+.activity-bar button:hover, .activity-bar button[aria-pressed="true"] { color: var(--accent); background: var(--background); }
+.activity-bar button[aria-pressed="true"]::before { content: ''; position: absolute; left: -5px; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--accent); }
+.activity-bar .activity-new-session { margin-top: auto; font-size: 1.5rem; }
+.workspace-panel { min-width: 0; min-height: 0; }
+.panel-resizer { position: relative; background: var(--border); cursor: col-resize; touch-action: none; }
+.panel-resizer:hover, .panel-resizer:focus-visible { background: var(--border-focus); outline: none; }
+.panel-resizer::after { content: ''; position: absolute; inset: 0 -4px; }
+.panel-heading { height: 60px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: .4rem; padding: .65rem .75rem; border-bottom: 1px solid var(--border); }
+.panel-heading h2 { margin: 0; font-size: .95rem; color: var(--accent); }
+.panel-minimize { width: 30px; height: 30px; padding: 0; font-size: 1.25rem; line-height: 1; }
+.workspace-panel .session-list-actions { gap: .3rem; flex-wrap: wrap; }
+.workspace-panel .session-list-actions .new-session { flex: 1 0 100%; }
+.workspace-panel .sessions { display: block; min-height: 0; overflow-y: auto; }
+.workspace-panel .session-item { width: auto; margin: .2rem 0; }
+.panel-slot, .panel-body { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.panel-body { padding: .7rem; }
+.panel-path { margin: 0 0 .5rem; overflow-wrap: anywhere; color: var(--text-secondary); font: .8rem/1.4 ui-monospace, monospace; }
+.panel-actions { display: flex; gap: .35rem; margin-bottom: .5rem; }
+.file-panel .panel-actions { flex-wrap: wrap; }
+.panel-actions input, .tool-catalog > input, .terminal-input input { min-width: 0; width: 100%; padding: .5rem; color: var(--text-primary); background: var(--background); border: 1px solid var(--border); border-radius: 7px; }
+.panel-actions button { flex: none; }
+.panel-list { flex: 1; min-height: 0; overflow-y: auto; }
+.panel-list-item { display: flex; gap: .5rem; width: 100%; padding: .48rem .35rem; overflow: hidden; text-align: left; border: 0; background: transparent; overflow-wrap: anywhere; }
+.panel-list-item:hover { background: var(--background); color: var(--accent); }
+.panel-list-item span:first-child { flex: none; color: var(--text-secondary); }
+.file-item { display: flex; align-items: stretch; gap: .15rem; }
+.file-item .panel-list-item { flex: 1; min-width: 0; }
+.file-item .panel-list-item span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.file-insert { flex: none; width: 30px; padding: 0; border: 0; background: transparent; color: var(--text-secondary); font-size: 1.1rem; }
+.file-insert:hover { color: var(--accent); background: var(--background); }
+.panel-count, .panel-hint { color: var(--text-secondary); font-size: .8rem; }
+.panel-hint { margin: .6rem .7rem; }
+.tool-catalog .catalog-categories { flex-wrap: wrap; max-height: 92px; overflow-y: auto; }
+.tool-catalog .catalog-list { min-height: 0; }
+.terminal-panel pre { flex: 1; min-height: 0; margin: 0; padding: .6rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--background); font: .78rem/1.5 ui-monospace, monospace; }
+.terminal-input { display: flex; gap: .3rem; margin-top: .6rem; }
+.terminal-input button { flex: none; }
+.workspace-panel .config { min-width: 0; padding: .65rem; }
+.workspace-panel .config-header { align-items: flex-start; flex-direction: column; gap: .45rem; }
+.workspace-panel .config-modes { max-width: 100%; flex-wrap: wrap; }
+.workspace-panel .config-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+.workspace-panel .config-groups { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.workspace-panel .config-groups button { flex: none; white-space: nowrap; }
+.workspace-panel .config-fields { padding: .7rem; }
+.workspace-panel .config-row { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+.workspace-panel .config-footer { gap: .4rem; }
+.workspace-panel .config-footer button { flex: none; }
+
+@media (max-width: 800px) {
+  .shell, .shell.sidebar-collapsed { position: relative; display: grid; grid-template-columns: 48px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; }
+  .activity-bar { grid-column: 1; grid-row: 1; overflow-y: auto; }
+  .activity-bar button { width: 40px; height: 40px; flex: none; }
+  .workspace-panel { position: absolute; z-index: 3; left: 48px; top: 0; bottom: 0; width: min(var(--panel-width, 280px), calc(100vw - 48px)); box-shadow: 8px 0 24px rgb(0 0 0 / 35%); border-right: 1px solid var(--border); border-bottom: 0; display: flex; flex-direction: column; }
+  .panel-resizer { display: none; }
+  .workspace-panel .sessions { display: block; overflow-x: hidden; overflow-y: auto; }
+  .workspace-panel .session-item { width: auto; }
+  .shell main { grid-column: 2; grid-row: 1; min-height: 0; }
+}

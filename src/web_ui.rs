@@ -16,7 +16,13 @@ use crate::{
         CommandExecutor, ExecutionBroker, ExecutionResult, OutputSink, ShellExecutor,
         SystemRootProbe,
     },
-    tools::{android::environment::inspect_environment, Capability, ToolRegistry},
+    tools::{
+        android::{
+            diagnostics::{list_android_apps, ListAndroidAppsArgs},
+            environment::inspect_environment,
+        },
+        Capability, ToolRegistry,
+    },
 };
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -676,6 +682,7 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/model-check", post(check_model))
         .route("/api/device-overview", get(get_device_overview))
         .route("/api/tools", get(get_tools))
+        .route("/api/apps", get(get_apps))
         .route("/api/file-suggestions", get(get_file_suggestions))
         .route("/api/sessions", get(get_sessions))
         .route("/api/sessions/new", post(new_session))
@@ -1118,6 +1125,43 @@ async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolS
             })
             .collect(),
     ))
+}
+
+#[derive(Serialize)]
+struct InstalledApp {
+    package: String,
+}
+
+async fn get_apps(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<InstalledApp>>> {
+    let path = state.path.clone();
+    let mut cfg =
+        tokio::task::spawn_blocking(move || config::load_or_default_unvalidated(&path)).await??;
+    cfg.execute_user_mode = ExecuteUserMode::Normal;
+    cfg.enable_pty = false;
+    cfg.execute_timeout_secs = cfg.execute_timeout_secs.clamp(1, 15);
+    let executor = ShellExecutor::new(cfg);
+    let output = list_android_apps(
+        &executor,
+        &ListAndroidAppsArgs {
+            scope: None,
+            limit: Some(500),
+        },
+    )
+    .await?;
+    let value: serde_json::Value = serde_json::from_str(&output)?;
+    if value["status"] == "failed" || value["status"] == "timed_out" {
+        return Err(ApiError::bad(anyhow!("cannot list Android applications")));
+    }
+    let apps = value["packages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item["package"].as_str())
+        .map(|package| InstalledApp {
+            package: package.to_owned(),
+        })
+        .collect();
+    Ok(Json(apps))
 }
 
 #[derive(Deserialize)]
@@ -3491,6 +3535,13 @@ mod http_tests {
             .is_some_and(|items| items.iter().any(|tool| {
                 tool["name"] == "read_file" && tool["description"].as_str().is_some()
             })));
+        let apps: serde_json::Value = client
+            .get(format!("{base}/api/apps"))
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert!(apps.as_array().is_some());
         std::fs::write(dir.path().join("web-reference.txt"), "example")?;
         let suggestions: Vec<String> = client
             .get(format!("{base}/api/file-suggestions"))
