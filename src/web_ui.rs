@@ -691,6 +691,7 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/model-check", post(check_model))
         .route("/api/device-overview", get(get_device_overview))
         .route("/api/tools", get(get_tools))
+        .route("/api/tools/toggle", post(toggle_tool))
         .route("/api/apps", get(get_apps))
         .route("/api/file-suggestions", get(get_file_suggestions))
         .route("/api/files", get(get_files))
@@ -1111,6 +1112,8 @@ struct ToolSummary {
     description: String,
     category: String,
     risk: String,
+    group: Option<&'static str>,
+    enabled: bool,
 }
 
 async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolSummary>>> {
@@ -1120,7 +1123,7 @@ async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolS
     } else {
         Vec::new()
     };
-    let registry = ToolRegistry::builtin(&capabilities);
+    let registry = ToolRegistry::catalog(&capabilities);
     Ok(Json(
         registry
             .definitions()
@@ -1128,14 +1131,49 @@ async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolS
             .filter_map(|tool| {
                 let metadata = registry.get(&tool.name)?.metadata();
                 Some(ToolSummary {
-                    name: tool.name,
+                    name: tool.name.clone(),
                     description: tool.description,
                     category: format!("{:?}", metadata.category),
                     risk: format!("{:?}", metadata.risk),
+                    group: crate::tools::optional_group(&tool.name),
+                    enabled: crate::tools::tool_enabled(&cfg, &tool.name),
                 })
             })
             .collect(),
     ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ToolToggle {
+    group: Option<String>,
+    tool: Option<String>,
+    enabled: bool,
+}
+
+async fn toggle_tool(
+    State(state): State<Arc<Shared>>,
+    Json(change): Json<ToolToggle>,
+) -> ApiResult<Json<Vec<ToolSummary>>> {
+    let path = state.path.clone();
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let mut cfg = config::load_or_default_unvalidated(&path)?;
+        match (change.group, change.tool) {
+            (Some(group), None) if matches!(group.as_str(), "jadx" | "tailcat") => {
+                cfg.tool_overrides
+                    .retain(|name, _| !crate::tools::tool_in_group(name, &group));
+                cfg.tool_groups.insert(group, change.enabled);
+            }
+            (None, Some(tool)) if crate::tools::optional_tool_names().contains(&tool.as_str()) => {
+                cfg.tool_overrides.insert(tool, change.enabled);
+            }
+            _ => anyhow::bail!("specify one known optional tool or group"),
+        }
+        cfg.validate_runtime()?;
+        config::save_config(&path, &cfg)
+    })
+    .await??;
+    get_tools(State(state)).await
 }
 
 #[derive(Serialize)]
@@ -3797,6 +3835,33 @@ mod http_tests {
             .is_some_and(|items| items.iter().any(|tool| {
                 tool["name"] == "read_file" && tool["description"].as_str().is_some()
             })));
+        assert!(tools.as_array().is_some_and(|items| items
+            .iter()
+            .any(|tool| tool["name"] == "tailcat_check" && tool["enabled"] == false)));
+        let changed: serde_json::Value = client
+            .post(format!("{base}/api/tools/toggle"))
+            .json(&serde_json::json!({"group":"tailcat","enabled":true}))
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert!(changed.as_array().is_some_and(|items| items
+            .iter()
+            .any(|tool| tool["name"] == "tailcat_check" && tool["enabled"] == true)));
+        let changed: serde_json::Value = client
+            .post(format!("{base}/api/tools/toggle"))
+            .json(&serde_json::json!({"tool":"tailcat_serve","enabled":false}))
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert!(changed.as_array().is_some_and(|items| items
+            .iter()
+            .any(|tool| tool["name"] == "tailcat_serve" && tool["enabled"] == false)));
+        let persisted =
+            crate::config::load_or_default_unvalidated(&dir.path().join("config.toml"))?;
+        assert!(persisted.tool_groups["tailcat"]);
+        assert_eq!(persisted.tool_overrides.get("tailcat_serve"), Some(&false));
         let apps: serde_json::Value = client
             .get(format!("{base}/api/apps"))
             .send()

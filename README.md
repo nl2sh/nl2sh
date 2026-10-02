@@ -19,7 +19,8 @@ Natural Language to Shell 是以 Android 原生 `adb shell` 为一等运行环�
 - 丰富 TUI 支持 LLM 文本流式渐变输出、实时状态与命令输出、内嵌确认、历史滚动、工具结果折叠、Markdown 渲染、中英文界面和热重配置。
 - 内置 Web 支持多个独立 Agent 会话、流式结果、图表、审批与配置；进行中任务保存脱敏检查点，重启后可查看中断诊断，不自动续跑。
 - 内置 `read_file`、`list_dir`、`search_text`、`apply_patch` 结构化文件工具；允许绝对路径、父目录和符号链接，资源大小仍受限，补丁先展示 diff 并确认。
-- 内置 `inspect_apk`、`list_apk_entries`、`list_dex_classes` 对本地 APK 做有界只读分析；`decompile_apk_class` 在强确认后使用含 `classes.dex` 的 helper 和系统 `app_process`。三项只读工具无需 helper。
+- Web“能做什么”可按工具组或单项开关可选工具。APK/JADX 与 Tailcat 组默认关闭；关闭项不进入 Agent 工具定义，也不能由直接工具调用执行。开关保存到配置，新 Web 任务立即读取，TUI 会话重新启动后生效。
+- 开启 APK/JADX 组后，`inspect_apk`、`list_apk_entries`、`list_dex_classes` 可对本地 APK 做有界只读分析；`decompile_apk_class` 在强确认后使用含 `classes.dex` 的 helper 和系统 `app_process`。三项只读工具无需 helper。
 - 内置 `analyze_audio` 对 WAV/Raw PCM 做纯 Rust 确定性 DSP 分析；WAV 以真实 header 为准，无头 PCM 缺少可靠元数据时弹出结构化问答窗口，可直接选择常用值或输入自定义采样率、声道数和采样格式，不会把猜测当事实。
 - 内置 `judge_audio_quality` 对 Feature JSON 做多维音质判断；配置 Jev Key 时使用 Jev，否则使用当前通用 LLM，原始 WAV 不上传给判断模型。
 - 内置完整 Android 交互闭环：读取 UI 树后可对仍匹配的控件 bounds 执行确认后的点击、滑动、长按和文本输入；默认返回紧凑可操作节点，操作后附带最新界面状态；PNG/JPEG/WebP 截图会在必要时有界缩放后交给支持视觉的模型，图片不保存进会话。
@@ -462,6 +463,12 @@ Agent 内置只读 Android 诊断工具，可结构化查询前台或指定应�
 `inspect_android_ui` 可读取当前 UIAutomator 控件树、焦点窗口和显示信息，默认只返回可操作、有标签或聚焦的紧凑节点，必要时可请求完整树；`capture_android_screen` 在确认后将屏幕保存为指定 PNG。`view_screenshot` 接受 PNG、JPEG 和 WebP，超过附件上限时在进程内缩放并转为 JPEG，再作为多模态内容送入下一次模型请求且不持久化。`inject_android_input` 要求明确的控件 bounds，确认前与执行前都会重新读取当前 UI 树，坐标必须位于仍存在且 enabled/clickable 的相同 bounds 内，并在成功后返回最新紧凑界面状态。识别界面不会自动授权输入，每次操作仍独立确认。
 
 `inspect_tls` 对公网主机执行只读 TLS 握手，校验主机名、有效期和受信链，并返回各级证书的主题、颁发者、起止时间和 SHA-256 指纹；该工具不发送 HTTP 请求，也不接受本机或私网目标。
+
+### Tailcat 可选工具
+
+先按设备 ABI 安装可信的 tailcat 可执行文件，并将 `tailcat_binary_path` 指向它；直接 Android shell 的默认路径是 `/data/local/tmp/tailcat`。在 Web“能做什么”中开启 Tailcat 组，或只开启所需工具。`tailcat_check` 检查版本；`tailcat_receive_stream` 把一次原始数据流写入**新文件**，发送方用 `tailcat_send_file` 的 `mode: "stream"`；`tailcat_receive` 启动写入指定现有目录的文件接收箱，发送方用 `mode: "copy"`，该模式要求发送端有系统 `scp`。`tailcat_serve` 共享一个本机 TCP 端口；`tailcat_status` 和 `tailcat_stop` 管理当前 nl2sh 进程创建的接收或服务任务。启动输出返回完整地址；地址应只发给预期连接方。接收和停止须确认，发送及共享端口须强确认。通用 shell 工具调用 tailcat 时也按实际操作分类，不因关闭工具组而降低风险。
+
+接收和端口服务属于当前 TUI/Web 进程；一次性 `bridge` 调用只暴露检查和发送工具，不提供无法跨请求保持生命周期的服务操作。接收进程使用临时密钥，nl2sh 退出时由父进程退出信号终止。设备与本机已安装 tailcat 时，可设置 `TAILCAT_HOST_BIN`、`TAILCAT_DEVICE_BIN` 和 `ADB_SERIAL`，运行 `./test-tailcat-connected.sh` 验证两个方向的原始传输；脚本只创建并删除自己的临时文件。宿主工具级实测可设置 `NL2SH_TAILCAT_TEST_BINARY` 后运行 `cargo test --test tailcat_live_tests -- --ignored`，覆盖原始文件、接收箱和端口服务。
 
 本地命令 `/shell` 会暂停 TUI 并进入设备的普通交互 shell，可直接运行 adb shell 环境中的命令；输入 `exit` 或按 `Ctrl+D` 即恢复原 TUI。原会话不会丢失，shell 输入与输出也不会发送给模型或写入审计日志。该命令也会出现在 `/` 候选菜单中。
 

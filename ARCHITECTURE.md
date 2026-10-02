@@ -99,6 +99,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/network` | 统一 rustls HTTP Client、HTTP/SOCKS 代理、认证和绕过策略 | `Config` → `reqwest::Client` | 代理凭据不得进入日志、错误详情或模型上下文；关闭总开关不清理配置 |
 | `src/tools/network` | 公网 HTTP(S) 有界读取、确认后 POST/下载与 TLS 诊断 | URL/主机 → 有界正文、文件或证书信息 | 禁止重定向、URL 凭据、本机/私网目标和任意 header；POST、下载均须确认 |
 | `src/tools/apk` | APK ZIP 概览、条目检索、DEX 类索引与单类反编译适配 | 本地 APK → 有界 JSON 证据或 Java 源码 | 前三项纯 Rust 只读；反编译为 Dangerous 强确认，不执行 APK 内容 |
+| `src/tools/tailcat` | 可选 tailcat 检查、一次性接收、文件发送、端口服务和状态/停止 | 校验后的参数 → argv 子进程与当前进程管理的监听器 | 组默认关闭；接收确认，发送及开放端口强确认；临时密钥和父进程退出信号限制监听器生命周期 |
 | `src/runtime_dependencies/jadx` | Android DEX helper 校验/按需下载、私有缓存和受控子进程 | 含 `classes.dex` 的 helper → 带私有 Java 临时目录的 `app_process` → 单类源码 | 仅在反编译强确认后下载；普通 JVM JAR 拒绝；helper 只处理目标类并拒绝 XML 解析；无默认未验证资产 |
 | `src/web_ui` | Axum 0.8 HTTP/SSE/WebSocket、多 Agent 会话、LLM 自动标题、快捷运行设置、浏览器审批、rust-embed 资源 | serde JSON + SSE + WebSocket → 独立 Agent Runner、结构化显示条目、原子配置文件 | 无登录，优先监听 IPv4 9999（占用时使用可用端口）；每会话独立锁和审批通道；WebSocket 终端仍走安全分类和确认；请求有大小上限；不直接执行模型输出 |
 | `src/tools/ui` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
@@ -116,7 +117,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 
 公共 trait 允许测试以 mock 替换网络、执行、确认和 root 探测。依赖方向保持 `UI → Agent → abstractions`，security 与 shell 彼此通过调用参数协作，无循环依赖。
 
-模型可见工具由 Registry 显式注册，ima 按本地 `Capability` 条件暴露；参数类型通过 `schemars::JsonSchema` 派生定义。共用内部参数类型的 `android.*` 工具按各自操作收窄公开字段及必填项，准备阶段也拒绝无关字段，避免外部 Agent 按宽泛 Schema 误填。`Tool::prepare` 解析参数并构造预览与待执行动作；工具元数据声明风险下限，剪贴板、媒体和便签按实际参数升高单次风险。Agent 统一根据本地风险决定确认/强确认，再调用 `PreparedExecution::execute`。补丁和下载在确认前只准备 diff 或数据，截图、HTTP POST、输入注入与设备控制必须先显示预览；输入注入执行前重新校验当前 UI bounds。Shell 命令继续逐次经过原安全分类、编辑重评估、Root 与 PTY 回收路径。音频缺参问答与分析缓存、截图附件以及 Web 会话审批沿用既有行为。`define_tool!` 和构建期 `#[tool(...)]` 均只生成适配器，注册和权限仍需显式决定。
+模型可见工具由 Registry 显式注册，ima 按本地 `Capability` 条件暴露；APK/JADX 与 Tailcat 组默认关闭，配置的单工具开关覆盖组开关。Agent、桥接直调与目录共用可用性判定，关闭项不进入模型定义且无法直接调用；Web 目录另外列出关闭项供用户设置。一次性桥接入口过滤需当前进程维持的 Tailcat 监听器工具。参数类型通过 `schemars::JsonSchema` 派生定义。共用内部参数类型的 `android.*` 工具按各自操作收窄公开字段及必填项，准备阶段也拒绝无关字段，避免外部 Agent 按宽泛 Schema 误填。`Tool::prepare` 解析参数并构造预览与待执行动作；工具元数据声明风险下限，剪贴板、媒体和便签按实际参数升高单次风险。Agent 统一根据本地风险决定确认/强确认，再调用 `PreparedExecution::execute`。补丁和下载在确认前只准备 diff 或数据，截图、HTTP POST、输入注入与设备控制必须先显示预览；输入注入执行前重新校验当前 UI bounds。Shell 命令继续逐次经过原安全分类、编辑重评估、Root 与 PTY 回收路径。音频缺参问答与分析缓存、截图附件以及 Web 会话审批沿用既有行为。`define_tool!` 和构建期 `#[tool(...)]` 均只生成适配器，注册和权限仍需显式决定。
 
 Web 前端源码和 npm lockfile 保存在 `web/`；Cargo 的 `build.rs` 先把源码复制到 `OUT_DIR`，在副本中执行 `npm ci` 和 `npm run build`，再由 `rust-embed` 把产物编入单一可执行文件。构建需要 Node.js/npm，生成目录不进入版本控制或发布源码包；Android 运行时不依赖 Node.js。TUR 构建使用 Termux 提供的主机 Node 工具。
 

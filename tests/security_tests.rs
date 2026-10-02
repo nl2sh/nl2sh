@@ -24,6 +24,32 @@ fn ast_effects_cover_nested_commands_and_uncertain_execution() {
 }
 
 #[test]
+fn tailcat_shell_fallback_keeps_network_and_file_risks() {
+    let cfg = Config::default();
+    assert_eq!(
+        assess("/data/local/tmp/tailcat version", &cfg).risk_level,
+        RiskLevel::ReadOnly
+    );
+    for command in [
+        "/data/local/tmp/tailcat",
+        "/data/local/tmp/tailcat recv /sdcard/Download",
+    ] {
+        let assessment = assess(command, &cfg);
+        assert!(assessment.risk_level >= RiskLevel::Mutating, "{command}");
+        assert!(assessment.requires_confirmation, "{command}");
+    }
+    for command in [
+        "/data/local/tmp/tailcat tcABC123XYZ < /sdcard/Download/test.zip",
+        "/data/local/tmp/tailcat serve 8080",
+        "/data/local/tmp/tailcat cp test.zip tcABC123XYZ:",
+    ] {
+        let assessment = assess(command, &cfg);
+        assert!(assessment.risk_level >= RiskLevel::Dangerous, "{command}");
+        assert!(assessment.requires_double_confirmation, "{command}");
+    }
+}
+
+#[test]
 fn permissive_preferences_cannot_skip_mutation_confirmation() {
     let cfg = Config {
         security_level: SecurityLevel::Unsafe,

@@ -113,6 +113,14 @@ button:disabled { opacity: .45; }
 .catalog-categories button { white-space: nowrap; }
 .catalog-categories button[aria-pressed="true"] { border-color: var(--border-focus); color: var(--accent); }
 .catalog-list p { margin: .35rem 0 0; color: var(--text-secondary); white-space: pre-wrap; }
+.tool-groups { margin-top: .8rem; padding: .6rem; border: 1px solid var(--border); border-radius: 8px; }
+.tool-groups h3 { margin: 0 0 .5rem; font-size: .95rem; }
+.tool-group { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin: .5rem 0; }
+.tool-group small { display: block; color: var(--text-muted); }
+.tool-group button { white-space: nowrap; }
+.tool-group-actions { display: flex; gap: .3rem; }
+.tool-enable { display: flex; align-items: center; gap: .35rem; margin-top: .5rem; }
+.tool-enable input { width: auto; }
 .composer textarea, .composer input, .config textarea, .modal textarea, .modal input { width: 100%; background: var(--background-alt); color: var(--text-primary); border: 1px solid var(--border); border-radius: 7px; padding: .7rem; }
 .composer textarea { min-height: 68px; }
 .composer textarea::placeholder { color: var(--text-secondary); opacity: 1; }

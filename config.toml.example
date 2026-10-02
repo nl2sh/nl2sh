@@ -43,6 +43,8 @@ security_level = "balanced"
 # Explicitly auto-approve all A2A/MCP bridge operations, including dangerous ones.
 # Only enable for a gateway whose Bearer token holders you fully trust.
 bridge_auto_approve = false
+# Optional tools are off until enabled here or in the Web tool catalog.
+tailcat_binary_path = "/data/local/tmp/tailcat"
 execute_user_mode = "auto"
 enable_pty = true
 ascii_symbols = false
@@ -61,3 +63,13 @@ history_log_max_bytes = 10485760
 # pattern = "forbidden-command"
 # risk = "dangerous"
 # message = "This command is forbidden by local policy."
+
+# Group switches enable every member unless overridden below.
+[tool_groups]
+jadx = false
+tailcat = false
+
+# Individual switches override a group's setting.
+[tool_overrides]
+# tailcat_check = true
+# decompile_apk_class = false

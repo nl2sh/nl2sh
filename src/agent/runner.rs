@@ -146,7 +146,7 @@ impl AgentRunner<'_> {
         } else {
             Vec::new()
         };
-        let registry = ToolRegistry::builtin(&capabilities);
+        let registry = ToolRegistry::for_config(self.config, &capabilities);
         let effective_steps = self
             .config
             .max_agent_steps

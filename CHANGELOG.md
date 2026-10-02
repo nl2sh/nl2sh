@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add opt-in APK/JADX and Tailcat tool groups with persistent group and per-tool switches in the Web catalog; disabled tools are absent from model and direct-call registries.
+- Add structured Tailcat file transfer and local-port sharing with local confirmation, plus a host/ADB device transfer test script.
+
+### Changed
+
+- Classify Tailcat shell commands by their network and file effects, including strong confirmation for uploads and port sharing.
+
 ## [1.0.6] - 2026-10-01
 
 ### Added

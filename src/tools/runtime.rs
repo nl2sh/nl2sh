@@ -85,7 +85,7 @@ pub async fn invoke(
     } else {
         Vec::new()
     };
-    let registry = ToolRegistry::builtin(&capabilities);
+    let registry = ToolRegistry::for_config(config, &capabilities);
     let tool = registry
         .get(name)
         .with_context(|| format!("unsupported tool {name}"))?;
@@ -197,6 +197,34 @@ mod tests {
         ) -> Result<ConfirmationDecision> {
             Ok(ConfirmationDecision::Reject)
         }
+    }
+
+    #[tokio::test]
+    async fn disabled_optional_tool_cannot_be_invoked_directly() {
+        let config = Config::default();
+        let executor = ShellExecutor::new(config.clone());
+        let result = invoke(&config, &executor, &Reject, "tailcat_check", json!({})).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn rejected_tailcat_listener_never_starts() -> Result<()> {
+        let mut config = Config::default();
+        config.tool_overrides.insert("tailcat_serve".into(), true);
+        config.tool_overrides.insert("tailcat_status".into(), true);
+        let executor = ShellExecutor::new(config.clone());
+        let result = invoke(
+            &config,
+            &executor,
+            &Reject,
+            "tailcat_serve",
+            json!({"port":8080}),
+        )
+        .await?;
+        assert!(!result.success);
+        let status = invoke(&config, &executor, &Reject, "tailcat_status", json!({})).await?;
+        assert!(status.output.contains("no managed Tailcat listener"));
+        Ok(())
     }
 
     #[tokio::test]

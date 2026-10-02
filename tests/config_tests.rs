@@ -38,6 +38,22 @@ fn bridge_auto_approve_round_trips() -> anyhow::Result<()> {
 }
 
 #[test]
+fn optional_tool_switches_round_trip_and_reject_unknown_names() -> anyhow::Result<()> {
+    let mut cfg: Config =
+        toml::from_str("[tool_groups]\njadx = true\n[tool_overrides]\ntailcat_check = true\n")?;
+    assert!(cfg.tool_groups["jadx"]);
+    assert!(cfg.tool_overrides["tailcat_check"]);
+    let saved = toml::to_string(&cfg)?;
+    cfg = toml::from_str(&saved)?;
+    cfg.validate_runtime()?;
+    assert!(cfg.tool_groups["jadx"]);
+    assert!(cfg.tool_overrides["tailcat_check"]);
+    cfg.tool_overrides.insert("unknown_tool".into(), true);
+    assert!(cfg.validate_runtime().is_err());
+    Ok(())
+}
+
+#[test]
 fn agent_mode_applies_a_preset_unless_limits_are_explicit() -> anyhow::Result<()> {
     let dir = tempdir()?;
     let path = dir.path().join("mode.toml");

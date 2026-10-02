@@ -1,8 +1,10 @@
 # Project Status
 
-Last Updated: 2026-10-01
+Last Updated: 2026-10-02
 
 ## Recent Changes
+
+- 可选工具组与 Tailcat：APK/JADX、Tailcat 组默认关闭，Web 工具页支持按组与单项开关并保存 TOML；Agent 与 bridge 只注册启用工具，bridge 的短生命周期入口过滤监听器操作。Tailcat 提供版本检查、原始流/文件接收、文件发送、单端口服务及状态/停止；结构化操作复用确认，shell 路径对发送与端口服务强确认。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`npm run build --prefix web`、`npm test --prefix web` 通过；一轮 TUI 伪终端用例时序超时后单独及全量重跑通过。宿主 Linux 以官方 v0.7.0 二进制运行显式 live 测试，覆盖原始传输、文件接收箱和端口服务；Android API 34 ARMv7 release 交叉编译并在设备上经 bridge 调用检查和发送工具，接收端 SHA-256 一致。`test-tailcat-connected.sh` 在已连接设备与宿主间的双向传输通过。
 
 - v1.0.6：Web 左侧 logo 下显示正在运行的程序版本，版本由只读 `/api/version` 从 Cargo 包元数据返回；Web 侧栏、文件预览等功能纳入本次发布。`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings` 和 Android API 26 AArch64/ARMv7 release 交叉编译通过；ELF 分别使用 `/system/bin/linker64` 与 `/system/bin/linker`。该显示接口不参与 Agent 安全分类、审批、Android 执行或 PTY。
 - Web 文件预览增加代码语法高亮与自动换行切换；MP3、WAV、M4A/AAC、Ogg、FLAC 可尝试由浏览器直接播放，WAV/Raw PCM 还可按采样率、声道与采样格式参数播放。WAV 头部参数自动填入，Raw PCM 参数由用户选择；参数播放限 32 MiB，在浏览器内解码，不改变 Agent 文件工具或确认链。`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check`、`cargo test --quiet` 和 `git diff --check` 通过；新增前端回归覆盖 WAV 头部、PCM 解码和高亮转义。一次全量测试中的既有异步时序用例失败后，单独重跑及完整重跑均通过。

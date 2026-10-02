@@ -37,6 +37,7 @@ pub mod memory;
 pub mod network;
 pub mod runtime;
 mod shell;
+pub mod tailcat;
 pub mod ui;
 
 use self::{audio::domain::AudioToolExecutor, file::domain::FileToolExecutor};
@@ -108,6 +109,79 @@ pub fn builtin_tools(ima_enabled: bool) -> Vec<ToolDefinition> {
         &[][..]
     };
     ToolRegistry::builtin(capabilities).definitions()
+}
+
+/// Model-facing tools available under a loaded configuration.
+pub fn configured_tools(config: &Config) -> Vec<ToolDefinition> {
+    let capabilities = if config.ima_enabled {
+        &[Capability::Ima][..]
+    } else {
+        &[][..]
+    };
+    ToolRegistry::for_config(config, capabilities).definitions()
+}
+
+/// Remove managed listeners from one-shot bridge processes, which cannot keep them alive.
+pub fn disable_managed_tailcat_for_bridge(config: &mut Config) {
+    for name in [
+        "tailcat_receive",
+        "tailcat_receive_stream",
+        "tailcat_serve",
+        "tailcat_status",
+        "tailcat_stop",
+    ] {
+        config.tool_overrides.insert(name.into(), false);
+    }
+}
+
+/// Names whose availability can be configured independently of their group.
+pub fn optional_tool_names() -> &'static [&'static str] {
+    &[
+        "inspect_apk",
+        "list_apk_entries",
+        "list_dex_classes",
+        "decompile_apk_class",
+        "tailcat_check",
+        "tailcat_receive",
+        "tailcat_receive_stream",
+        "tailcat_send_file",
+        "tailcat_serve",
+        "tailcat_status",
+        "tailcat_stop",
+    ]
+}
+
+/// Optional group that owns a registered tool, if any.
+pub fn optional_group(name: &str) -> Option<&'static str> {
+    match name {
+        "inspect_apk" | "list_apk_entries" | "list_dex_classes" | "decompile_apk_class" => {
+            Some("jadx")
+        }
+        "tailcat_check"
+        | "tailcat_receive"
+        | "tailcat_receive_stream"
+        | "tailcat_send_file"
+        | "tailcat_serve"
+        | "tailcat_status"
+        | "tailcat_stop" => Some("tailcat"),
+        _ => None,
+    }
+}
+
+/// Check the assigned optional group of a tool.
+pub fn tool_in_group(name: &str, group: &str) -> bool {
+    optional_group(name) == Some(group)
+}
+
+/// Effective availability of one optional tool.
+pub fn tool_enabled(config: &Config, name: &str) -> bool {
+    optional_group(name).is_none_or(|group| {
+        config
+            .tool_overrides
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| config.tool_groups.get(group).copied().unwrap_or(false))
+    })
 }
 
 pub(crate) struct ToolContext<'a> {
@@ -299,6 +373,20 @@ pub(crate) struct ToolRegistry {
 
 impl ToolRegistry {
     pub fn builtin(capabilities: &[Capability]) -> Self {
+        Self::for_config(&Config::default(), capabilities)
+    }
+
+    /// Register only tools enabled by the current configuration.
+    pub fn for_config(config: &Config, capabilities: &[Capability]) -> Self {
+        Self::build(Some(config), capabilities)
+    }
+
+    /// Inventory all tools for settings, including disabled optional tools.
+    pub fn catalog(capabilities: &[Capability]) -> Self {
+        Self::build(None, capabilities)
+    }
+
+    fn build(config: Option<&Config>, capabilities: &[Capability]) -> Self {
         let mut tools: Vec<Box<dyn Tool>> = vec![
             Box::new(ShellTool),
             Box::new(apk::InspectApkTool),
@@ -314,12 +402,16 @@ impl ToolRegistry {
             Box::new(ImaSearchTool),
             Box::new(ImaReadTool),
         ];
+        tools.extend(tailcat::builtin_tools());
         tools.extend(extended::builtin_tools());
         tools.extend(android::tool::builtin_tools());
         Self {
             tools: tools
                 .into_iter()
-                .filter(|tool| tool.metadata().available(capabilities))
+                .filter(|tool| {
+                    tool.metadata().available(capabilities)
+                        && config.is_none_or(|config| tool_enabled(config, tool.metadata().name))
+                })
                 .map(|tool| (tool.definition(), tool))
                 .collect(),
         }
@@ -358,7 +450,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 57);
+        assert_eq!(names.len(), 53);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()
@@ -371,19 +463,54 @@ mod tests {
             "android_clipboard",
             "agent_memory",
             "inspect_tls",
-            "inspect_apk",
-            "list_apk_entries",
-            "list_dex_classes",
-            "decompile_apk_class",
         ] {
             assert!(names.contains(&name.to_string()), "missing {name}");
         }
         assert!(registry.get("read_file").is_some());
         assert!(registry.get("ima_search").is_none());
+        assert!(registry.get("inspect_apk").is_none());
+        assert!(registry.get("tailcat_check").is_none());
         assert!(ToolRegistry::builtin(&[Capability::Ima])
             .get("ima_search")
             .is_some());
         assert_eq!(builtin_tools(true).len(), names.len() + 3);
+    }
+
+    #[test]
+    fn optional_groups_and_individual_overrides_gate_definitions_and_dispatch() {
+        let mut config = crate::config::Config::default();
+        let registry = ToolRegistry::for_config(&config, &[]);
+        for name in super::optional_tool_names() {
+            assert!(
+                registry.get(name).is_none(),
+                "{name} was exposed by default"
+            );
+        }
+        config.tool_groups.insert("jadx".into(), true);
+        config.tool_groups.insert("tailcat".into(), true);
+        config
+            .tool_overrides
+            .insert("decompile_apk_class".into(), false);
+        config.tool_overrides.insert("tailcat_serve".into(), false);
+        let registry = ToolRegistry::for_config(&config, &[]);
+        assert!(registry.get("inspect_apk").is_some());
+        assert!(registry.get("tailcat_check").is_some());
+        assert!(registry.get("decompile_apk_class").is_none());
+        assert!(registry.get("tailcat_serve").is_none());
+        config.tool_groups.insert("tailcat".into(), false);
+        config.tool_overrides.insert("tailcat_check".into(), true);
+        let registry = ToolRegistry::for_config(&config, &[]);
+        assert!(registry.get("tailcat_check").is_some());
+        assert!(registry.get("tailcat_receive").is_none());
+        assert!(registry
+            .definitions()
+            .iter()
+            .all(|definition| definition.name != "tailcat_receive"));
+        super::disable_managed_tailcat_for_bridge(&mut config);
+        let bridge = ToolRegistry::for_config(&config, &[]);
+        assert!(bridge.get("tailcat_check").is_some());
+        assert!(bridge.get("tailcat_receive").is_none());
+        assert!(bridge.get("tailcat_serve").is_none());
     }
 
     #[test]

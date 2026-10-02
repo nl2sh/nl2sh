@@ -25,6 +25,71 @@ struct MockLlm {
     command: &'static str,
 }
 
+struct VisibilityLlm {
+    expect_tailcat: bool,
+    expect_jadx: bool,
+}
+
+#[async_trait]
+impl LlmClient for VisibilityLlm {
+    async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
+        assert_eq!(
+            request
+                .tools
+                .iter()
+                .any(|tool| tool.name == "tailcat_check"),
+            self.expect_tailcat
+        );
+        assert_eq!(
+            request.tools.iter().any(|tool| tool.name == "inspect_apk"),
+            self.expect_jadx
+        );
+        assert!(!request
+            .tools
+            .iter()
+            .any(|tool| tool.name == "tailcat_serve"));
+        Ok(LlmResponse {
+            text: Some("done".into()),
+            tool_calls: Vec::new(),
+            usage: Usage::default(),
+            finish_reason: FinishReason::Stop,
+        })
+    }
+}
+
+#[tokio::test]
+async fn model_only_discovers_enabled_optional_tools() -> Result<()> {
+    let mut config = Config::default();
+    let executor = Exec {
+        calls: Arc::new(AtomicUsize::new(0)),
+    };
+    AgentRunner {
+        config: &config,
+        llm: &VisibilityLlm {
+            expect_tailcat: false,
+            expect_jadx: false,
+        },
+        executor: &executor,
+        confirmer: &Confirm(false),
+    }
+    .run("inspect")
+    .await?;
+    config.tool_groups.insert("jadx".into(), true);
+    config.tool_overrides.insert("tailcat_check".into(), true);
+    AgentRunner {
+        config: &config,
+        llm: &VisibilityLlm {
+            expect_tailcat: true,
+            expect_jadx: true,
+        },
+        executor: &executor,
+        confirmer: &Confirm(false),
+    }
+    .run("inspect")
+    .await?;
+    Ok(())
+}
+
 #[derive(Default)]
 struct ToolEventSink {
     events: Mutex<Vec<String>>,

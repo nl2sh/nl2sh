@@ -9,7 +9,10 @@ use crate::{
     security::SecurityAssessment,
     sessions::SessionStore,
     shell::ShellExecutor,
-    tools::{android::environment::inspect_environment, builtin_tools, runtime::invoke},
+    tools::{
+        android::environment::inspect_environment, configured_tools,
+        disable_managed_tailcat_for_bridge, runtime::invoke,
+    },
 };
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
@@ -97,11 +100,9 @@ impl Confirmer for AutoApproveConfirmer {
 pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
     match operation {
         BridgeOperation::Tools => {
-            let cfg = config::load_or_default_unvalidated(path)?;
-            println!(
-                "{}",
-                serde_json::to_string(&builtin_tools(cfg.ima_enabled))?
-            );
+            let mut cfg = config::load_or_default_unvalidated(path)?;
+            disable_managed_tailcat_for_bridge(&mut cfg);
+            println!("{}", serde_json::to_string(&configured_tools(&cfg))?);
         }
         BridgeOperation::Inspect => {
             let cfg = config::load_or_default_unvalidated(path)?;
@@ -125,6 +126,7 @@ pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
             }
             let mut cfg = config::load_or_default_unvalidated(path)?;
             cfg.validate_runtime()?;
+            disable_managed_tailcat_for_bridge(&mut cfg);
             if !cfg.provider_is_configured() {
                 bail!("model provider is not configured")
             }
@@ -219,6 +221,7 @@ pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
                 bail!("invalid bridge tool name")
             }
             let mut cfg = config::load_or_default_unvalidated(path)?;
+            disable_managed_tailcat_for_bridge(&mut cfg);
             if cfg.security_level == SecurityLevel::Unsafe {
                 cfg.security_level = SecurityLevel::Balanced;
             }

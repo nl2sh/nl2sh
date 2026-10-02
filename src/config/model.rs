@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 use url::Url;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -177,6 +177,12 @@ pub struct Config {
     pub security_level: SecurityLevel,
     /// Automatically approve operations received through the A2A/MCP bridge.
     pub bridge_auto_approve: bool,
+    /// Enabled state of optional tool groups. `jadx` and `tailcat` default off.
+    pub tool_groups: BTreeMap<String, bool>,
+    /// Per-tool enabled state, overriding its group.
+    pub tool_overrides: BTreeMap<String, bool>,
+    /// Tailcat executable path on this runtime.
+    pub tailcat_binary_path: PathBuf,
     /// Command execution identity mode.
     pub execute_user_mode: ExecuteUserMode,
     /// Enables real PTY execution instead of pipeline fallback.
@@ -262,6 +268,13 @@ impl Default for Config {
             execute_confirm_policy: ConfirmPolicy::RiskOnly,
             security_level: SecurityLevel::Balanced,
             bridge_auto_approve: false,
+            tool_groups: BTreeMap::new(),
+            tool_overrides: BTreeMap::new(),
+            tailcat_binary_path: PathBuf::from(if cfg!(target_os = "android") {
+                "/data/local/tmp/tailcat"
+            } else {
+                "tailcat"
+            }),
             execute_user_mode: ExecuteUserMode::Auto,
             enable_pty: true,
             ascii_symbols: false,
@@ -380,6 +393,19 @@ impl Config {
             }
             regex::Regex::new(&rule.pattern)
                 .with_context(|| format!("invalid security rule {}", rule.id))?;
+        }
+        if self.tailcat_binary_path.as_os_str().is_empty() {
+            bail!("tailcat_binary_path must not be empty")
+        }
+        for group in self.tool_groups.keys() {
+            if !matches!(group.as_str(), "jadx" | "tailcat") {
+                bail!("unknown tool group {group}")
+            }
+        }
+        for name in self.tool_overrides.keys() {
+            if !crate::tools::optional_tool_names().contains(&name.as_str()) {
+                bail!("unknown optional tool {name}")
+            }
         }
         Ok(())
     }
