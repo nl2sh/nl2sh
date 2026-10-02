@@ -142,6 +142,7 @@ pub fn optional_tool_names() -> &'static [&'static str] {
         "list_dex_classes",
         "decompile_apk_class",
         "tailcat_check",
+        "tailcat_install",
         "tailcat_receive",
         "tailcat_receive_stream",
         "tailcat_send_file",
@@ -158,6 +159,7 @@ pub fn optional_group(name: &str) -> Option<&'static str> {
             Some("jadx")
         }
         "tailcat_check"
+        | "tailcat_install"
         | "tailcat_receive"
         | "tailcat_receive_stream"
         | "tailcat_send_file"
@@ -470,6 +472,7 @@ mod tests {
         assert!(registry.get("ima_search").is_none());
         assert!(registry.get("inspect_apk").is_none());
         assert!(registry.get("tailcat_check").is_none());
+        assert!(registry.get("tailcat_install").is_none());
         assert!(ToolRegistry::builtin(&[Capability::Ima])
             .get("ima_search")
             .is_some());
@@ -495,6 +498,7 @@ mod tests {
         let registry = ToolRegistry::for_config(&config, &[]);
         assert!(registry.get("inspect_apk").is_some());
         assert!(registry.get("tailcat_check").is_some());
+        assert!(registry.get("tailcat_install").is_some());
         assert!(registry.get("decompile_apk_class").is_none());
         assert!(registry.get("tailcat_serve").is_none());
         config.tool_groups.insert("tailcat".into(), false);

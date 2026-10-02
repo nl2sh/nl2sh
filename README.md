@@ -466,7 +466,7 @@ Agent 内置只读 Android 诊断工具，可结构化查询前台或指定应�
 
 ### Tailcat 可选工具
 
-先按设备 ABI 安装可信的 tailcat 可执行文件，并将 `tailcat_binary_path` 指向它；直接 Android shell 的默认路径是 `/data/local/tmp/tailcat`。在 Web“能做什么”中开启 Tailcat 组，或只开启所需工具。`tailcat_check` 检查版本；`tailcat_receive_stream` 把一次原始数据流写入**新文件**，发送方用 `tailcat_send_file` 的 `mode: "stream"`；`tailcat_receive` 启动写入指定现有目录的文件接收箱，发送方用 `mode: "copy"`，该模式要求发送端有系统 `scp`。`tailcat_serve` 共享一个本机 TCP 端口；`tailcat_status` 和 `tailcat_stop` 管理当前 nl2sh 进程创建的接收或服务任务。启动输出返回完整地址；地址应只发给预期连接方。接收和停止须确认，发送及共享端口须强确认。通用 shell 工具调用 tailcat 时也按实际操作分类，不因关闭工具组而降低风险。
+在 Web“能做什么”中开启 Tailcat 组，或只开启所需工具。`tailcat_install` 在确认后按设备 ABI 下载固定的官方 v0.7.0 静态包，校验内置 SHA-256、ELF 架构及版本，再原子安装到 `tailcat_binary_path`；直接 Android shell 的默认路径是 `/data/local/tmp/tailcat`。已存在的目标文件会被替换，安装失败时保留原文件。仅支持官方 arm64-v8a 与 armeabi-v7a 包；其他 Android ABI 应手动安装兼容程序，网络受限时也可手动安装并配置绝对路径。`tailcat_check` 只检查已配置程序的版本，不会下载。`tailcat_receive_stream` 把一次原始数据流写入**新文件**，发送方用 `tailcat_send_file` 的 `mode: "stream"`；`tailcat_receive` 启动写入指定现有目录的文件接收箱，发送方用 `mode: "copy"`，该模式要求发送端有系统 `scp`。`tailcat_serve` 共享一个本机 TCP 端口；`tailcat_status` 和 `tailcat_stop` 管理当前 nl2sh 进程创建的接收或服务任务。启动输出返回完整地址；地址应只发给预期连接方。接收、停止及安装须确认，发送及共享端口须强确认。通用 shell 工具调用 tailcat 时也按实际操作分类，不因关闭工具组而降低风险。
 
 接收和端口服务属于当前 TUI/Web 进程；一次性 `bridge` 调用只暴露检查和发送工具，不提供无法跨请求保持生命周期的服务操作。接收进程使用临时密钥，nl2sh 退出时由父进程退出信号终止。设备与本机已安装 tailcat 时，可设置 `TAILCAT_HOST_BIN`、`TAILCAT_DEVICE_BIN` 和 `ADB_SERIAL`，运行 `./test-tailcat-connected.sh` 验证两个方向的原始传输；脚本只创建并删除自己的临时文件。宿主工具级实测可设置 `NL2SH_TAILCAT_TEST_BINARY` 后运行 `cargo test --test tailcat_live_tests -- --ignored`，覆盖原始文件、接收箱和端口服务。
 

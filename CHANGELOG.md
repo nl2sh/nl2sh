@@ -4,6 +4,7 @@
 
 ### Added
 
+- Add an opt-in `tailcat_install` tool that downloads the pinned official release for the device ABI after confirmation, validates its checksum and executable, and atomically installs it.
 - Add opt-in APK/JADX and Tailcat tool groups with persistent group and per-tool switches in the Web catalog; disabled tools are absent from model and direct-call registries.
 - Add structured Tailcat file transfer and local-port sharing with local confirmation, plus a host/ADB device transfer test script.
 

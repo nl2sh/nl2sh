@@ -72,4 +72,5 @@ tailcat = false
 # Individual switches override a group's setting.
 [tool_overrides]
 # tailcat_check = true
+# tailcat_install = true
 # decompile_apk_class = false
