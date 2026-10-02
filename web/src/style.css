@@ -141,6 +141,9 @@ button:disabled { opacity: .45; }
 .setup-steps .active { color: var(--accent); font-weight: 700; }
 .setup-steps .active::before { border-color: var(--border-focus); }
 .approval-impact { padding: .8rem; border-left: 3px solid var(--warning); background: var(--background); }
+.approval-strong { color: var(--warning); font-weight: 600; }
+.approval .approve-button { background: var(--warning); border-color: var(--warning); color: var(--background); font-weight: 700; }
+.approval .approve-button:hover:not(:disabled) { filter: brightness(1.12); border-color: var(--warning); }
 .approval-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30vh; overflow: auto; padding: .8rem; background: var(--background); border: 1px solid var(--border); border-radius: 7px; }
 .approval details { margin: .8rem 0; }
 .approval summary { cursor: pointer; color: var(--accent); }

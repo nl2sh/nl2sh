@@ -1,6 +1,6 @@
 export type EntryKind='user'|'assistant'|'stream'|'reasoning'|'task_summary'|'tool_call'|'tool_result'|'tool_error'|'tool_output'|'error'|'notice';
 export interface Entry{kind:EntryKind;text:string}
-export interface Pending{request_id:number;kind:'approval'|'questions';command?:string;risk?:string;explanation?:string;root?:boolean;strong?:boolean;questions?:Question[]}
+export interface Pending{request_id:number;kind:'approval'|'questions';command?:string;risk?:string;explanation?:string;root?:boolean;strong?:boolean;armed?:boolean;questions?:Question[]}
 export interface Question{id:string;header:string;prompt:string;options:{label:string;value:string;description:string}[]}
 export interface Session{id:string;title:string;turns:number;busy:boolean;pending:boolean;created:number;updated:number}
 export interface TaskMetrics{timing_available:boolean;steps:number;tool_calls:number;total_ms:number;model_ms:number;tool_ms:number;waiting_ms:number}

@@ -4,6 +4,7 @@ Last Updated: 2026-10-02
 
 ## Recent Changes
 
+- Web 风险审批移除手输 `CONFIRM`：警告色批准按钮对高风险请求分两次点击，服务端只允许已进入复核阶段、编号匹配的待决请求最终批准；普通修改仍单次批准，拒绝和编辑后重评估保留。新增危险请求的服务端审批回归测试，覆盖未复核直接批准、旧编号拒绝和复核后批准。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`npm run build --prefix web`、`npm test --prefix web`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 和 `git diff --check` 通过；Android 执行与 PTY 路径未改。
 - 可选工具组与 Tailcat：APK/JADX、Tailcat 组默认关闭，Web 工具页支持按组与单项开关并保存 TOML；Agent 与 bridge 只注册启用工具，bridge 的短生命周期入口过滤监听器操作。Tailcat 提供版本检查、原始流/文件接收、文件发送、单端口服务及状态/停止；结构化操作复用确认，shell 路径对发送与端口服务强确认。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`npm run build --prefix web`、`npm test --prefix web` 通过；一轮 TUI 伪终端用例时序超时后单独及全量重跑通过。宿主 Linux 以官方 v0.7.0 二进制运行显式 live 测试，覆盖原始传输、文件接收箱和端口服务；Android API 34 ARMv7 release 交叉编译并在设备上经 bridge 调用检查和发送工具，接收端 SHA-256 一致。`test-tailcat-connected.sh` 在已连接设备与宿主间的双向传输通过。
 
 - v1.0.6：Web 左侧 logo 下显示正在运行的程序版本，版本由只读 `/api/version` 从 Cargo 包元数据返回；Web 侧栏、文件预览等功能纳入本次发布。`npm run build --prefix web`、`npm test --prefix web`、`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings` 和 Android API 26 AArch64/ARMv7 release 交叉编译通过；ELF 分别使用 `/system/bin/linker64` 与 `/system/bin/linker`。该显示接口不参与 Agent 安全分类、审批、Android 执行或 PTY。

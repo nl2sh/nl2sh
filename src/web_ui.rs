@@ -433,6 +433,7 @@ enum Pending {
         explanation: String,
         root: bool,
         strong: bool,
+        armed: bool,
     },
     Questions {
         request_id: u64,
@@ -519,6 +520,7 @@ struct Message {
 #[derive(Deserialize)]
 struct Decision {
     session_id: String,
+    request_id: u64,
     action: String,
     text: Option<String>,
     answers: Option<QuestionAnswers>,
@@ -1861,18 +1863,41 @@ async fn post_decision(
         .inner
         .lock()
         .map_err(|_| anyhow!("web session lock poisoned"))?;
-    let pending = inner.pending.as_ref().context("no pending request")?;
+    let pending = inner.pending.as_mut().context("no pending request")?;
+    let pending_id = match pending {
+        Pending::Approval { request_id, .. } | Pending::Questions { request_id, .. } => *request_id,
+    };
+    if pending_id != decision.request_id {
+        return Err(ApiError::bad(anyhow!("approval request changed")));
+    }
+    if let Pending::Approval {
+        strong: true,
+        armed,
+        ..
+    } = pending
+    {
+        if decision.action == "arm" {
+            *armed = true;
+            drop(inner);
+            audit(&current, "web_decision", "arm");
+            notify(&current, "state");
+            return Ok("请再次确认高风险操作".into());
+        }
+    }
     let reply = match pending {
-        Pending::Approval { strong, root, .. } => Reply::Approval(match decision.action.as_str() {
-            "approve" if !strong || decision.text.as_deref() == Some("CONFIRM") => {
-                ConfirmationDecision::ApproveCaptured
-            }
-            "remember" if !strong && !root => ConfirmationDecision::ApproveForTask,
+        Pending::Approval {
+            strong,
+            root,
+            armed,
+            ..
+        } => Reply::Approval(match decision.action.as_str() {
+            "approve" if !*strong || *armed => ConfirmationDecision::ApproveCaptured,
+            "remember" if !*strong && !*root => ConfirmationDecision::ApproveForTask,
             "reject" => ConfirmationDecision::Reject,
             "edit" => ConfirmationDecision::Edit(decision.text.unwrap_or_default()),
             _ => {
                 return Err(ApiError::bad(anyhow!(
-                    "invalid decision or missing CONFIRM"
+                    "invalid decision or strong confirmation missing"
                 )))
             }
         }),
@@ -2632,6 +2657,7 @@ impl Confirmer for WebConfirmer {
             explanation: approval_explanation(assessment),
             root: assessment.requires_root,
             strong: assessment.requires_double_confirmation,
+            armed: false,
         };
         match self.wait(pending).await? {
             Reply::Approval(decision) => Ok(decision),
@@ -3016,6 +3042,7 @@ mod tests {
         let shared = state(directory.path().join("config.toml"));
         let current = session(&shared, "web-test")?;
         let (reply, waiting) = oneshot::channel();
+        let request_id = PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         {
             let mut inner = current
                 .inner
@@ -3023,12 +3050,13 @@ mod tests {
                 .map_err(|_| anyhow!("web lock poisoned"))?;
             inner.busy = true;
             inner.pending = Some(Pending::Approval {
-                request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+                request_id,
                 command: "touch /tmp/x".into(),
                 risk: "Mutating".into(),
                 explanation: "test".into(),
                 root: false,
                 strong: false,
+                armed: false,
             });
             inner.reply = Some(reply);
         }
@@ -3055,6 +3083,75 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn dangerous_web_approval_requires_two_explicit_decisions() -> Result<()> {
+        let directory = tempdir()?;
+        let shared = state(directory.path().join("config.toml"));
+        let current = session(&shared, "web-test")?;
+        let (reply, waiting) = oneshot::channel();
+        let request_id = PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        {
+            let mut inner = current
+                .inner
+                .lock()
+                .map_err(|_| anyhow!("web lock poisoned"))?;
+            inner.busy = true;
+            inner.pending = Some(Pending::Approval {
+                request_id,
+                command: "rm -rf /tmp/test".into(),
+                risk: "Dangerous".into(),
+                explanation: "test".into(),
+                root: false,
+                strong: true,
+                armed: false,
+            });
+            inner.reply = Some(reply);
+        }
+        let decision = |action: &str| Decision {
+            session_id: "web-test".into(),
+            request_id,
+            action: action.into(),
+            text: None,
+            answers: None,
+        };
+        assert!(post_decision(
+            State(shared.clone()),
+            Json(Decision {
+                request_id: request_id.saturating_add(1),
+                ..decision("arm")
+            })
+        )
+        .await
+        .is_err());
+        assert!(
+            post_decision(State(shared.clone()), Json(decision("approve")))
+                .await
+                .is_err()
+        );
+        post_decision(State(shared.clone()), Json(decision("arm")))
+            .await
+            .map_err(|error| error.error)?;
+        {
+            let inner = current
+                .inner
+                .lock()
+                .map_err(|_| anyhow!("web lock poisoned"))?;
+            assert!(matches!(
+                inner.pending,
+                Some(Pending::Approval { armed: true, .. })
+            ));
+            assert!(inner.reply.is_some());
+        }
+        post_decision(State(shared), Json(decision("approve")))
+            .await
+            .map_err(|error| error.error)?;
+        assert!(matches!(
+            waiting.await?,
+            Reply::Approval(ConfirmationDecision::ApproveCaptured)
+        ));
+        Ok(())
+    }
+
     #[test]
     fn approval_explanation_uses_local_rule_evidence() {
         let assessment = crate::security::assess("rm -rf /", &Config::default());
@@ -3071,6 +3168,7 @@ mod tests {
             explanation: "test".into(),
             root: false,
             strong: false,
+            armed: false,
         };
         let second = Pending::Approval {
             request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
@@ -3079,6 +3177,7 @@ mod tests {
             explanation: "test".into(),
             root: false,
             strong: false,
+            armed: false,
         };
         let first = serde_json::to_value(first)?;
         let second = serde_json::to_value(second)?;

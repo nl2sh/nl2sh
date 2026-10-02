@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Replace the Web high-risk `CONFIRM` text field with two explicit approval clicks, enforced per pending request by the server; color the approval button with the warning palette.
 - Classify Tailcat shell commands by their network and file effects, including strong confirmation for uploads and port sharing.
 
 ## [1.0.6] - 2026-10-01
