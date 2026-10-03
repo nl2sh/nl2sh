@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- Retry a transient HTTP 405 from an explicitly selected or already negotiated LLM API dialect, including post-tool streaming requests, while preserving immediate Responses-to-Chat fallback during initial automatic protocol discovery.
 - Show every fetched model in the Web Quick Start picker even when the model field already contains a preset name.
 
 ## [1.0.6] - 2026-10-01

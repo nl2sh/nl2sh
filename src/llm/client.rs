@@ -86,15 +86,20 @@ impl LlmClient for HttpLlmClient {
     async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
         let api_type = self.selected_api_type();
         if api_type != ApiType::Auto {
-            return self.complete_for(request, api_type).await;
+            return self.complete_for(request, api_type, true).await;
         }
-        match self.complete_for(request.clone(), ApiType::Responses).await {
+        match self
+            .complete_for(request.clone(), ApiType::Responses, false)
+            .await
+        {
             Ok(response) => {
                 self.cache_api_type(ApiType::Responses);
                 Ok(response)
             }
             Err(error) if is_protocol_mismatch(&error) => {
-                let response = self.complete_for(request, ApiType::ChatCompletions).await?;
+                let response = self
+                    .complete_for(request, ApiType::ChatCompletions, true)
+                    .await?;
                 self.cache_api_type(ApiType::ChatCompletions);
                 Ok(response)
             }
@@ -111,11 +116,11 @@ impl LlmClient for HttpLlmClient {
         let tracking_sink = TrackingSink::new(sink);
         let api_type = self.selected_api_type();
         let result = if api_type != ApiType::Auto {
-            self.complete_stream_for(request, &tracking_sink, api_type)
+            self.complete_stream_for(request, &tracking_sink, api_type, true)
                 .await
         } else {
             match self
-                .complete_stream_for(request.clone(), &tracking_sink, ApiType::Responses)
+                .complete_stream_for(request.clone(), &tracking_sink, ApiType::Responses, false)
                 .await
             {
                 Ok(response) => {
@@ -124,7 +129,12 @@ impl LlmClient for HttpLlmClient {
                 }
                 Err(error) if !tracking_sink.emitted() && is_protocol_mismatch(&error) => {
                     let fallback = self
-                        .complete_stream_for(request, &tracking_sink, ApiType::ChatCompletions)
+                        .complete_stream_for(
+                            request,
+                            &tracking_sink,
+                            ApiType::ChatCompletions,
+                            true,
+                        )
                         .await;
                     if fallback.is_ok() {
                         self.cache_api_type(ApiType::ChatCompletions);
@@ -160,7 +170,12 @@ impl HttpLlmClient {
         self.negotiated_api_type.store(value, Ordering::Release);
     }
 
-    async fn complete_for(&self, request: LlmRequest, api_type: ApiType) -> Result<LlmResponse> {
+    async fn complete_for(
+        &self,
+        request: LlmRequest,
+        api_type: ApiType,
+        retry_method_not_allowed: bool,
+    ) -> Result<LlmResponse> {
         let suffix = match api_type {
             ApiType::ChatCompletions => "chat/completions",
             ApiType::Responses => "responses",
@@ -204,7 +219,9 @@ impl HttpLlmClient {
                             }
                         };
                     }
-                    if !retry::retryable_status(status) || attempt == self.retries {
+                    if !retry::retryable_status(status, retry_method_not_allowed)
+                        || attempt == self.retries
+                    {
                         return Err(http_error(status, resp, &self.key).await);
                     }
                 }
@@ -230,6 +247,7 @@ impl HttpLlmClient {
         request: LlmRequest,
         sink: &dyn TextDeltaSink,
         api_type: ApiType,
+        retry_method_not_allowed: bool,
     ) -> Result<LlmResponse> {
         let suffix = match api_type {
             ApiType::ChatCompletions => "chat/completions",
@@ -261,7 +279,9 @@ impl HttpLlmClient {
                 }
                 Ok(resp) => {
                     let status = resp.status();
-                    if !retry::retryable_status(status) || attempt == self.retries {
+                    if !retry::retryable_status(status, retry_method_not_allowed)
+                        || attempt == self.retries
+                    {
                         return Err(http_error(status, resp, &self.key).await);
                     }
                 }

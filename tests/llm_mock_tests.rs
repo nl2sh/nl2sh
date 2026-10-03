@@ -121,6 +121,96 @@ async fn retries_429_then_succeeds() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn retries_405_for_selected_protocol_then_succeeds() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(405).set_body_string("temporary gateway route"))
+        .with_priority(1)
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "choices":[{"message":{"content":"recovered"},"finish_reason":"stop"}],
+            "usage":{}
+        })))
+        .with_priority(2)
+        .expect(1)
+        .mount(&server)
+        .await;
+    let client = build_client(&Config {
+        endpoint: format!("{}/v1", server.uri()),
+        api_type: ApiType::ChatCompletions,
+        llm_retry_count: 1,
+        llm_retry_base_delay_ms: 1,
+        ..Config::default()
+    })?;
+
+    assert_eq!(
+        client.complete(request()).await?.text.as_deref(),
+        Some("recovered")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn stream_retries_405_for_selected_protocol_then_succeeds() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let chat_stream = concat!(
+        "data: {\"choices\":[{\"delta\":{\"content\":\"stream-recovered\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+        "data: [DONE]\n\n"
+    );
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(405).set_body_string("temporary gateway route"))
+        .with_priority(1)
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(chat_stream),
+        )
+        .with_priority(2)
+        .expect(1)
+        .mount(&server)
+        .await;
+    let client = build_client(&Config {
+        endpoint: format!("{}/v1", server.uri()),
+        api_type: ApiType::ChatCompletions,
+        llm_retry_count: 1,
+        llm_retry_base_delay_ms: 1,
+        ..Config::default()
+    })?;
+    let sink = CapturingSink::default();
+
+    assert_eq!(
+        client
+            .complete_stream(request(), &sink)
+            .await?
+            .text
+            .as_deref(),
+        Some("stream-recovered")
+    );
+    assert_eq!(
+        sink.0
+            .lock()
+            .map_err(|_| anyhow::anyhow!("sink poisoned"))?
+            .as_str(),
+        "stream-recovered"
+    );
+    Ok(())
+}
 #[tokio::test]
 async fn request_timeout_is_reported() -> anyhow::Result<()> {
     let server = MockServer::start().await;

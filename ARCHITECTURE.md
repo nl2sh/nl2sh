@@ -76,7 +76,7 @@ Web 快速开始在保存配置后发送无工具的短模型请求，直接验�
 
 TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标记渲染高辨识度地址和访问说明；该标记仅用于本地显示，不进入模型上下文、审计或 Web 会话持久化。
 
-网络、解析或执行错误沿 `anyhow::Result` 返回 UI。LLM 重试只覆盖传输错误、429 和 5xx，并使用有上限的指数退避；401 等配置错误立即返回。Provider 返回的函数参数不是完整 JSON 时，协议层保留调用 ID、工具名、参数字节数和解析错误，但不猜测修补内容；Runner 把它作为未执行的失败 Tool Result 反馈给模型，初次失败后最多允许两次重新生成。每次拒绝都计入 Step 与 Tool Call 预算，连续失败超过上限后终止当前任务；重新生成的参数仍从工具准备开始经过完整安全分类、确认和执行链。Ctrl+C 可取消 HTTP 请求、响应读取和退避。执行超时先给进程组 SIGTERM，短暂等待后给 SIGKILL；Ctrl+C 先给 SIGINT 再升级并回收子进程。Agent TUI 以异步任务驱动 LLM、确认和捕获式命令，保持同一 ratatui frame 并持续刷新历史；只有必须直接占用终端的全屏交互命令才临时离开 alternate screen。交互命令结束后恢复 alternate screen 与鼠标捕获，并清除 ratatui 的旧差分缓存以完整重绘框架。
+网络、解析或执行错误沿 `anyhow::Result` 返回 UI。LLM 重试覆盖传输错误、429、5xx，以及协议已显式选择或成功协商后兼容网关偶发返回的 405，并使用有上限的指数退避；自动协议首次探测的 404/405 仍立即切换 adapter，401 等配置错误立即返回。Provider 返回的函数参数不是完整 JSON 时，协议层保留调用 ID、工具名、参数字节数和解析错误，但不猜测修补内容；Runner 把它作为未执行的失败 Tool Result 反馈给模型，初次失败后最多允许两次重新生成。每次拒绝都计入 Step 与 Tool Call 预算，连续失败超过上限后终止当前任务；重新生成的参数仍从工具准备开始经过完整安全分类、确认和执行链。Ctrl+C 可取消 HTTP 请求、响应读取和退避。执行超时先给进程组 SIGTERM，短暂等待后给 SIGKILL；Ctrl+C 先给 SIGINT 再升级并回收子进程。Agent TUI 以异步任务驱动 LLM、确认和捕获式命令，保持同一 ratatui frame 并持续刷新历史；只有必须直接占用终端的全屏交互命令才临时离开 alternate screen。交互命令结束后恢复 alternate screen 与鼠标捕获，并清除 ratatui 的旧差分缓存以完整重绘框架。
 
 终端进入 raw mode 和 alternate screen 后由 `TerminalGuard` 持有；TUI 启用鼠标追踪以稳定接收滚轮，宿主终端通过 Shift+拖选保留原生高亮与右键菜单复制。正常退出或错误展开都会恢复鼠标、屏幕、raw mode 和光标。panic hook 做尽力恢复。release 的 `panic=abort` 意味着析构不保证执行，因此生产路径避免 panic；hook 是 abort 前的最后保护。
 
