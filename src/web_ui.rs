@@ -76,6 +76,7 @@ const LIVE_TOOL_PENDING_PREFIX: &str = "\u{1e}TOOL_PENDING:";
 static WELCOME_URL: OnceLock<String> = OnceLock::new();
 static SESSION_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static PENDING_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static MODEL_LIST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 /// Makes the running browser address available to startup welcome text.
 pub fn set_welcome_url(url: String) {
@@ -689,7 +690,7 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/config/validate", post(validate_config))
         .route("/api/config/render", post(render_config))
         .route("/api/quick-settings", get(get_quick_settings).post(save_quick_settings))
-        .route("/api/models", get(get_models))
+        .route("/api/models", get(get_models).post(get_draft_models))
         .route("/api/model-check", post(check_model))
         .route("/api/device-overview", get(get_device_overview))
         .route("/api/tools", get(get_tools))
@@ -1057,7 +1058,88 @@ async fn save_quick_settings(
 
 async fn get_models(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<serde_json::Value>>> {
     let cfg = load_config(state.path.clone()).await?;
-    let models = build_metadata_client(&cfg).list_models(&cfg).await?;
+    list_models(state.path.clone(), cfg, "saved").await
+}
+
+#[derive(Deserialize)]
+struct ModelListDraft {
+    endpoint: String,
+    api_key: String,
+}
+
+async fn get_draft_models(
+    State(state): State<Arc<Shared>>,
+    Json(draft): Json<ModelListDraft>,
+) -> ApiResult<Json<Vec<serde_json::Value>>> {
+    let mut cfg = load_config(state.path.clone()).await?;
+    cfg.endpoint = draft.endpoint.trim().to_owned();
+    cfg.api_key = draft.api_key.trim().to_owned();
+    if cfg.endpoint.is_empty() {
+        return Err(ApiError::bad(anyhow!(
+            "Base URL is required to list models"
+        )));
+    }
+    list_models(state.path.clone(), cfg, "quick_start").await
+}
+
+async fn record_model_list_event(path: PathBuf, cfg: &Config, event: &'static str, data: String) {
+    let log_path = cfg.history_log_file.clone();
+    let event_limit = cfg.history_log_event_max_bytes;
+    let file_limit = cfg.history_log_max_bytes;
+    let result = tokio::task::spawn_blocking(move || -> Result<()> {
+        HistoryLog::open_with_limits(&path, &log_path, event_limit, file_limit)?
+            .record(event, &data)
+    })
+    .await;
+    if !matches!(result, Ok(Ok(()))) {
+        eprintln!("cannot append model list diagnostic event");
+    }
+}
+
+async fn list_models(
+    path: PathBuf,
+    cfg: Config,
+    source: &'static str,
+) -> ApiResult<Json<Vec<serde_json::Value>>> {
+    let request_id = MODEL_LIST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let endpoint_host = url::Url::parse(&cfg.endpoint)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_else(|| "[invalid host]".into());
+    let metadata = serde_json::json!({
+        "request_id": request_id,
+        "source": source,
+        "endpoint_host": endpoint_host,
+        "provider": format!("{:?}", crate::provider_metadata::provider_kind(&cfg.endpoint)),
+        "credential_present": !cfg.api_key.is_empty() || std::env::var_os("NL2SH_API_KEY").is_some(),
+        "proxy_enabled": cfg.proxy_enabled,
+    });
+    record_model_list_event(
+        path.clone(),
+        &cfg,
+        "web_model_list_started",
+        metadata.to_string(),
+    )
+    .await;
+    let started = Instant::now();
+    let result = build_metadata_client(&cfg).list_models(&cfg).await;
+    let diagnostic = match &result {
+        Ok(models) => {
+            serde_json::json!({"request_id":request_id,"outcome":"ok","model_count":models.len(),"elapsed_ms":started.elapsed().as_millis()})
+        }
+        Err(error) => {
+            serde_json::json!({"request_id":request_id,"outcome":"error","error":error.to_string(),"elapsed_ms":started.elapsed().as_millis()})
+        }
+    };
+    record_model_list_event(
+        path,
+        &cfg,
+        "web_model_list_finished",
+        diagnostic.to_string(),
+    )
+    .await;
+    let models = result
+        .map_err(|error| ApiError::bad(anyhow!("model list request #{request_id}: {error}")))?;
     Ok(Json(models.into_iter().map(|m|serde_json::json!({"id":m.id,"context_window":m.context_window,"max_output_tokens":m.max_output_tokens})).collect()))
 }
 
@@ -3705,6 +3787,76 @@ mod http_tests {
     use futures_util::{SinkExt, StreamExt};
     use std::io::Read;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn model_list_uses_unsaved_quick_start_credentials() -> Result<()> {
+        let provider_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
+        let provider_port = provider_listener.local_addr()?.port();
+        let provider = Router::new().route(
+            "/v1/models",
+            get(|headers: axum::http::HeaderMap| async move {
+                let authorization = headers
+                    .get(header::AUTHORIZATION)
+                    .and_then(|value| value.to_str().ok());
+                match authorization {
+                    Some("Bearer draft-key") => (
+                        StatusCode::OK,
+                        Json(serde_json::json!({"data":[{"id":"draft-model"}]})),
+                    ),
+                    Some("Bearer gateway-test-key") => (
+                        StatusCode::BAD_GATEWAY,
+                        Json(serde_json::json!({"error":"upstream detail must stay private"})),
+                    ),
+                    _ => (
+                        StatusCode::UNAUTHORIZED,
+                        Json(serde_json::json!({"error":"unauthorized"})),
+                    ),
+                }
+            }),
+        );
+        let provider_task = tokio::spawn(async move {
+            let _ = axum::serve(provider_listener, provider).await;
+        });
+        let dir = tempdir()?;
+        let path = dir.path().join("config.toml");
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
+        let server = start_with_listener(path.clone(), listener).await?;
+        let web_port = url::Url::parse(server.url())?
+            .port()
+            .context("web URL lacks port")?;
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let response = client
+            .post(format!("http://127.0.0.1:{web_port}/api/models"))
+            .json(&serde_json::json!({
+                "endpoint": format!("http://127.0.0.1:{provider_port}/v1"),
+                "api_key": "draft-key"
+            }))
+            .send()
+            .await?;
+        assert!(response.status().is_success());
+        let models: serde_json::Value = response.json().await?;
+        assert_eq!(models[0]["id"], "draft-model");
+        let failure = client
+            .post(format!("http://127.0.0.1:{web_port}/api/models"))
+            .json(&serde_json::json!({
+                "endpoint": format!("http://127.0.0.1:{provider_port}/v1"),
+                "api_key": "gateway-test-key"
+            }))
+            .send()
+            .await?;
+        assert_eq!(failure.status(), StatusCode::BAD_REQUEST);
+        assert!(failure.text().await?.contains("502 Bad Gateway"));
+        let log = std::fs::read_to_string(config::state_dir(&path)?.join("nl2sh.log"))?;
+        assert!(log.contains("web_model_list_started"));
+        assert!(log.contains("web_model_list_finished"));
+        assert!(log.contains("502 Bad Gateway"));
+        assert!(!log.contains("draft-key"));
+        assert!(!log.contains("gateway-test-key"));
+        assert!(!log.contains("upstream detail must stay private"));
+        assert!(!path.exists());
+        provider_task.abort();
+        Ok(())
+    }
 
     #[tokio::test]
     async fn config_editor_validates_renders_and_applies_saved_settings() -> Result<()> {

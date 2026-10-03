@@ -4,14 +4,20 @@
 
 ### Added
 
+- Let Web Quick Start fetch model names using its unsaved Base URL and API key, then choose a returned model or enter a name manually.
 - Add an opt-in `tailcat_install` tool that downloads the pinned official release for the device ABI after confirmation, validates its checksum and executable, and atomically installs it.
 - Add opt-in APK/JADX and Tailcat tool groups with persistent group and per-tool switches in the Web catalog; disabled tools are absent from model and direct-call registries.
 - Add structured Tailcat file transfer and local-port sharing with local confirmation, plus a host/ADB device transfer test script.
 
 ### Changed
 
+- Record credential-free diagnostics for Web Quick Start model discovery, including a request ID, provider host, duration and upstream error status.
 - Replace the Web high-risk `CONFIRM` text field with two explicit approval clicks, enforced per pending request by the server; color the approval button with the warning palette.
 - Classify Tailcat shell commands by their network and file effects, including strong confirmation for uploads and port sharing.
+
+### Fixed
+
+- Show every fetched model in the Web Quick Start picker even when the model field already contains a preset name.
 
 ## [1.0.6] - 2026-10-01
 

@@ -131,6 +131,16 @@ button:disabled { opacity: .45; }
 .modal h2 { color: var(--accent); }
 .modal label { display: block; margin: .7rem 0; }
 .modal label small { display: block; margin-top: .3rem; color: var(--text-secondary); }
+.beginner-model-field { margin: .7rem 0; }
+.beginner-model-field label { margin-bottom: .3rem; }
+.beginner-model-field > small { display: block; margin-top: .3rem; color: var(--text-secondary); }
+.beginner-model-row { display: flex; gap: .5rem; align-items: stretch; }
+.beginner-model-row input { min-width: 0; flex: 1; }
+.beginner-model-row button { flex: none; white-space: nowrap; }
+.beginner-model-row .beginner-model-toggle { padding-inline: .65rem; }
+.beginner-model-options { max-height: 11rem; overflow-y: auto; margin-top: .25rem; padding: .25rem; border: 1px solid var(--border); border-radius: 7px; background: var(--background); }
+.beginner-model-options button { display: block; width: 100%; text-align: left; overflow-wrap: anywhere; border-color: transparent; background: transparent; }
+.beginner-model-options button:hover, .beginner-model-options button[aria-selected="true"] { border-color: var(--border-focus); background: var(--background-alt); }
 .modal select { display: block; width: 100%; margin-top: .4rem; padding: .6rem; color: var(--text-primary); background: var(--background); border: 1px solid var(--border); border-radius: 7px; }
 .actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
 .primary { border-color: var(--border-focus); color: var(--accent); }
