@@ -1,8 +1,10 @@
 # Project Status
 
-Last Updated: 2026-10-02
+Last Updated: 2026-10-03
 
 ## Recent Changes
+
+- 源码构建运行脚本及 Linux/Windows 预编译启动器在启动新版本前会按 root adbd、`su` 或普通 shell 的实际启动权限，精确匹配 `/proc/<pid>/comm` 为 `nl2sh` 的旧实例并先 TERM、后 KILL，避免旧的 TUI/Web-only 进程继续提供内嵌旧页面或占用默认 Web 端口；安装入口通过预编译启动器自然获得相同行为，安装脚本本身未改。`bash -n android-build-run.sh android-run-linux.sh`、`android-build-run.ps1` PowerShell AST 解析、Windows Batch `--help` smoke 和 `git diff --check` 通过；Rust、Web、PTY 与安全执行代码未改。
 
 - Tailcat 自动安装：可选 `tailcat_install` 按 Android ABI 选取固定官方 v0.7.0 arm64/armv7 归档，在修改确认后才下载；限制归档和可执行文件大小，校验预置 SHA-256、ELF 架构与运行版本，再用同目录临时文件原子替换配置路径。`tailcat_check` 仍只读；不支持的 ABI、相对路径和非普通文件目标明确拒绝，下载或校验失败保留旧文件。新增 ABI、校验、归档、路径和拒绝后原文件保留的回归测试，官方包的显式 live 安装测试通过。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`npm run build --prefix web`、`npm test --prefix web`、Android API 26 ARMv7/AArch64 `cargo check --no-default-features` 及 `git diff --check` 通过。实际 Android 设备下载与安装尚未验证；PTY 与终端恢复路径未改。
 - Web 风险审批移除手输 `CONFIRM`：警告色批准按钮对高风险请求分两次点击，服务端只允许已进入复核阶段、编号匹配的待决请求最终批准；普通修改仍单次批准，拒绝和编辑后重评估保留。新增危险请求的服务端审批回归测试，覆盖未复核直接批准、旧编号拒绝和复核后批准。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo test --workspace --all-targets`、`npm run build --prefix web`、`npm test --prefix web`、Android API 26 ARMv7 `cargo check --target armv7-linux-androideabi --no-default-features` 和 `git diff --check` 通过；Android 执行与 PTY 路径未改。

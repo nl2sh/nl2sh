@@ -63,6 +63,17 @@ run_web_only() {
   echo "Web-only service started. Log: ${log_file}"
 }
 
+stop_existing_nl2sh() {
+  local privilege_prefix="$1"
+  local command='for process in /proc/[0-9]*; do [ -r "$process/comm" ] || continue; IFS= read -r name < "$process/comm" || continue; [ "$name" = nl2sh ] || continue; kill "${process##*/}" 2>/dev/null || true; done; sleep 1; for process in /proc/[0-9]*; do [ -r "$process/comm" ] || continue; IFS= read -r name < "$process/comm" || continue; [ "$name" = nl2sh ] || continue; kill -9 "${process##*/}" 2>/dev/null || true; done; exit 0'
+  echo "Stopping existing nl2sh processes on the device..."
+  if [[ "${privilege_prefix}" == "su" ]]; then
+    "${ADB[@]}" shell su -c "${command}"
+  else
+    "${ADB[@]}" shell "${command}"
+  fi
+}
+
 die() {
   echo "error: $*" >&2
   exit 1
@@ -169,6 +180,7 @@ echo "Pushing: ${LOCAL_BINARY} -> ${REMOTE_BINARY}"
 "${ADB[@]}" shell chmod 755 "${REMOTE_BINARY}"
 
 if [[ "${ADB_IS_ROOT}" == true ]]; then
+  stop_existing_nl2sh root
   echo "Starting ${REMOTE_BINARY} through root adbd."
   if [[ "${WEB_ONLY}" == true ]]; then
     run_web_only root
@@ -181,6 +193,7 @@ fi
 
 echo "Trying Android su as a fallback..."
 if "${ADB[@]}" shell su -c id >/dev/null 2>&1; then
+  stop_existing_nl2sh su
   echo "su access granted; starting ${REMOTE_BINARY} as root."
   if [[ "${WEB_ONLY}" == true ]]; then
     run_web_only su
@@ -200,6 +213,7 @@ if "${ADB[@]}" shell test -e "${REMOTE_CONFIG}" \
 fi
 
 echo "warning: adb root and su are unavailable; starting as adb shell user." >&2
+stop_existing_nl2sh shell
 if [[ "${WEB_ONLY}" == true ]]; then
   run_web_only shell
   exit $?

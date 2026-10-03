@@ -143,7 +143,7 @@ $env:ANDROID_NDK_HOME = "C:\Android\Sdk\ndk\28.2.13676358"
 .\android-build-run.ps1
 ```
 
-默认推送到 `/data/local/tmp/nl2sh`。`android-build-run.sh` 与 `android-build-run.ps1` 会在没有设备时提示输入网络 ADB 地址、单设备自动选择、多设备按编号选择，并根据设备 ABI 自动选择 AArch64 或 ARMv7 Rust target；显式设置的 `RUST_TARGET` 与设备不匹配时会停止。可用 `ANDROID_DIR=/data/local/tmp/tools` 修改设备目录，也可用 `ADB_SERIAL=<serial>` 预选设备。脚本要求主机 `PATH` 中可找到 `adb`，设备端仅使用 Android 自带的 `mkdir`、`chmod` 和 shell。连接后会先执行 `adb root`、等待 adbd 重启并验证 `id -u`；root adbd 成功时，后续推送和启动均以 root 进行。设备不支持 `adb root` 时才尝试 `su -c`，两者都不可用且已有 `0600 config.toml` 不可读时会提前报错，不会放宽 API Key 配置文件权限。
+默认推送到 `/data/local/tmp/nl2sh`。`android-build-run.sh` 与 `android-build-run.ps1` 会在没有设备时提示输入网络 ADB 地址、单设备自动选择、多设备按编号选择，并根据设备 ABI 自动选择 AArch64 或 ARMv7 Rust target；显式设置的 `RUST_TARGET` 与设备不匹配时会停止。可用 `ANDROID_DIR=/data/local/tmp/tools` 修改设备目录，也可用 `ADB_SERIAL=<serial>` 预选设备。脚本要求主机 `PATH` 中可找到 `adb`，设备端仅使用 Android 自带的 shell 与基础工具。连接后会先执行 `adb root`、等待 adbd 重启并验证 `id -u`；root adbd 成功时，后续推送和启动均以 root 进行。设备不支持 `adb root` 时才尝试 `su -c`，两者都不可用且已有 `0600 config.toml` 不可读时会提前报错，不会放宽 API Key 配置文件权限。每次启动新版本前，脚本会使用相同权限停止设备上进程名精确为 `nl2sh` 的旧实例，避免旧 Web 服务继续占用原端口；先发送 TERM，一秒后再清理未退出的实例。
 
 源码构建脚本也可直接后台启动 Web-only 模式；设备日志写入 `${ANDROID_DIR}/nl2sh-web.log`：
 
@@ -179,7 +179,7 @@ android-run-windows.bat --web-only
 
 一键安装入口同样支持 Linux/CMD 的 `--web-only` 与 PowerShell 的 `-WebOnly`，并把选项传递给安装后的启动器。
 
-启动器会比较包内程序与设备端实际文件的 SHA-256；一致时直接启动，不再重复传输，摘要不同才推送并在推送后复核。只有显式设置 `NL2SH_CONFIG_SOURCE` 时才会把指定配置部署为设备端 `config.toml`，普通启动不会覆盖配置。
+启动器会比较包内程序与设备端实际文件的 SHA-256；一致时直接启动，不再重复传输，摘要不同才推送并在推送后复核。启动新版本前会使用实际启动权限停止进程名精确为 `nl2sh` 的旧实例，先发送 TERM，一秒后再清理未退出的实例，避免旧 Web 服务继续占用原端口。只有显式设置 `NL2SH_CONFIG_SOURCE` 时才会把指定配置部署为设备端 `config.toml`，普通启动不会覆盖配置。
 
 也可直接下载最新 Release、校验 ZIP、填写最小配置并启动。建议通过环境变量传 API Key，避免它进入 shell 历史：
 

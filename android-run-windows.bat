@@ -132,6 +132,8 @@ if defined NL2SH_CONFIG_SOURCE (
 )
 
 if "!ADB_IS_ROOT!"=="true" (
+  call :stop_existing_nl2sh false
+  if errorlevel 1 goto :adb_fail
   echo Starting %REMOTE_BINARY% through root adbd.
   if "!WEB_ONLY!"=="true" (
     call :start_web_only false
@@ -147,6 +149,8 @@ if "!ADB_IS_ROOT!"=="true" (
 echo Trying Android su as a fallback...
 adb -s "!SERIAL!" shell su -c id >nul 2>&1
 if not errorlevel 1 (
+  call :stop_existing_nl2sh true
+  if errorlevel 1 goto :adb_fail
   echo su access granted; starting %REMOTE_BINARY% as root.
   if "!WEB_ONLY!"=="true" (
     call :start_web_only true
@@ -170,6 +174,8 @@ if not errorlevel 1 (
 )
 
 echo WARNING: adb root and su are unavailable; starting as adb shell user.
+call :stop_existing_nl2sh false
+if errorlevel 1 goto :adb_fail
 if "!WEB_ONLY!"=="true" (
   call :start_web_only false
   set "RUN_EXIT=!ERRORLEVEL!"
@@ -191,6 +197,16 @@ if /i "%~1"=="true" (
 if errorlevel 1 exit /b 1
 echo Web-only service started. Log: !WEB_LOG!
 exit /b 0
+
+:stop_existing_nl2sh
+set "STOP_COMMAND=for process in /proc/[0-9]*; do [ -r \"$process/comm\" ] ^|^| continue; IFS= read -r name ^< \"$process/comm\" ^|^| continue; [ \"$name\" = nl2sh ] ^|^| continue; kill \"${process##*/}\" 2^>/dev/null ^|^| true; done; sleep 1; for process in /proc/[0-9]*; do [ -r \"$process/comm\" ] ^|^| continue; IFS= read -r name ^< \"$process/comm\" ^|^| continue; [ \"$name\" = nl2sh ] ^|^| continue; kill -9 \"${process##*/}\" 2^>/dev/null ^|^| true; done; exit 0"
+echo Stopping existing nl2sh processes on the device...
+if /i "%~1"=="true" (
+  adb -s "!SERIAL!" shell su -c "!STOP_COMMAND!"
+) else (
+  adb -s "!SERIAL!" shell "!STOP_COMMAND!"
+)
+exit /b !ERRORLEVEL!
 
 :usage
 echo Usage: android-run-windows.bat [--web-only]
