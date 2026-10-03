@@ -230,3 +230,9 @@ Agent TUI 在输入分发边界保留 `/` 前缀命名空间：所有去除前�
 设置编辑器在单次打开期间分别持有 Ollama 与 Custom 的 Endpoint 草稿；离开对应 Provider 前保存当前值，切回时恢复。其他内置 Provider 仍使用固定预设地址，编辑其地址会转入 Custom。
 
 `/shell` 是显式的用户直控边界：它暂停 alternate-screen TUI，直接 Android shell 使用 `/system/bin/sh -i`，Termux 使用 `$PREFIX/bin/sh -i`，开发主机条件使用 `/bin/sh -i`。其中输入直接属于用户而非 LLM 输出，不进入模型、安全分类或审计内容；键入 `exit` 或发送 EOF 后必须 wait 子 shell、恢复 raw mode、鼠标捕获和 alternate screen，并显式清除 ratatui 差分缓存后完整重绘原会话。
+
+## 文档与发布架构
+
+正式用户手册以 `docs/zh/` / `docs/en/` 为唯一事实源，MkDocs Material 与静态 i18n 生成中文根路径和英文 `/en/`，导航按照用户成长路径组织。根目录与模块 README 只保留简介和入口；架构/计划/状态/视觉规范保留贡献者内部上下文。CLI/config/tool 参考从编译后的公开接口导出，中文说明与 Schema 分离，CI 比较生成区域并检查双语页面、链接、路由和编辑地址。
+
+Release 先构建签名 Termux APT 快照并作为正式资产发布，不再直接覆盖 Pages。文档 workflow 在 PR 验证、master 或成功 tag Release 完成后构建并合并最新正式快照；旧 Release 没有快照资产时验证已有线上仓库。公钥指纹、Release/InRelease 签名、索引和包 SHA-256 全部通过后才合并 `dists/`、`pool/`、`nl2sh-repo.gpg`，失败停止部署。唯一 Pages 发布任务使用共享并发组，保留 APT 根地址，不把 HTML 写回 master。此流程只处理文档/分发资产，不进入 Android 安全、执行或 PTY 边界。

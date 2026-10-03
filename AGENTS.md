@@ -12,6 +12,16 @@ nl2sh 定位为 Android 原生 shell 版的类 Hermes AI Agent：使用 stable R
 
 项目文档只记录与项目本身相关、可供所有开发环境复用的信息。`CHANGELOG.md` 和 `PROJECT_STATUS.md` 禁止记录个人或本地机器信息，包括用户名、本地绝对路径、特定工作站/容器/WSL 环境、工具在当前机器上的安装状态，以及仅对单次本地会话成立的授权或执行限制。验证记录应描述可复现的命令、目标平台和结果；未运行的检查只在当前任务交付说明中告知用户，不写入项目文档。
 
+## 双语文档与 Docs-as-Code
+
+- 正式用户文档唯一事实源是 `docs/zh/` 与 `docs/en/`；默认中文，英文发布在 `/en/`。README 和模块 README 只保留介绍、快速入口及开发命令，不复制完整手册。
+- 用户可感知行为、配置、CLI、Slash Commands、工具参数/开关、安装、Web、Root 或审批发生变化时，必须在同一变更中同步对应中英文页面、示例与安全说明；无需修改时在交付说明或 PR 解释原因。
+- 新页面必须两种语言同相对路径且有实质翻译；同步 `mkdocs.yml` 导航。不得把缺失英文页的中文回退当作翻译完成。
+- 配置/CLI/工具变化运行 `cargo run --quiet --example docs_export`，用 `scripts/update-docs-reference.py` 更新并 `--check`；新增字段/工具补齐 `docs/_data/reference-translations.json` 中文说明。生成段落不得手工修改，人工解释必须双语维护。
+- 文档修改运行 `python3 scripts/check-docs.py`、`mkdocs build --strict` 及构建后 `python3 scripts/check-docs.py --site site`。依赖固定在 `requirements-docs.txt`；详见双语 `docs/*/development/contributing.md`。
+- 文档 Pages 与 Termux APT 共用站点；必须验证并合并 `dists/`、`pool/`、`nl2sh-repo.gpg`，不得发布纯文档产物覆盖软件源。生成的 HTML/site 不提交到 master。
+- 根目录架构、计划、状态与视觉规范保留为贡献者/Agent 内部上下文；正式用户教程不以这些文件替代英文文档。更新记录在 `docs/zh/changelog.md` 和 `docs/en/changelog.md` 维护。
+
 ## Rust 规范
 
 - 只用 stable Rust；业务代码不得使用 `unwrap`、`expect`、`panic!`、`todo!`、`unimplemented!`。

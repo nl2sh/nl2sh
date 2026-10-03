@@ -14,8 +14,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -183,8 +181,8 @@ jobs:
           mkdir -p "dist/${NAME}/bin/arm64-v8a" "dist/${NAME}/bin/armeabi-v7a"
           cp artifacts/aarch64-linux-android/nl2sh "dist/${NAME}/bin/arm64-v8a/nl2sh"
           cp artifacts/armv7-linux-androideabi/nl2sh "dist/${NAME}/bin/armeabi-v7a/nl2sh"
-          cp android-run-linux.sh android-run-windows.bat install-android.sh install-android.bat install-android.ps1 config.toml.example 使用说明.md "dist/${NAME}/"
-          cp -r screenshots "dist/${NAME}/screenshots"
+          cp android-run-linux.sh android-run-windows.bat install-android.sh install-android.bat install-android.ps1 config.toml.example README.md README_EN.md LICENSE AGENTS.md "dist/${NAME}/"
+          cp -r docs "dist/${NAME}/docs"
           chmod +x "dist/${NAME}/android-run-linux.sh" \
             "dist/${NAME}/install-android.sh" \
             "dist/${NAME}/bin/arm64-v8a/nl2sh" \
@@ -235,13 +233,11 @@ jobs:
           path: dist/*.deb
 
   termux-repository:
-    name: Publish signed Termux APT repository
+    name: Build signed Termux APT snapshot
+    environment: github-pages
     if: github.event_name == 'push'
     needs: termux-package
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -262,17 +258,17 @@ jobs:
           echo "NL2SH_APT_GPG_KEY_ID=${KEY_ID}" >> "${GITHUB_ENV}"
       - name: Assemble and sign repository
         run: packaging/termux/build-apt-repo.sh debs site
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Archive signed repository for unified Pages deployment
+        run: tar -C site -czf termux-apt-repository.tar.gz dists pool nl2sh-repo.gpg
+      - uses: actions/upload-artifact@v4
         with:
-          path: site
-      - name: Deploy GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          name: termux-apt-repository
+          path: termux-apt-repository.tar.gz
 
   release:
     name: Publish release
-    needs: [jadx-helper, package, termux-package]
+    needs: [jadx-helper, package, termux-package, termux-repository]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts

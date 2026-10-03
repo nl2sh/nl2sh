@@ -1,0 +1,5 @@
+/* Product landing page spacing; Material owns navigation and accessibility. */
+.md-typeset h1 { font-weight: 700; }
+.md-typeset .md-button { margin: .25rem .3rem .5rem 0; }
+.md-typeset img { border-radius: .4rem; }
+.md-typeset .grid.cards > ul > li { border-radius: .5rem; }

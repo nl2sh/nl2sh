@@ -26,7 +26,8 @@ PREFIX="${STAGING}/data/data/com.termux/files/usr"
 
 install -Dm755 "${BINARY}" "${PREFIX}/bin/nl2sh"
 install -Dm644 config.toml.example "${PREFIX}/share/nl2sh/config.toml.example"
-install -Dm644 README.md "${PREFIX}/share/doc/nl2sh/README.md"
+install -Dm644 packaging/termux/README.md "${PREFIX}/share/doc/nl2sh/README.md"
+install -Dm644 packaging/termux/README_EN.md "${PREFIX}/share/doc/nl2sh/README_EN.md"
 install -Dm644 LICENSE "${PREFIX}/share/doc/nl2sh/LICENSE"
 mkdir -p "${STAGING}/DEBIAN" "${OUTPUT_DIR}"
 

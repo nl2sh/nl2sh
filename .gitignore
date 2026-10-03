@@ -14,3 +14,7 @@
 /jadx-helper/dist/
 /jadx-helper/local.properties
 /target-release-*/
+
+/site/
+/.venv-docs/
+/scripts/**/__pycache__/

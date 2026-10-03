@@ -1,0 +1,95 @@
+name: Documentation
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Release completion publishes current master docs with the stable APT snapshot.
+          ref: ${{ github.event_name == 'workflow_run' && 'master' || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+      - run: python -m pip install -r requirements-docs.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: docs-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'web/package-lock.json') }}
+      - name: Check bilingual structure and links
+        run: python scripts/check-docs.py
+      - name: Check code-derived references
+        run: |
+          cargo run --quiet --example docs_export > "$RUNNER_TEMP/reference.json"
+          python scripts/update-docs-reference.py "$RUNNER_TEMP/reference.json" --check
+      - name: Test APT preservation checks
+        run: python -m unittest discover -s scripts/tests -v
+      - name: Strict bilingual build
+        run: mkdocs build --strict
+      - name: Check generated language routes and edit links
+        run: python scripts/check-docs.py --site site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: site
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.event_name == 'workflow_run')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/download-artifact@v4
+        with:
+          name: documentation
+          path: site
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Preserve signed APT paths in the Pages artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/merge-pages-apt.py site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy complete site
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -48,10 +48,10 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $PackageDir "bin\arm64-v8a"), (Join-Path $PackageDir "bin\armeabi-v7a"), $DistDir | Out-Null
     Copy-Item -LiteralPath (Join-Path $ProjectDir "target\aarch64-linux-android\release\nl2sh") -Destination (Join-Path $PackageDir "bin\arm64-v8a\nl2sh")
     Copy-Item -LiteralPath (Join-Path $ProjectDir "target\armv7-linux-androideabi\release\nl2sh") -Destination (Join-Path $PackageDir "bin\armeabi-v7a\nl2sh")
-    foreach ($File in @("android-run-linux.sh", "android-run-windows.bat", "install-android.sh", "install-android.bat", "install-android.ps1", "config.toml.example", "使用说明.md")) {
+    foreach ($File in @("android-run-linux.sh", "android-run-windows.bat", "install-android.sh", "install-android.bat", "install-android.ps1", "config.toml.example", "README.md", "README_EN.md", "LICENSE", "AGENTS.md")) {
         Copy-Item -LiteralPath (Join-Path $ProjectDir $File) -Destination $PackageDir
     }
-    Copy-Item -LiteralPath (Join-Path $ProjectDir "screenshots") -Destination (Join-Path $PackageDir "screenshots") -Recurse
+    Copy-Item -LiteralPath (Join-Path $ProjectDir "docs") -Destination (Join-Path $PackageDir "docs") -Recurse
 
     $Archive = Join-Path $DistDir "$PackageName.zip"
     Compress-Archive -LiteralPath $PackageDir -DestinationPath $Archive -CompressionLevel Optimal -Force

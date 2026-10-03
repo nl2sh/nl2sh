@@ -4,6 +4,8 @@ Last Updated: 2026-10-04
 
 ## Recent Changes
 
+- 双语文档站：以 `docs/zh/`、`docs/en/` 建立 46 对 MkDocs Material 页面，中文默认根路径、英文 `/en/`，按快速开始/使用/工具/进阶/参考/排查/开发组织；历史 changelog 逐项翻译，README 与模块手册改为入口，移除旧使用说明文件。新增代码导出的配置/CLI/66 个工具参数参考、双语完整性/链接/路由/编辑目标检查与 PR 严格构建。Release 发布签名 APT 快照，文档工作流验签/摘要后合并唯一 Pages 产物，现有 APT 根路径不变；发布压缩包携带双语 Markdown/素材，Termux deb 提供双语入口。Android 运行、安全评估、审批和 PTY 实现未改。
+
 - LLM 兼容网关 405 恢复：显式选择或已成功协商的 Responses/Chat Completions 请求如果偶发返回 HTTP 405，现在按既有 `llm_retry_count` 与指数退避有限重试；自动协议首次探测的 405 仍立即从 Responses 回退 Chat，不引入额外探测延迟，401 等其他客户端错误仍不重试。新增普通与 SSE 流式回归，覆盖工具结果回传后的同协议恢复。`cargo fmt --all -- --check`、`cargo check`、13 项 LLM mock 定向测试和完整 `cargo test` 通过，3 项显式 live 测试按设计忽略。该改动不重放已产生的流式内容，不改变 Agent 安全、Android 执行、PTY 或终端恢复路径。
 - Web 快速开始获取模型后改用独立下拉列表展示全部返回项，预填模型名称不再触发浏览器原生建议列表的筛选；下拉选择和手动输入都可用。设备诊断事件确认同一服务实际返回 2 个模型，前端显示问题位于原生 `datalist` 过滤。`npm run build --prefix web`、`npm test --prefix web`、Android API 26 ARMv7 release 构建及设备端页面和打包 JavaScript 的 HTTP 读取通过。该改动只涉及浏览器显示，不改变配置保存、Agent 安全或 PTY。
 - Web 快速开始模型列表查询新增有界审计诊断：开始与结束事件通过请求编号关联，记录服务域名、服务类别、凭据存在状态、代理启用状态、耗时及结果；错误响应包含编号，日志不记录 API Key 和上游响应正文。新增模拟 502 回归验证状态可追踪且密钥与响应正文不落日志。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`npm run build --prefix web`、`npm test --prefix web`、Android API 26 ARMv7 构建及 `git diff --check` 通过。该日志不改变 Agent 安全、Android 执行或 PTY 路径。
@@ -259,7 +261,7 @@ Last Updated: 2026-10-04
 - Test status: 全量 `cargo test --all-targets` 通过；显式凭据 ima live smoke 按设计忽略。
 - Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
-- CI release workflow: 已添加 `.github/workflows/release.yml`，在推送 `v*` tag 时用 GitHub Actions 并行交叉编译 `aarch64-linux-android` 与 `armv7-linux-androideabi`，将两个程序放入统一包的 ABI 子目录，并与自动选择设备/ABI 的 Linux/Windows BAT 启动脚本、`config.toml.example`、`使用说明.md` 打包为单一 `.tar.gz`/`.zip`，附带 SHA256 校验和发布到 GitHub Release；`workflow_dispatch` 可手动触发草稿发布。
+- CI release workflow: 已添加 `.github/workflows/release.yml`，在推送 `v*` tag 时用 GitHub Actions 并行交叉编译 `aarch64-linux-android` 与 `armv7-linux-androideabi`，将两个程序放入统一包的 ABI 子目录，并与自动选择设备/ABI 的 Linux/Windows BAT 启动脚本、`config.toml.example`、双语 README 与 `docs/` 打包为单一 `.tar.gz`/`.zip`，附带 SHA256 校验和发布到 GitHub Release；`workflow_dispatch` 可手动触发草稿发布。
 - Known blockers: 无；标签发布产物状态由 GitHub Actions 最终结果确认。
 
 ## Completed
@@ -340,6 +342,8 @@ Last Updated: 2026-10-04
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- 双语 Docs-as-Code：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 通过（323 项有效测试，3 项显式 live 测试按设计忽略）；`python scripts/check-docs.py`、代码派生参考 `--check`、`mkdocs build --strict`、构建后路由/语言切换/编辑链接检查通过，46 对页面完整；桌面/手机浏览器验证中文和英文搜索、同页语言切换、图片加载通过，无 JavaScript 异常及手机横向溢出。`actionlint .github/workflows/docs.yml .github/workflows/release.yml`、发布相关 Bash 语法及 `git diff --check` 通过。APT 合并脚本的 7 项签名/篡改/路径回归通过；对现有线上仓库验证公钥指纹、双签名、两种架构索引及包 SHA-256 后合并成功；签名快照恢复后的 10 个仓库文件摘要一致。
 
 - `v1.0.3` 发布门禁：`cargo fmt --all -- --check`、默认及 `--no-default-features` 的 `cargo check --workspace --all-targets`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace --all-targets`、`cargo build --release`、前端测试/生产构建、Release workflow 静态检查和发布相关 Bash 语法检查通过；NDK r28c/API 26 的 AArch64 与 ARMv7 release 交叉编译通过，分别验证为使用 `/system/bin/linker64` 的 64 位 PIE 和使用 `/system/bin/linker` 的 32 位 PIE。
 - `v1.0.3` GitHub Actions 发布工作流全部通过；正式 Release 包含双 ABI 裸二进制及摘要、统一 `.zip`/`.tar.gz`、两个 Termux `.deb` 和 `SHA256SUMS`，签名 APT 仓库同步部署成功。

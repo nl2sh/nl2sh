@@ -1,0 +1,187 @@
+site_name: nl2sh
+site_description: Android 原生 Shell AI Agent · Native Android Shell AI Agent
+site_url: https://nl2sh.github.io/nl2sh/
+repo_name: nl2sh/nl2sh
+repo_url: https://github.com/nl2sh/nl2sh
+edit_uri: edit/master/docs/
+copyright: nl2sh · MIT License
+theme:
+  name: material
+  language: zh
+  logo: assets/logo.png
+  favicon: assets/logo.png
+  palette:
+  - scheme: default
+    primary: teal
+    accent: cyan
+    toggle:
+      icon: material/brightness-4
+      name: 切换深色 / Dark mode
+  - scheme: slate
+    primary: teal
+    accent: cyan
+    toggle:
+      icon: material/brightness-7
+      name: 切换浅色 / Light mode
+  features:
+  - navigation.tabs
+  - navigation.sections
+  - navigation.top
+  - navigation.indexes
+  - navigation.footer
+  - content.code.copy
+  - content.action.edit
+  - search.suggest
+  - search.highlight
+plugins:
+- i18n:
+    docs_structure: folder
+    fallback_to_default: true
+    languages:
+    - locale: zh
+      default: true
+      name: 简体中文
+      build: true
+    - locale: en
+      name: English
+      build: true
+      nav_translations:
+        首页: Home
+        更新记录: Changelog
+        快速开始: Getting started
+        概览: Overview
+        安装与更新: Installation and updates
+        ADB / 原生 Android: ADB / native Android
+        Termux: Termux
+        配置模型: Configure a provider
+        第一个任务: First task
+        使用指南: User guide
+        TUI: TUI
+        Web: Web
+        会话与日志: Sessions and logs
+        文件引用: File references
+        Root: Root
+        安全确认: Safety approvals
+        工具能力: Tools
+        工具概览: Overview
+        Android: Android
+        文件系统: Filesystem
+        音频: Audio
+        APK / JADX: APK / JADX
+        Tailcat: Tailcat
+        网络工具: Networking
+        知识与图表: Knowledge and charts
+        进阶: Advanced
+        Agent 模式: Agent modes
+        自定义 Provider: Custom providers
+        Ollama: Ollama
+        网络与代理: Networks and proxies
+        A2A / MCP: A2A / MCP
+        Android Bridge: Android Bridge
+        受控自动化: Controlled automation
+        参考: Reference
+        配置文件: Configuration
+        CLI: CLI
+        Slash Commands: Slash commands
+        环境变量: Environment variables
+        安全模型: Security model
+        工具参数目录: Tool argument catalog
+        故障排查: Troubleshooting
+        FAQ: FAQ
+        ADB 与 ABI: ADB and ABI
+        网络排查: Network troubleshooting
+        Provider 排查: Provider troubleshooting
+        权限排查: Permission troubleshooting
+        开发: Development
+        架构: Architecture
+        构建与验证: Builds and validation
+        Web 开发: Web development
+        贡献与文档维护: Contributing and docs
+        Release: Releases
+        JADX helper: JADX helper
+- search:
+    lang:
+    - zh
+    - en
+markdown_extensions:
+- admonition
+- tables
+- footnotes
+- attr_list
+- md_in_html
+- pymdownx.details
+- pymdownx.superfences:
+    custom_fences:
+    - name: mermaid
+      class: mermaid
+      format: !!python/name:pymdownx.superfences.fence_code_format
+- pymdownx.tabbed:
+    alternate_style: true
+- toc
+nav:
+- 首页: index.md
+- 快速开始:
+  - 概览: getting-started/index.md
+  - 安装与更新: getting-started/installation.md
+  - ADB / 原生 Android: getting-started/android-adb.md
+  - Termux: getting-started/termux.md
+  - 配置模型: getting-started/configure-provider.md
+  - 第一个任务: getting-started/first-task.md
+- 使用指南:
+  - TUI: guide/tui.md
+  - Web: guide/web.md
+  - 会话与日志: guide/sessions.md
+  - 文件引用: guide/file-reference.md
+  - Root: guide/root.md
+  - 安全确认: guide/security-confirmation.md
+- 工具能力:
+  - 工具概览: tools/index.md
+  - Android: tools/android.md
+  - 文件系统: tools/filesystem.md
+  - 音频: tools/audio.md
+  - APK / JADX: tools/apk-jadx.md
+  - Tailcat: tools/tailcat.md
+  - 网络工具: tools/network.md
+  - 知识与图表: tools/knowledge.md
+- 进阶:
+  - Agent 模式: advanced/agent-mode.md
+  - 自定义 Provider: advanced/custom-provider.md
+  - Ollama: advanced/ollama.md
+  - 网络与代理: advanced/proxy.md
+  - A2A / MCP: advanced/a2a-mcp.md
+  - Android Bridge: advanced/android-bridge.md
+  - 受控自动化: advanced/automation.md
+- 参考:
+  - 配置文件: reference/configuration.md
+  - CLI: reference/cli.md
+  - Slash Commands: reference/slash-commands.md
+  - 环境变量: reference/environment-variables.md
+  - 安全模型: reference/security-model.md
+  - 工具参数目录: reference/tool-catalog.md
+- 故障排查:
+  - FAQ: troubleshooting/faq.md
+  - ADB 与 ABI: troubleshooting/adb.md
+  - 网络排查: troubleshooting/network.md
+  - Provider 排查: troubleshooting/provider.md
+  - 权限排查: troubleshooting/permissions.md
+- 开发:
+  - 架构: development/architecture.md
+  - 构建与验证: development/build.md
+  - Web 开发: development/web-development.md
+  - 贡献与文档维护: development/contributing.md
+  - Release: development/release.md
+  - JADX helper: development/jadx-helper.md
+- 更新记录: changelog.md
+exclude_docs: '_data/
+
+  '
+extra_css:
+- assets/stylesheets/extra.css
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    unrecognized_links: warn
+    anchors: warn
