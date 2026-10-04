@@ -6,6 +6,8 @@ nl2sh 是以 Android 原生 shell 为一等环境、Termux 为兼容环境的类
 
 预编译包的主机启动器在选定 ABI 后分别计算主机文件与设备端实际 ELF 的 SHA-256；摘要一致时保留设备文件并直接启动，不一致时推送并再次校验。Bootstrap 脚本从用户显式选择的 GitHub 或 Gitee 最新 Release 同时下载 ZIP 与 `SHA256SUMS`，校验后解压；Gitee 路径通过公开 Release API 解析最新 tag，不在 GitHub 失败后隐式切换来源。脚本可根据显式 Provider、模型、Endpoint 和 API Key 生成最小配置；Linux 脚本在 `curl | bash` 模式完成脚本读取后把启动器 stdin 重新连接到主机 controlling terminal，使 ADB 能为 TUI 分配远端 PTY。Windows CMD Bootstrap 作为交互批处入口，复用 PowerShell 安装核心执行 HTTPS 下载、SHA-256 校验和 ZIP 解压，并保留 CMD 控制台输入。只有显式设置 `NL2SH_CONFIG_SOURCE` 时启动器才覆盖设备配置，设备文件继续保持 `0600`。这些主机侧便利流程不改变设备内的 Agent 安全与确认链。
 
+Android companion 与 JADX helper 源码分别由 `nl2sh/android-bridge` 和 `nl2sh/jadx-helper` 独立 Git 仓库维护，采用独立 Gradle 根工程、CI 和标签发布；主仓库不通过相邻目录或 submodule 构建它们。包名、ContentProvider authority 与 `com.nl2sh.jadx.Main` 入口保持兼容。主仓库 Release 不再重发 helper；运行时保留历史 `v1.0.4` URL 与固定摘要，新 helper 仍需显式来源与摘要配置。
+
 ## 系统整体架构
 
 ```text

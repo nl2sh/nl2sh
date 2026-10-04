@@ -40,6 +40,8 @@ Web 默认监听所有 IPv4 且无需登录，接入者可编辑配置或提交�
 
 ![nl2sh Web](docs/assets/web.png)
 
+可选 Android 项目：[Android Bridge](https://github.com/nl2sh/android-bridge) · [JADX helper](https://github.com/nl2sh/jadx-helper)，各自独立构建与发布，不包含在本仓库源码内。
+
 ## 开发与贡献
 
 需要 stable Rust 与 Node.js 22+ / npm。

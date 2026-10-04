@@ -13,6 +13,8 @@
 
 ### 变更
 
+- Android Bridge 与 JADX helper 源码拆分到 `nl2sh/android-bridge`、`nl2sh/jadx-helper` 独立仓库，各自维护 Android 构建、CI、标签发布和双语文档；主仓库不再构建或重发 helper，运行时仍固定历史 `v1.0.4` URL 与摘要。
+
 - Web 模型发现记录无凭据诊断：请求编号、域名、耗时和上游状态。
 - Web 高风险从手输 CONFIRM 改为两次点击；服务端按待决请求检查，按钮用警告色。
 - 按网络与文件副作用分类 Tailcat shell 命令，上传与端口共享强确认。

@@ -25,7 +25,7 @@ Three logical layers separate Agent planning, named Tool Runtime, and safe platf
 - `src/security/`: AST shell semantics and domain policy.
 - `src/shell/`: Root plans, execution broker, PTY/pipeline, cancellation/restoration.
 - `src/config/`, `src/tui/`, `src/web_ui.rs`: configuration and user entry points.
-- `a2a_gateway/`, `android-bridge/`, `jadx-helper/`: separate optional modules.
+- `a2a_gateway/`: optional host module in this repository. [Android Bridge](https://github.com/nl2sh/android-bridge) and [JADX helper](https://github.com/nl2sh/jadx-helper) are standalone Android projects and Git repositories with independent builds and releases.
 
 Tools retain prepare → assessment → confirmation → execution. Display components cannot execute Provider JSON. PTY control sequences are filtered, fds/processes use RAII, and failures still wait/restore terminals.
 

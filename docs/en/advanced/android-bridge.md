@@ -1,5 +1,7 @@
 # Android Bridge companion
 
+The standalone Android project is maintained in [`nl2sh/android-bridge`](https://github.com/nl2sh/android-bridge), outside the main repository. See its [English guide](https://github.com/nl2sh/android-bridge/blob/main/docs/en/guide.md) and [release guide](https://github.com/nl2sh/android-bridge/blob/main/docs/en/release.md) for independent builds, CI, and releases. This page covers integration and permissions for native nl2sh.
+
 This optional APK provides live accessibility nodes and Unicode text entry to the single-file nl2sh executable. It contains no Agent, model client, network listener, or approval interface. The device-side nl2sh Tool Runtime still assesses and confirms every action before it sends a request.
 
 ## Build and enable
@@ -7,6 +9,7 @@ This optional APK provides live accessibility nodes and Unicode text entry to th
 Install Android SDK Platform 35 and Build Tools 35.0.0, set `ANDROID_HOME`, then run:
 
 ```sh
+git clone https://github.com/nl2sh/android-bridge.git
 cd android-bridge
 ./gradlew --no-daemon :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk

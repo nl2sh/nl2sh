@@ -40,6 +40,8 @@ Web listens on all IPv4 interfaces without login; visitors can edit configuratio
 
 ![nl2sh Web](docs/assets/web.png)
 
+Optional Android projects: [Android Bridge](https://github.com/nl2sh/android-bridge) · [JADX helper](https://github.com/nl2sh/jadx-helper), each built and released independently outside this repository.
+
 ## Development and contributions
 
 Requires stable Rust and Node.js 22+ / npm.

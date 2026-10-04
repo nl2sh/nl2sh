@@ -1,5 +1,12 @@
 # JADX helper development
 
+The standalone Android project is maintained in [`nl2sh/jadx-helper`](https://github.com/nl2sh/jadx-helper). Clone that repository and enter its root before running the build commands below. Independent CI and future tagged releases are maintained there; see its [release guide](https://github.com/nl2sh/jadx-helper/blob/main/docs/en/release.md). Main nl2sh releases no longer rebuild or republish the helper. The existing default URL and digest remain pinned to the historical `v1.0.4` asset. Using a new independent asset requires an explicit HTTPS URL and matching digest, or an offline path; the runtime does not follow latest.
+
+```bash
+git clone https://github.com/nl2sh/jadx-helper.git
+cd jadx-helper
+```
+
 This module builds an unsigned Android APK and renames it to `jadx-helper.jar`. It contains `classes.dex` and a narrow `com.nl2sh.jadx.Main` entrypoint for `app_process`; it is never installed as an Android application. The entrypoint accepts an APK path, an exact class name, and an output Java file path. nl2sh provides bounded arguments and output, a timeout, SHA-256 verification, and strong confirmation.
 
 The build pins JADX core and DEX input to 1.5.1, matching the upstream Android library example, and targets Android API 26+. It uses Android Gradle Plugin 8.7.3, Gradle Wrapper 8.9, JDK 17, and Android SDK API 35. Run `./build-helper.sh` on Linux/macOS or `.\build-helper.ps1` in Windows PowerShell; no system Gradle installation is required. The Wrapper verifies the downloaded Gradle distribution with its published SHA-256. Gradle repackages all required runtime entries with reproducible ordering, timestamps, and compression; Windows and Linux builds therefore produce the same pinned JAR. Both scripts write `dist/jadx-helper.jar`, its SHA-256 file, and `metadata.json`; `dist/` is not committed. Include the applicable JADX and dependency licenses when distributing the JAR.

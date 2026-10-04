@@ -352,8 +352,14 @@
 
 - [x] 结构化只读 APK 概览、ZIP 条目检索和 DEX 类索引，限制条目、解压量和结果数量。
 - [x] 单类 JADX 反编译经过 Dangerous 强确认；只接受含 `classes.dex` 的 Android helper，并通过 `CLASSPATH` + `/system/bin/app_process` 启动；离线 JAR 或 HTTPS URL + 固定 SHA-256 可在强确认后使用。
-- [x] 仓库内提供固定 JADX 1.5.1 的最小 Android helper 源码、Gradle 构建和发布元数据生成脚本；该版本兼容 API 28 的 `Inflater` 接口基线。
+- [x] 独立 `nl2sh/jadx-helper` 仓库提供固定 JADX 1.5.1 的最小 Android helper 源码、Gradle 构建和发布元数据生成脚本；该版本兼容 API 28 的 `Inflater` 接口基线。
 - [x] 发布并锁定经真机验证的 Android DEX helper，提供默认 GitHub Release 下载地址和固定摘要；自定义下载源仍强制提供独立摘要。
 - [x] 在 Android API 35 模拟器通过 `app_process` 对单 DEX 和双 DEX 测试 APK 完成单类反编译；不使用设备端 Java 或安装 helper APK。
 - [x] 在 Android API 28 ARMv7 设备通过完整强确认链反编译单类；运行时为 ART 提供私有临时目录，helper 限定目标类并拒绝 XML 解析。
 - [ ] 在 Android API 26 真机及其他 API 版本验证，并覆盖大型多 DEX APK、内存与超时清理。
+
+## Android 项目独立仓库 — 已实现
+
+- [x] Android Bridge 与 JADX helper 提取模块 Git 历史，建立独立 Gradle 根工程与 Git 仓库。
+- [x] 独立 PR/main CI、`v*` 标签发布、许可证、忽略规则和双语构建/发布文档。
+- [x] 主仓库移除 Android 源码与 helper 构建发布 job；文档更新为独立仓库入口，历史固定 helper 下载保持兼容。

@@ -23,30 +23,6 @@ env:
   NDK_SHA1: a7b54a5de87fecd125a17d54f73c446199e72a64
 
 jobs:
-  jadx-helper:
-    name: Build Android JADX helper
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Build helper with verified Gradle Wrapper
-        run: ./jadx-helper/build-helper.sh
-      - name: Verify published helper digest
-        run: echo "b733944a9588abbafee1d9b9d77cb78c02bb95f056301f115c0fcb77307c7328  jadx-helper/dist/jadx-helper.jar" | sha256sum -c -
-      - name: Upload helper assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: jadx-helper
-          path: |
-            jadx-helper/dist/jadx-helper.jar
-            jadx-helper/dist/jadx-helper.jar.sha256
-            jadx-helper/dist/metadata.json
-
   build:
     name: Build ${{ matrix.target }}
     runs-on: ubuntu-latest
@@ -267,7 +243,7 @@ jobs:
 
   release:
     name: Publish release
-    needs: [jadx-helper, package, termux-package, termux-repository]
+    needs: [package, termux-package, termux-repository]
     if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     steps:
@@ -305,7 +281,4 @@ jobs:
             artifacts/**/nl2sh-android-arm64-v8a.sha256
             artifacts/**/nl2sh-android-armeabi-v7a
             artifacts/**/nl2sh-android-armeabi-v7a.sha256
-            artifacts/**/jadx-helper.jar
-            artifacts/**/jadx-helper.jar.sha256
-            artifacts/**/metadata.json
             artifacts/**/*.deb

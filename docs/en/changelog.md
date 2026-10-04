@@ -13,6 +13,8 @@
 
 ### Changed
 
+- Move Android Bridge and JADX helper source into independent `nl2sh/android-bridge` and `nl2sh/jadx-helper` repositories with their own Android builds, CI, tagged releases, and bilingual docs. Main releases no longer rebuild or republish the helper; its runtime URL and digest stay pinned to historical `v1.0.4`.
+
 - Record credential-free diagnostics for Web Quick Start model discovery, including a request ID, provider host, duration and upstream error status.
 - Replace the Web high-risk `CONFIRM` text field with two explicit approval clicks, enforced per pending request by the server; color the approval button with the warning palette.
 - Classify Tailcat shell commands by their network and file effects, including strong confirmation for uploads and port sharing.

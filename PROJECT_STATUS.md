@@ -4,6 +4,8 @@ Last Updated: 2026-10-04
 
 ## Recent Changes
 
+- Android 项目拆分：Android Bridge 与 JADX helper 的模块 Git 历史分别提取为独立 `nl2sh/android-bridge`、`nl2sh/jadx-helper` 工程；各自维护 Gradle Wrapper、Android CI、标签 Release、许可证和双语文档。主仓库移除两个源码目录及 helper 构建/重发流程，改为链接独立项目；现有运行时继续固定历史 `v1.0.4` helper URL 与摘要。包名、Binder authority、DEX 入口、安全分类、确认链及 PTY 行为保持兼容。
+
 - 双语文档站：以 `docs/zh/`、`docs/en/` 建立 46 对 MkDocs Material 页面，中文默认根路径、英文 `/en/`，按快速开始/使用/工具/进阶/参考/排查/开发组织；历史 changelog 逐项翻译，README 与模块手册改为入口，移除旧使用说明文件。新增代码导出的配置/CLI/66 个工具参数参考、双语完整性/链接/路由/编辑目标检查与 PR 严格构建。Release 发布签名 APT 快照，文档工作流验签/摘要后合并唯一 Pages 产物，现有 APT 根路径不变；发布压缩包携带双语 Markdown/素材，Termux deb 提供双语入口。Android 运行、安全评估、审批和 PTY 实现未改。
 
 - LLM 兼容网关 405 恢复：显式选择或已成功协商的 Responses/Chat Completions 请求如果偶发返回 HTTP 405，现在按既有 `llm_retry_count` 与指数退避有限重试；自动协议首次探测的 405 仍立即从 Responses 回退 Chat，不引入额外探测延迟，401 等其他客户端错误仍不重试。新增普通与 SSE 流式回归，覆盖工具结果回传后的同协议恢复。`cargo fmt --all -- --check`、`cargo check`、13 项 LLM mock 定向测试和完整 `cargo test` 通过，3 项显式 live 测试按设计忽略。该改动不重放已产生的流式内容，不改变 Agent 安全、Android 执行、PTY 或终端恢复路径。
@@ -342,6 +344,8 @@ Last Updated: 2026-10-04
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- Android 项目独立拆分：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 通过；双语页面/链接检查、`mkdocs build --strict` 与构建后语言路由检查通过。Android Bridge 的 `assembleDebug`、`lintDebug`、`assembleRelease`、`lintRelease` 和 JADX helper 的 `packageHelper`、`lintRelease`、DEX 入口及摘要校验在 JDK 17 / Android SDK 35 下通过。主仓库和两个独立仓库的 GitHub 工作流通过 actionlint，两个独立仓库的 GitHub Android CI 均通过；APT 合并的 7 项回归通过，现有线上软件源经签名与摘要验证后成功合并文档产物。
 
 - 双语 Docs-as-Code：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 通过（323 项有效测试，3 项显式 live 测试按设计忽略）；`python scripts/check-docs.py`、代码派生参考 `--check`、`mkdocs build --strict`、构建后路由/语言切换/编辑链接检查通过，46 对页面完整；桌面/手机浏览器验证中文和英文搜索、同页语言切换、图片加载通过，无 JavaScript 异常及手机横向溢出。`actionlint .github/workflows/docs.yml .github/workflows/release.yml`、发布相关 Bash 语法及 `git diff --check` 通过。APT 合并脚本的 7 项签名/篡改/路径回归通过；对现有线上仓库验证公钥指纹、双签名、两种架构索引及包 SHA-256 后合并成功；签名快照恢复后的 10 个仓库文件摘要一致。
 

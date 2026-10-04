@@ -1,5 +1,7 @@
 # Android Bridge companion
 
+源码与独立 Android 工程已迁到 [`nl2sh/android-bridge`](https://github.com/nl2sh/android-bridge)，不再位于主仓库内。独立构建、CI 和发布说明见该仓库的[中文文档](https://github.com/nl2sh/android-bridge/blob/main/docs/zh/guide.md)与[发布指南](https://github.com/nl2sh/android-bridge/blob/main/docs/zh/release.md)。本页保留原生 nl2sh 的集成与权限说明。
+
 可选 companion APK 为单文件 nl2sh 提供实时 Accessibility 节点、Unicode 输入与手势，不包含 Agent、模型客户端、网络监听或批准接口。
 
 ## 构建与启用
@@ -7,6 +9,7 @@
 主机需要 JDK 17、Android SDK Platform 35 / Build Tools 35.0.0，配置 `ANDROID_HOME`：
 
 ```bash
+git clone https://github.com/nl2sh/android-bridge.git
 cd android-bridge
 ./gradlew --no-daemon :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk

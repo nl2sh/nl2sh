@@ -25,7 +25,7 @@ flowchart TB
 - `src/security/`：AST shell 语义与领域策略。
 - `src/shell/`：提权计划、执行 broker、PTY/管道、取消与恢复。
 - `src/config/`、`src/tui/`、`src/web_ui.rs`：配置与用户入口。
-- `a2a_gateway/`、`android-bridge/`、`jadx-helper/`：独立可选模块。
+- `a2a_gateway/`：主仓库内可选主机模块；[Android Bridge](https://github.com/nl2sh/android-bridge) 与 [JADX helper](https://github.com/nl2sh/jadx-helper) 为独立 Android 项目和 Git 仓库，各自构建与发布。
 
 新增工具必须保持 prepare → assessment → confirmation → execution；显示组件不得直接执行 Provider JSON。PTY 输出过滤终端控制序列，fd 与进程采用 RAII，异常仍 wait 并恢复终端。
 
