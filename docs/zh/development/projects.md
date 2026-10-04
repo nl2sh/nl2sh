@@ -1,0 +1,19 @@
+# 项目与集成边界
+
+[nl2sh 组织](https://github.com/nl2sh) 分别维护各组件。从各自仓库根目录构建，主仓库不会通过相邻目录或 submodule 构建 Android 伴侣项目。
+
+| 项目 | 用途 | 运行环境与权限 | 指南 |
+| --- | --- | --- | --- |
+| [nl2sh](https://github.com/nl2sh/nl2sh) | Agent、TUI/Web/CLI、Tool Runtime | 单个 Rust 设备程序，权限由调用用户/root 策略决定 | [开始](../getting-started/index.md) |
+| nl2sh 中的 `a2a_gateway/` | A2A 1.0、HTTP/stdio MCP | 主机 Python 3.11+，adb 固定连接一台设备，直接工具无需设备模型 | [A2A/MCP](../advanced/a2a-mcp.md) |
+| [android-bridge](https://github.com/nl2sh/android-bridge) | 无障碍、Unicode 输入与手势 | 可选安装的 API 26+ APK，provider/广播要求 shell/root，手工启用服务 | [集成](../advanced/android-bridge.md) |
+| [jadx-helper](https://github.com/nl2sh/jadx-helper) | APK 单类反编译 | API 26+ DEX JAR，通过 app_process 运行，不作为 APK 安装 | [APK/JADX](../tools/apk-jadx.md) |
+| [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) | Android ADB 安装与浏览器启动助手 | API 26+ 控制端，TCP 或目标 Android 11+ 无线配对，部署最新 ARM64/ARMv7 Release | 需仓库权限 |
+
+ADB 安装助手与无障碍伴侣用途不同。助手验证发布摘要，管理 `/data/local/tmp/nl2sh-helper/` 并启动目标 9999 端口 Web，不安装伴侣、不提供模型凭据，也不提供 A2A/MCP。其源码与双语指南当前需要仓库权限；公开主项目的安装路径见 [安装](../getting-started/installation.md)。
+
+伴侣/helper 独立发布。原生 JADX 默认仍固定历史 `nl2sh/nl2sh` v1.0.4 资产与摘要，不自动追踪新 helper Release。Android Bridge 的 release APK 未签名，需签名后安装。协调接口时保持包名、provider authority 与 DEX 入口兼容。
+
+默认 bridge 审批与本地 TUI/Web 不同：直接调用等待设备交互终端批准，Agent 咨询拒绝待确认动作。显式 `bridge_auto_approve` 可自动批准所有风险等级的桥接操作，风险评估与能力检查仍运行。完整 UI 自动化要求 shell/root，普通 Termux UID 权限不同。内置 Web 当前无需登录并监听所有 IPv4 接口，不继承网关 Bearer 鉴权。
+
+在对应组件仓库反馈问题，附版本、Android API/ABI、调用 UID、后端/传输及脱敏证据。共享组织贡献说明在 [.github](https://github.com/nl2sh/.github) 维护。组织中的 TUR fork 用于打包及上游贡献，不是 Agent 运行时开发仓库。

@@ -4,6 +4,8 @@ Last Updated: 2026-10-04
 
 ## Recent Changes
 
+- 按实现完善 A2A/MCP 双语部署与协议文档：说明任务/设备结果、直接调用与咨询、审批及显式自动审批、HTTP/stdio 传输、大小/超时限制、会话存储与失败处理；移除尚未推送的安装步骤，补充独立项目与组织文档入口。文档和配置注释变更不修改运行时接口、安全分类、Android 或 PTY 行为。
+
 - Android 项目拆分：Android Bridge 与 JADX helper 的模块 Git 历史分别提取为独立 `nl2sh/android-bridge`、`nl2sh/jadx-helper` 工程；各自维护 Gradle Wrapper、Android CI、标签 Release、许可证和双语文档。主仓库移除两个源码目录及 helper 构建/重发流程，改为链接独立项目；现有运行时继续固定历史 `v1.0.4` helper URL 与摘要。包名、Binder authority、DEX 入口、安全分类、确认链及 PTY 行为保持兼容。
 
 - 双语文档站：以 `docs/zh/`、`docs/en/` 建立 46 对 MkDocs Material 页面，中文默认根路径、英文 `/en/`，按快速开始/使用/工具/进阶/参考/排查/开发组织；历史 changelog 逐项翻译，README 与模块手册改为入口，移除旧使用说明文件。新增代码导出的配置/CLI/66 个工具参数参考、双语完整性/链接/路由/编辑目标检查与 PR 严格构建。Release 发布签名 APT 快照，文档工作流验签/摘要后合并唯一 Pages 产物，现有 APT 根路径不变；发布压缩包携带双语 Markdown/素材，Termux deb 提供双语入口。Android 运行、安全评估、审批和 PTY 实现未改。
@@ -254,12 +256,12 @@ Last Updated: 2026-10-04
 
 ## Current Phase
 
-1.0.4 已发布；Hermes 设备 Tool Runtime 升级正在开发中。直接工具调用、设备交互终端一次性审批、截图图像块回传、可选 Accessibility companion 和三层逻辑边界已实现并通过 API 26 模拟器验证；真机闭环验证仍待完成。
+1.0.6 已发布；Hermes 设备 Tool Runtime 升级正在开发中。直接工具调用、设备交互终端一次性审批、截图图像块回传、可选 Accessibility companion 和三层逻辑边界已实现并通过 API 26 模拟器验证；真机闭环验证仍待完成。
 
 ## Overall Status
 
 - Product positioning: 以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent；核心程序以单个可执行文件交付，提供多轮 Tool Calling 和丰富 TUI，不声称与 Hermes API 或插件兼容。
-- Build status: 1.0.4 的 stable Rust 检查、测试与 Android API 26 双 ABI release 交叉编译通过。
+- Build status: 当前 Cargo 版本为 1.0.6；构建与测试结果见下方 Verification Performed。
 - Test status: 全量 `cargo test --all-targets` 通过；显式凭据 ima live smoke 按设计忽略。
 - Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
@@ -318,7 +320,7 @@ Last Updated: 2026-10-04
 - 命令审批改为固定 `1-6` 列表，支持方向键/Enter 与 `y/n/a/e/i/t` 别名；可在当前 Agent 任务内记住完全相同的普通命令，但 Root、Dangerous、Critical 和强确认命令始终禁用该选项，且许可不持久化、不做前缀匹配。
 - 审批区域使用完整风险色边框和统一 `background_alt` 面板背景；阶段切换保持稳定最小高度并清空整个面板，避免列表字符残留到强确认或编辑画面。
 - 审批面板锚定在输入区正上方的左下角；初始审批忽略孤立 Esc 和大写 CSI 尾字符，避免 adb 将方向键拆分后误触拒绝或 always 导致弹窗消失。
-- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.4。
+- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.6。
 - 实时 TUI、捕获式工具结果、发给模型的 Tool Result、JSONL 单事件和单文件均有可配置上限；截断会插入明确标记。
 - TUI 输出与历史生命周期已从 session 控制器拆为独立模块，同时保留新的审批菜单和任务级精确命令许可。
 - 真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵已完成，覆盖提权与确认链、超时回收，以及全屏程序退出后的终端恢复和 TUI 重绘。
@@ -344,6 +346,8 @@ Last Updated: 2026-10-04
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- A2A/MCP 与组织文档核对：`cargo fmt --all -- --check`、`cargo check` 和完整 `cargo test` 通过（323 项有效测试，3 项显式 live 测试按设计忽略）；Python 3.11 全新虚拟环境安装网关并运行 19 项协议/HTTP MCP/stdio 测试通过。48 对页面的双语/链接检查、代码派生参考 `--check`、`mkdocs build --strict`、构建后语言路由/编辑链接检查和 7 项 APT 回归通过；现有线上 APT 经签名与摘要验证后合并成功。Compose 示例配置解析、中英文 Codex TOML 示例、辅助项目文档链接及组织 Issue YAML 结构检查通过。
 
 - Android 项目独立拆分：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 通过；双语页面/链接检查、`mkdocs build --strict` 与构建后语言路由检查通过。Android Bridge 的 `assembleDebug`、`lintDebug`、`assembleRelease`、`lintRelease` 和 JADX helper 的 `packageHelper`、`lintRelease`、DEX 入口及摘要校验在 JDK 17 / Android SDK 35 下通过。主仓库和两个独立仓库的 GitHub 工作流通过 actionlint，两个独立仓库的 GitHub Android CI 均通过；APT 合并的 7 项回归通过，现有线上软件源经签名与摘要验证后成功合并文档产物。
 

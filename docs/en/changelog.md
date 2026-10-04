@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Document A2A/MCP wire formats, task/result semantics, limits, approval and troubleshooting; refresh client setup and explain independently maintained Android projects.
+
 ### Added
 
 - Add a Chinese-default, fully translated English MkDocs Material site, canonical manuals and translated release history, bilingual/link/code-reference CI, and one Pages artifact combining docs with signature- and digest-verified Termux APT.

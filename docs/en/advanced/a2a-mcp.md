@@ -1,12 +1,12 @@
-# nl2sh A2A gateway
+# A2A / MCP gateway
 
-
+For setup and client examples, use this guide. For wire formats, limits and troubleshooting, see the [protocol reference](../reference/a2a-mcp.md).
 
 This optional host-side module exposes the Android nl2sh Device Runtime through the A2A 1.0 JSON-RPC binding. External agents can call registered device tools directly or optionally consult nl2sh's built-in Agent. The Android deployment remains one Rust executable; Python and the A2A SDK run on the gateway host. The gateway uses an exact `adb` serial, including wireless ADB `device IP:port`, and a narrow `nl2sh bridge` JSON interface. It does not expose an arbitrary adb shell endpoint or add a device network listener.
 
 ## Start
 
-Prerequisites: Python 3.11+, `adb`, a connected Android device, and a compatible nl2sh binary on the device. Direct Tool Runtime calls do not need a device model provider; only the optional built-in Agent consultation does. Install the gateway in a virtual environment:
+Prerequisites: Python 3.11+, `adb`, a connected Android device, and a compatible nl2sh binary on the device. Direct Tool Runtime calls do not need a device model provider; only the optional built-in Agent consultation does. Run from the main repository’s `a2a_gateway/` directory and install the gateway in a virtual environment:
 
 ```sh
 python3 -m venv .venv
@@ -125,7 +125,7 @@ When Hermes uses the gateway's IP on a trusted private network, replace that exa
 
 Replace `192.168.1.10` with the gateway host IP. This origin must match `NL2SH_GATEWAY_URL` in the gateway's `.env`; put the Android device IP only in the gateway's `NL2SH_DEVICE_SERIAL`.
 
-The tool allowlist keeps the optional `nl2sh_ask` Agent path out of Hermes' direct-tool workflow. The 210-second MCP timeout covers the gateway's 200-second request limit and the device's 120-second approval window. Restart Hermes or reload its MCP connections after changing the config. Hermes' [MCP configuration reference](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference) documents these keys and environment-variable references.
+The tool allowlist keeps the optional `nl2sh_ask` Agent path out of Hermes' direct-tool workflow. The 210-second MCP timeout leaves room for the adapter's 200-second HTTP timeout and the device's 120-second approval window; the gateway does not enforce a separate 200-second server deadline. Restart Hermes or reload its MCP connections after changing the config. Hermes' [MCP configuration reference](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference) documents these keys and environment-variable references.
 
 For example, invoke `android.screen_dump` with `{}` and then `android.tap_text` with `{"text":"Search"}` when that exact node is present. The second call waits for local device approval. After any action, read the UI again and check the direct result's `success` value. This flow is app-independent and does not give the external agent an approval channel.
 
@@ -137,16 +137,14 @@ The same Python package installs `nl2sh-a2a-mcp`, a local stdio MCP server. It s
 
 Run the following steps on the **Codex machine**. Start the A2A gateway on the machine connected to Android first. The Codex machine needs Python and network access to the gateway; it does not need `adb`, the Android SDK, or the NDK.
 
-1. Get the repository's `a2a_gateway` directory. If these changes have not been pushed to Git yet, copy them from the machine holding the current workspace:
+1. Clone the repository on the client machine and enter the gateway package directory:
 
    ```sh
-   mkdir -p "$HOME/nl2sh-a2a-gateway"
-   rsync -a --exclude '.venv/' --exclude '__pycache__/' \
-     USER@GATEWAY_HOST:/path/to/nl2sh/a2a_gateway/ "$HOME/nl2sh-a2a-gateway/"
-   cd "$HOME/nl2sh-a2a-gateway"
+   git clone https://github.com/nl2sh/nl2sh.git
+   cd nl2sh/a2a_gateway
    ```
 
-   Replace `USER@GATEWAY_HOST` and the project path on that machine. After the changes are pushed, you can instead clone the repository and enter its `a2a_gateway/` directory. Only this directory is needed; do not copy another machine's `.venv/`. Run the following commands from this directory.
+   These commands also work in Windows PowerShell. Create a fresh virtual environment on each machine; do not copy `.venv/` from the gateway host.
 
 2. Check that Python is at least 3.11, create a virtual environment, and install the package:
 
@@ -159,19 +157,16 @@ Run the following steps on the **Codex machine**. Start the A2A gateway on the m
 
    `pip install .` installs the dependencies and `nl2sh-a2a-mcp` command. If you are editing the adapter locally, use `.venv/bin/python -m pip install -e .` instead. If `python3 -m venv` is unavailable, install your operating system's Python venv component first.
 
-   On Windows PowerShell, use the following commands instead for steps 1 and 2. `scp` is an option for unpublished changes; after the copy, create a fresh local virtual environment, never use one copied from another machine:
+   On Windows PowerShell, run these commands from `nl2sh/a2a_gateway/`:
 
    ```powershell
-   scp -r USER@GATEWAY_HOST:/path/to/nl2sh/a2a_gateway .\nl2sh-a2a-gateway
-   cd .\nl2sh-a2a-gateway
    py -3 --version
-   if (Test-Path .\.venv) { Remove-Item .\.venv -Recurse -Force }
    py -3 -m venv .venv
    & .\.venv\Scripts\python.exe -m pip install .
    Test-Path .\.venv\Scripts\nl2sh-a2a-mcp.exe
    ```
 
-   Confirm the Python version is at least 3.11 and the last command prints `True`. The removal only discards a virtual environment copied into this new directory. For editable installs, use `& .\.venv\Scripts\python.exe -m pip install -e .`. Once the changes are pushed, `git clone` and entering `a2a_gateway` work on Windows as well.
+   Confirm the Python version is at least 3.11 and the last command prints `True`. For editable installs, use `& .\.venv\Scripts\python.exe -m pip install -e .`.
 
    If installation reports `No matching distribution found for hatchling>=1.25` while using a package mirror, retry from this directory with the official PyPI index:
 
@@ -187,7 +182,7 @@ Run the following steps on the **Codex machine**. Start the A2A gateway on the m
    ssh -N -L 8765:127.0.0.1:8765 USER@GATEWAY_HOST
    ```
 
-   Replace `USER@GATEWAY_HOST` with the gateway host's SSH address. A trusted HTTPS reverse proxy can be used instead of the tunnel.
+   Replace `USER@GATEWAY_HOST` with the gateway host's SSH address. A trusted HTTPS reverse proxy can be used instead of the tunnel. For stdio through this tunnel, the gateway card must advertise `http://127.0.0.1:8765/a2a`, matching the client origin. A card advertising another hostname fails the adapter's same-origin check even if the tunnel is connected.
    The same `ssh -N -L 8765:127.0.0.1:8765 USER@GATEWAY_HOST` command works in Windows PowerShell when OpenSSH Client is installed.
 
 4. In the terminal that will **launch Codex**, set the gateway origin and the same bearer token used by the gateway, then check Agent Card access:
@@ -218,7 +213,10 @@ Run the following steps on the **Codex machine**. Start the A2A gateway on the m
 [mcp_servers.nl2sh_a2a]
 command = "/absolute/path/to/a2a_gateway/.venv/bin/nl2sh-a2a-mcp"
 env_vars = ["NL2SH_A2A_URL", "NL2SH_A2A_TOKEN"]
+tool_timeout_sec = 210
 ```
+
+   For explicitly enabled trusted remote HTTP, also export `NL2SH_A2A_ALLOW_INSECURE_HTTP=1` and add its name to `env_vars`.
 
    Do not use the literal `/absolute/path/to/a2a_gateway` placeholder; run `pwd` in the directory to find the actual path. `env_vars` passes the two variables from Codex's launch environment to its MCP child process. Do not put the bearer token value in the TOML file.
 
@@ -228,10 +226,24 @@ env_vars = ["NL2SH_A2A_URL", "NL2SH_A2A_TOKEN"]
    [mcp_servers.nl2sh_a2a]
    command = "C:/projects/nl2sh-a2a-gateway/.venv/Scripts/nl2sh-a2a-mcp.exe"
    env_vars = ["NL2SH_A2A_URL", "NL2SH_A2A_TOKEN"]
+tool_timeout_sec = 210
    ```
 
    Run `(Resolve-Path .\.venv\Scripts\nl2sh-a2a-mcp.exe).Path` to find the actual path; replace `C:/projects/nl2sh-a2a-gateway` in the example.
 
 6. Start or restart Codex from the terminal in step 4. Run `codex mcp list` to check for `nl2sh_a2a`, then ask Codex to call `nl2sh_inspect`. A device result proves the MCP → A2A → Android path is connected; a tool listing alone does not prove that gateway authentication or the device connection works.
 
-The adapter rejects non-HTTPS remote URLs and Agent Cards that redirect the bearer token to another origin. The device-side confirmation policy remains in force, so MCP tools cannot approve writes.
+The adapter rejects remote plain HTTP unless explicitly enabled and rejects Agent Cards that point the bearer token at another origin. MCP exposes no approval tool; the device selects local approval or explicit `bridge_auto_approve` according to its configuration.
+
+### Codex via HTTP MCP
+
+For a reachable gateway, use this alternative to the stdio entry above. The client needs no local Python package. Set `NL2SH_A2A_TOKEN` in the environment launching Codex and use the actual `/mcp` URL (HTTPS for a remote gateway, or loopback through a tunnel):
+
+```toml
+[mcp_servers.nl2sh_a2a]
+url = "http://127.0.0.1:8765/mcp"
+bearer_token_env_var = "NL2SH_A2A_TOKEN"
+tool_timeout_sec = 210
+```
+
+Choose one transport for this server name. `tool_timeout_sec = 210` also belongs in the stdio config: the client's default 60 seconds is shorter than device approval. The environment and timeout keys follow the [official OpenAI MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli). Restart the client and call `nl2sh_inspect` to verify the full path; this gateway uses Bearer authentication, not an OAuth login flow.

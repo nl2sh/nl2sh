@@ -42,3 +42,5 @@ flowchart LR
 ## 下一步
 
 [选择安装方式](getting-started/installation.md) → [连接模型](getting-started/configure-provider.md) → [完成第一个任务](getting-started/first-task.md)。网站默认中文，语言菜单可切换完整英文文档。“类 Hermes”描述交互形态，不承诺 Hermes API、插件或功能兼容。
+
+[项目与集成边界](development/projects.md)

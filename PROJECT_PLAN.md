@@ -43,7 +43,7 @@
 - [x] 主机侧独立 A2A 1.0 网关，支持 Agent Card、Bearer 认证、JSON-RPC、持久 Task 与同上下文续接。
 - [x] 独立 stdio MCP 适配层通过 A2A 协议调用网关，供 Codex 发现设备盘点、工具目录、咨询与任务查询能力。
 - [x] A2A 网关在同一监听端口提供需 Bearer 令牌的 Streamable HTTP MCP `/mcp`，复用现有工具与设备安全链。
-- [x] Android 单文件程序增加最小 `bridge` 适配，复用既有 Agent、工具、安全和私有会话；无人值守写入由确认器拒绝。
+- [x] Android 单文件程序增加最小 `bridge` 适配，复用既有 Agent、工具、安全和私有会话；默认 ask 拒绝待确认操作、invoke 等待本地审批，显式 bridge_auto_approve 可自动批准。
 - [x] 主机侧显式格式检查、测试、按 ABI 交叉编译、摘要校验和独立候选部署工作流。
 - [x] 连接设备验证 Agent Card、鉴权、环境盘点、工具发现、跨轮续接、拒绝修改及构建部署后的继续测试。
 

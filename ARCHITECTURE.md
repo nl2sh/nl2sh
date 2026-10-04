@@ -107,7 +107,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/tools/ui` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
-| `src/bridge`、`src/tools/runtime` | 固定环境盘点、工具目录、有界 JSON Agent 调用和直接工具调用 | `bridge` CLI → JSON / 私有会话或工具结果 | 直接调用绕过 LLM 但保留工具安全链；无人值守确认一律拒绝；不开放任意 adb 命令 |
+| `src/bridge`、`src/tools/runtime` | 固定环境盘点、工具目录、有界 JSON Agent 调用和直接工具调用 | `bridge` CLI → JSON / 私有会话或工具结果 | 直接调用绕过 LLM 但保留工具安全链；默认 ask 拒绝待确认操作、invoke 等待本地审批，显式 bridge_auto_approve 自动批准；不开放任意 adb 命令 |
 | `a2a_gateway` | 主机侧 A2A Agent Card、JSON-RPC、鉴权、Task Store、adb 传输、stdio/HTTP MCP 适配及显式构建部署 | MCP → A2A 消息 → Android bridge 结果 | 不在设备运行；HTTP MCP 需 Bearer 令牌；不直接执行模型输出；部署仅到独立候选路径 |
 | `src/tools` | `Tool`、显式 `ToolRegistry`、风险/能力元数据、派生 schema 与 `PreparedToolCall` | 模型调用 → 预备动作 → 审批后有界结果 | 只用本地元数据定风险；修改预览必须在统一确认入口批准后执行 |
 | `crates/nl2sh-tool-macros` | 编译期 `#[tool]` 生成适配器与元数据 | 注解函数 → Rust Tool 实现 | 只在构建主机运行；不自动注册或授予执行权限 |

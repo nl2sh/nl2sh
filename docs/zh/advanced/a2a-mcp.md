@@ -1,12 +1,12 @@
-# nl2sh A2A 网关
+# A2A / MCP 网关
 
-
+本页介绍部署与客户端接入；协议格式、限制及排障见 [A2A/MCP 参考](../reference/a2a-mcp.md)。
 
 这个可选的主机侧模块通过 A2A 1.0 JSON-RPC 接口开放 Android 设备上的 nl2sh Device Runtime。外部 Agent 可直接调用已注册的设备工具，也可选择咨询 nl2sh 内置 Agent。Android 端仍只需部署一个 Rust 可执行文件；Python 和 A2A SDK 运行在网关主机上。网关使用指定的 `adb` 设备序列号，也支持无线 ADB `设备 IP:端口`，通过受限的 `nl2sh bridge` JSON 接口通信，不开放任意 adb shell 命令接口。设备端无需新增网络监听器。
 
 ## 启动
 
-前提条件：Python 3.11 或更新版本、`adb`、已连接的 Android 设备，以及设备上兼容的 nl2sh 程序。直接调用 Tool Runtime 不需要设备端模型服务；只有可选的内置 Agent 咨询需要配置模型。在虚拟环境中安装网关：
+前提条件：Python 3.11 或更新版本、`adb`、已连接的 Android 设备，以及设备上兼容的 nl2sh 程序。直接调用 Tool Runtime 不需要设备端模型服务；只有可选的内置 Agent 咨询需要配置模型。在主仓库的 `a2a_gateway/` 目录中，用虚拟环境安装网关：
 
 ```sh
 python3 -m venv .venv
@@ -125,7 +125,7 @@ Hermes 与网关分机、通过可信私网 IP 直连时，将上例的 `env` �
 
 其中 `192.168.1.10` 替换为网关主机 IP，必须与网关 `.env` 的 `NL2SH_GATEWAY_URL` 一致；Android 设备 IP 只填写在网关的 `NL2SH_DEVICE_SERIAL` 中。
 
-工具白名单让 Hermes 只看到直接调用路径，不加载可选的内置 Agent `nl2sh_ask`。210 秒 MCP 调用超时覆盖网关的 200 秒请求上限及设备端 120 秒审批窗口。修改配置后重启 Hermes 或重新加载 MCP 连接。以上字段和环境变量引用见 Hermes 官方 [MCP 配置参考](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference)。
+工具白名单让 Hermes 只看到直接调用路径，不加载可选的内置 Agent `nl2sh_ask`。210 秒 MCP 调用超时为适配器的 200 秒 HTTP 超时及设备端 120 秒审批窗口留出空间；网关没有独立的 200 秒服务端总时限。修改配置后重启 Hermes 或重新加载 MCP 连接。以上字段和环境变量引用见 Hermes 官方 [MCP 配置参考](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference)。
 
 例如先以 `{}` 调用 `android.screen_dump`，确认出现目标节点后，再以 `{"text":"搜索"}` 调用 `android.tap_text`。第二步需设备本地审批；操作后重新读取 UI 并检查直接结果的 `success`。这条流程不绑定具体 App，也不向外部 Agent 提供批准入口。
 
@@ -137,16 +137,14 @@ Hermes 与网关分机、通过可信私网 IP 直连时，将上例的 `env` �
 
 以下命令在 **Codex 所在机器** 执行。A2A 网关应先在连接 Android 设备的机器上启动；Codex 所在机器只需 Python 和到网关的网络连接，不需要 `adb`、Android SDK 或 NDK。
 
-1. 取得源码中的 `a2a_gateway` 目录。若这些改动尚未推送到 Git 仓库，可从保存当前工作区的机器复制：
+1. 在客户端机器克隆主仓库并进入网关目录：
 
    ```sh
-   mkdir -p "$HOME/nl2sh-a2a-gateway"
-   rsync -a --exclude '.venv/' --exclude '__pycache__/' \
-     USER@GATEWAY_HOST:/path/to/nl2sh/a2a_gateway/ "$HOME/nl2sh-a2a-gateway/"
-   cd "$HOME/nl2sh-a2a-gateway"
+   git clone https://github.com/nl2sh/nl2sh.git
+   cd nl2sh/a2a_gateway
    ```
 
-   替换 `USER@GATEWAY_HOST` 和网关主机上的项目路径。改动推送后，也可以用 `git clone` 检出项目，再进入其 `a2a_gateway/` 目录。只需这个目录，不要复制其他机器的 `.venv/`；以下命令均从该目录执行。
+   Windows PowerShell 也可使用上述命令。每台机器分别创建虚拟环境，不复制网关主机的 `.venv/`。
 
 2. 确认 Python 至少为 3.11，创建该机器自己的虚拟环境并安装 Python 包：
 
@@ -159,19 +157,16 @@ Hermes 与网关分机、通过可信私网 IP 直连时，将上例的 `env` �
 
    `pip install .` 会安装依赖和 `nl2sh-a2a-mcp` 命令。修改本地适配层源码并希望立即生效时，可改用 `.venv/bin/python -m pip install -e .`。若 `python3 -m venv` 不可用，先安装该操作系统提供的 Python venv 组件。
 
-   Windows PowerShell 中，第 1、2 步改用下列命令。改动尚未推送时可通过 `scp` 复制；复制后需在本机重新创建虚拟环境，不能沿用另一台机器的环境：
+   Windows PowerShell 中，在 `nl2sh/a2a_gateway/` 目录运行以下命令：
 
    ```powershell
-   scp -r USER@GATEWAY_HOST:/path/to/nl2sh/a2a_gateway .\nl2sh-a2a-gateway
-   cd .\nl2sh-a2a-gateway
    py -3 --version
-   if (Test-Path .\.venv) { Remove-Item .\.venv -Recurse -Force }
    py -3 -m venv .venv
    & .\.venv\Scripts\python.exe -m pip install .
    Test-Path .\.venv\Scripts\nl2sh-a2a-mcp.exe
    ```
 
-   确认 Python 版本至少为 3.11，且最后一条命令输出 `True`。删除命令仅清理刚复制到这个新目录中的虚拟环境。若要以可编辑模式安装，使用 `& .\.venv\Scripts\python.exe -m pip install -e .`。改动推送后也可在 Windows 上 `git clone`，再进入 `a2a_gateway` 目录。
+   确认 Python 版本至少为 3.11，且最后一条命令输出 `True`。若要以可编辑模式安装，使用 `& .\.venv\Scripts\python.exe -m pip install -e .`。
 
    如果安装时使用的软件包镜像报告 `No matching distribution found for hatchling>=1.25`，在当前目录指定官方 PyPI 源重试：
 
@@ -187,7 +182,7 @@ Hermes 与网关分机、通过可信私网 IP 直连时，将上例的 `env` �
    ssh -N -L 8765:127.0.0.1:8765 USER@GATEWAY_HOST
    ```
 
-   将 `USER@GATEWAY_HOST` 替换为网关主机的 SSH 地址。如果已有受信任的 HTTPS 反向代理，则无需 SSH 隧道。
+   将 `USER@GATEWAY_HOST` 替换为网关主机的 SSH 地址。如果已有受信任的 HTTPS 反向代理，则无需 SSH 隧道。stdio 通过此隧道连接时，网关卡片须公告 `http://127.0.0.1:8765/a2a`，与客户端 origin 一致；即使隧道可用，公告其他主机名也会被同源检查拒绝。
    安装 OpenSSH Client 后，Windows PowerShell 也可使用同一条 `ssh -N -L 8765:127.0.0.1:8765 USER@GATEWAY_HOST` 命令。
 
 4. 在**即将启动 Codex 的终端**设置网关地址和同一个 Bearer 令牌，并检查 Agent Card 可访问：
@@ -218,7 +213,10 @@ Hermes 与网关分机、通过可信私网 IP 直连时，将上例的 `env` �
 [mcp_servers.nl2sh_a2a]
 command = "/absolute/path/to/a2a_gateway/.venv/bin/nl2sh-a2a-mcp"
 env_vars = ["NL2SH_A2A_URL", "NL2SH_A2A_TOKEN"]
+tool_timeout_sec = 210
 ```
+
+   如显式启用可信远程 HTTP，还需导出 `NL2SH_A2A_ALLOW_INSECURE_HTTP=1`，并将变量名加入 `env_vars`。
 
    `command` 示例中的 `/absolute/path/to/a2a_gateway` 不能原样使用；在该目录运行 `pwd` 可取得实际路径。`env_vars` 会把启动 Codex 时已有的两个变量传给本地 MCP 子进程，不要把令牌值写进 TOML 文件。
 
@@ -228,10 +226,24 @@ env_vars = ["NL2SH_A2A_URL", "NL2SH_A2A_TOKEN"]
    [mcp_servers.nl2sh_a2a]
    command = "C:/projects/nl2sh-a2a-gateway/.venv/Scripts/nl2sh-a2a-mcp.exe"
    env_vars = ["NL2SH_A2A_URL", "NL2SH_A2A_TOKEN"]
+tool_timeout_sec = 210
    ```
 
    可运行 `(Resolve-Path .\.venv\Scripts\nl2sh-a2a-mcp.exe).Path` 查找实际路径，并替换示例中的 `C:/projects/nl2sh-a2a-gateway`。
 
 6. 从第 4 步的终端启动或重启 Codex，运行 `codex mcp list` 确认出现 `nl2sh_a2a`，然后请 Codex 调用 `nl2sh_inspect`。能返回设备信息才表示 MCP → A2A → Android 链路实际连通；仅能看到工具名称还不足以证明网关鉴权或设备连接正常。
 
-适配层会拒绝非 HTTPS 的远程地址，也会拒绝试图把令牌引向其他来源地址的 Agent Card。设备端确认策略继续生效，MCP 工具不能批准写入。
+适配层默认拒绝远程明文 HTTP（显式开启后可用），并拒绝把令牌引向其他来源的 Agent Card。MCP 不提供批准工具，设备按配置选择本地审批或显式 `bridge_auto_approve`。
+
+### Codex 直接使用 HTTP MCP
+
+网关可达时，可用以下配置替代上面的 stdio 入口，客户端无需安装本地 Python 包。在启动 Codex 的环境中设置 `NL2SH_A2A_TOKEN`，填入实际 `/mcp` 地址（远程优先 HTTPS，隧道可用 loopback）：
+
+```toml
+[mcp_servers.nl2sh_a2a]
+url = "http://127.0.0.1:8765/mcp"
+bearer_token_env_var = "NL2SH_A2A_TOKEN"
+tool_timeout_sec = 210
+```
+
+同一服务名选择一种传输即可。stdio 配置也需 `tool_timeout_sec = 210`，客户端默认 60 秒短于设备审批窗口。环境与超时字段见 [OpenAI 官方 MCP 文档](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。重启客户端后调用 `nl2sh_inspect` 验证完整链路；本网关使用 Bearer 鉴权，不使用 OAuth 登录流程。

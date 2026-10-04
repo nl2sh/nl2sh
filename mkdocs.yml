@@ -77,6 +77,7 @@ plugins:
         Ollama: Ollama
         网络与代理: Networks and proxies
         A2A / MCP: A2A / MCP
+        A2A / MCP 协议: A2A / MCP protocol
         Android Bridge: Android Bridge
         受控自动化: Controlled automation
         参考: Reference
@@ -93,6 +94,7 @@ plugins:
         Provider 排查: Provider troubleshooting
         权限排查: Permission troubleshooting
         开发: Development
+        项目与集成边界: Projects and integration boundaries
         架构: Architecture
         构建与验证: Builds and validation
         Web 开发: Web development
@@ -154,6 +156,7 @@ nav:
 - 参考:
   - 配置文件: reference/configuration.md
   - CLI: reference/cli.md
+  - A2A / MCP 协议: reference/a2a-mcp.md
   - Slash Commands: reference/slash-commands.md
   - 环境变量: reference/environment-variables.md
   - 安全模型: reference/security-model.md
@@ -165,6 +168,7 @@ nav:
   - Provider 排查: troubleshooting/provider.md
   - 权限排查: troubleshooting/permissions.md
 - 开发:
+  - 项目与集成边界: development/projects.md
   - 架构: development/architecture.md
   - 构建与验证: development/build.md
   - Web 开发: development/web-development.md

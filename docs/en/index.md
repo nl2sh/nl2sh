@@ -42,3 +42,5 @@ Try “Show how much storage this device has left” or “Diagnose the network 
 ## Next steps
 
 [Choose an installation](getting-started/installation.md) → [Connect a model](getting-started/configure-provider.md) → [Run your first task](getting-started/first-task.md). Chinese is the default site language; the language menu opens the complete English documentation. “Hermes-like” describes the interaction style and does not promise Hermes API, plugin, or feature compatibility.
+
+[Projects and integration boundaries](development/projects.md)
