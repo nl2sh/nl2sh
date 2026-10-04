@@ -1786,13 +1786,14 @@ Send an existing file to a Tailcat address. Use mode=stream for a raw receiver o
 
 ## `tailcat_serve`
 
-Expose one local TCP port through a managed Tailcat listener and return its address.
+Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.
 
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "port": {
+      "description": "Destination port of an existing localhost TCP service; keep that service running.",
       "format": "uint16",
       "maximum": 65535,
       "minimum": 0,

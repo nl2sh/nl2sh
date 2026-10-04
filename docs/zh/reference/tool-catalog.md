@@ -1786,13 +1786,14 @@ DeviceIdle 与白名单证据。
 
 ## `tailcat_serve`
 
-共享本机单一 TCP 端口，强确认。
+把 Tailcat 连接转发到已有 localhost TCP 服务；参数是目标端口，不重复绑定，无需停止服务；缺少程序时先确认安装，共享需强确认。
 
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "port": {
+      "description": "Destination port of an existing localhost TCP service; keep that service running.",
       "format": "uint16",
       "maximum": 65535,
       "minimum": 0,

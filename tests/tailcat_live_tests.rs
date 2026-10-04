@@ -103,6 +103,24 @@ async fn raw_file_transfer_through_tailcat_tools() -> Result<()> {
         .filter_map(|item| std::fs::read(item.path()).ok())
         .collect::<Vec<_>>();
     assert_eq!(received, vec![std::fs::read(source)?]);
+    share_existing_service(&config, &executor).await
+}
+
+#[tokio::test]
+#[ignore = "set NL2SH_TAILCAT_TEST_BINARY to an installed Tailcat executable"]
+async fn occupied_service_port_is_forwarded_without_rebinding() -> Result<()> {
+    let binary = std::env::var("NL2SH_TAILCAT_TEST_BINARY")
+        .context("NL2SH_TAILCAT_TEST_BINARY is required")?;
+    let mut config = Config {
+        tailcat_binary_path: binary.into(),
+        ..Config::default()
+    };
+    config.tool_groups.insert("tailcat".into(), true);
+    let executor = ShellExecutor::new(config.clone());
+    share_existing_service(&config, &executor).await
+}
+
+async fn share_existing_service(config: &Config, executor: &ShellExecutor) -> Result<()> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
     let server = tokio::spawn(async move {
@@ -115,8 +133,8 @@ async fn raw_file_transfer_through_tailcat_tools() -> Result<()> {
         Ok::<(), anyhow::Error>(())
     });
     let started = invoke(
-        &config,
-        &executor,
+        config,
+        executor,
         &Approve,
         "tailcat_serve",
         json!({"port":port}),
@@ -150,7 +168,7 @@ async fn raw_file_transfer_through_tailcat_tools() -> Result<()> {
     );
     assert!(String::from_utf8_lossy(&reply.stdout).contains("\r\n\r\npass"));
     server.await??;
-    let stopped = invoke(&config, &executor, &Approve, "tailcat_stop", json!({})).await?;
+    let stopped = invoke(config, executor, &Approve, "tailcat_stop", json!({})).await?;
     assert!(stopped.success);
     Ok(())
 }

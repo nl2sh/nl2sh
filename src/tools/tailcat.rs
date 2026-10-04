@@ -33,7 +33,7 @@ static META: &[ToolMetadata] = &[
     ToolMetadata { name: "tailcat_receive", description: "Start a managed Tailcat file drop box in an existing directory and return its address. Incoming peers can write files there.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_receive_stream", description: "Start a managed raw Tailcat receiver, saving one incoming byte stream to a new file. Return its address.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_send_file", description: "Send an existing file to a Tailcat address. Use mode=stream for a raw receiver or mode=copy for a file drop box (requires scp).", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
-    ToolMetadata { name: "tailcat_serve", description: "Expose one local TCP port through a managed Tailcat listener and return its address.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
+    ToolMetadata { name: "tailcat_serve", description: "Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_status", description: "Inspect this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::ReadOnly, requires: &[], parallel_safe: true },
     ToolMetadata { name: "tailcat_stop", description: "Stop this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
 ];
@@ -67,6 +67,7 @@ struct SendFile {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct Serve {
+    /// Destination port of an existing localhost TCP service; keep that service running.
     port: u16,
 }
 
@@ -178,7 +179,7 @@ impl Tool for TailcatTool {
                 }
             ),
             Action::Serve(port) => {
-                format!("Expose localhost TCP port {port} to peers with the Tailcat address")
+                format!("Forward Tailcat peers to the existing localhost TCP service on port {port}. Keep the local service running; this does not bind its port again.")
             }
             Action::Stop => "Stop managed Tailcat listener".into(),
             _ => String::new(),
@@ -226,7 +227,6 @@ const ARMV7_ASSET: ReleaseAsset = ReleaseAsset {
     elf_class: 1,
     elf_machine: 40,
 };
-#[cfg(not(target_os = "android"))]
 const AMD64_ASSET: ReleaseAsset = ReleaseAsset {
     abi: "x86_64",
     arch: "amd64",
@@ -239,6 +239,7 @@ const AMD64_ASSET: ReleaseAsset = ReleaseAsset {
 fn asset_for_android_abis(abis: &str) -> Result<ReleaseAsset> {
     for abi in abis.split(',').map(str::trim) {
         match abi {
+            "x86_64" => return Ok(AMD64_ASSET),
             "arm64-v8a" => return Ok(ARM64_ASSET),
             "armeabi-v7a" => return Ok(ARMV7_ASSET),
             _ => {}
@@ -537,7 +538,8 @@ impl PreparedExecution for TailcatOperation {
                     Command::new(&self.binary).arg("version").output(),
                 )
                 .await
-                .context("Tailcat version timed out")??;
+                .context("Tailcat version timed out")?
+                .with_context(|| binary_start_context(&self.binary, "check"))?;
                 if !output.status.success() {
                     bail!(
                         "Tailcat version failed: {}",
@@ -734,7 +736,9 @@ async fn start(
             });
         }
     }
-    let mut child = command.spawn().context("cannot start Tailcat listener")?;
+    let mut child = command
+        .spawn()
+        .with_context(|| binary_start_context(binary, "start listener"))?;
     let (tx, mut rx) = mpsc::channel::<String>(32);
     if let Some(pipe) = child.stdout.take() {
         collect_lines(pipe, tx.clone());
@@ -743,8 +747,11 @@ async fn start(
         collect_lines(pipe, tx.clone());
     }
     drop(tx);
+    let mut diagnostics = crate::limits::BoundedText::new(4096);
     let address = timeout(Duration::from_secs(15), async {
         while let Some(line) = rx.recv().await {
+            diagnostics.push(line.as_bytes());
+            diagnostics.push(b"\n");
             if let Some(address) = line
                 .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .find(|part| valid_address(part))
@@ -769,7 +776,20 @@ async fn start(
     }
     let _ = child.start_kill();
     let _ = child.wait().await;
-    bail!("Tailcat did not start a listener or print an address within 15 seconds")
+    let diagnostics = diagnostics.finish();
+    let recovery = if diagnostics.contains("androiddns: bogus answer length") {
+        " Tailcat v0.7.0 has a DNS bootstrap compatibility limitation on older Android. Start nl2sh with a device-reachable HTTPS_PROXY or configure a compatible Tailcat binary; changing the destination service port does not fix DNS."
+    } else {
+        ""
+    };
+    bail!(
+        "Tailcat listener failed to start (startup timeout: 15 seconds). Diagnostics: {}{recovery}",
+        if diagnostics.trim().is_empty() {
+            "no output from Tailcat"
+        } else {
+            diagnostics.trim()
+        }
+    )
 }
 
 fn collect_lines(pipe: impl AsyncRead + Unpin + Send + 'static, sender: mpsc::Sender<String>) {
@@ -779,6 +799,13 @@ fn collect_lines(pipe: impl AsyncRead + Unpin + Send + 'static, sender: mpsc::Se
             let _ = sender.try_send(line);
         }
     });
+}
+
+fn binary_start_context(binary: &Path, action: &str) -> String {
+    format!(
+        "cannot {action} with Tailcat executable {}. If missing, use tailcat_install after approval, then retry; if present, check executable permissions and ABI/interpreter compatibility",
+        binary.display()
+    )
 }
 
 #[cfg(test)]
@@ -826,7 +853,12 @@ mod tests {
             "arm64"
         );
         assert_eq!(asset_for_android_abis("armeabi-v7a,armeabi")?.arch, "armv7");
-        assert!(asset_for_android_abis("x86_64,x86").is_err());
+        assert_eq!(asset_for_android_abis("x86_64,x86")?.arch, "amd64");
+        assert_eq!(
+            asset_for_android_abis("x86_64,arm64-v8a,armeabi-v7a")?.arch,
+            "amd64"
+        );
+        assert!(asset_for_android_abis("x86").is_err());
         Ok(())
     }
 
@@ -835,6 +867,9 @@ mod tests {
         let binary = sample_elf(ARMV7_ASSET);
         verify_elf(&binary, ARMV7_ASSET)?;
         assert!(verify_elf(&binary, ARM64_ASSET).is_err());
+        let amd64 = sample_elf(AMD64_ASSET);
+        verify_elf(&amd64, asset_for_android_abis("x86_64,x86")?)?;
+        assert!(verify_elf(&amd64, ARM64_ASSET).is_err());
         let digest = format!("{:x}", Sha256::digest(&binary));
         verify_checksum(&binary, &digest)?;
         assert!(verify_checksum(&binary, ARMV7_ASSET.sha256).is_err());
@@ -894,7 +929,106 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn listener_start_failure_preserves_bounded_diagnostics() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir()?;
+        let binary = directory.path().join("failing-tailcat");
+        let shell = if cfg!(target_os = "android") {
+            "/system/bin/sh"
+        } else {
+            "/bin/sh"
+        };
+        let noise = format!("echo '{}' >&2\n", "x".repeat(512)).repeat(20);
+        std::fs::write(
+            &binary,
+            format!("#!{shell}\n{noise}echo 'androiddns: bogus answer length' >&2\nexit 1\n"),
+        )?;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))?;
+        let error = start(
+            &binary,
+            vec!["serve".into(), "9999".into()],
+            "test".into(),
+            None,
+        )
+        .await
+        .err()
+        .context("startup should fail")?;
+        assert!(error
+            .to_string()
+            .contains("androiddns: bogus answer length"));
+        assert!(error.to_string().contains(crate::limits::TRUNCATION_LABEL));
+        assert!(error.to_string().contains("HTTPS_PROXY"));
+        assert!(error.to_string().len() < 4500);
+        assert!(listener().lock().await.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn missing_binary_check_identifies_path_and_install_recovery() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let target = directory.path().join("missing-tailcat");
+        let mut config = Config {
+            tailcat_binary_path: target.clone(),
+            ..Config::default()
+        };
+        config.tool_groups.insert("tailcat".into(), true);
+        let executor = ShellExecutor::new(config.clone());
+        let error = invoke(
+            &config,
+            &executor,
+            &RejectInstall,
+            "tailcat_check",
+            json!({}),
+        )
+        .await
+        .err()
+        .context("missing binary should fail")?;
+        let message = error.to_string();
+        assert!(message.contains(&target.display().to_string()));
+        assert!(message.contains("tailcat_install after approval"));
+        assert!(!target.exists());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn serve_rejection_keeps_existing_service_and_requires_strong_confirmation() -> Result<()>
+    {
+        struct RejectServe;
+        #[async_trait]
+        impl Confirmer for RejectServe {
+            async fn confirm(
+                &self,
+                preview: &str,
+                assessment: &SecurityAssessment,
+            ) -> Result<ConfirmationDecision> {
+                assert_eq!(assessment.risk_level, RiskLevel::Dangerous);
+                assert!(assessment.requires_double_confirmation);
+                assert!(preview.contains("existing localhost TCP service"));
+                Ok(ConfirmationDecision::Reject)
+            }
+        }
+        let service = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let port = service.local_addr()?.port();
+        let mut config = Config::default();
+        config.tool_groups.insert("tailcat".into(), true);
+        let executor = ShellExecutor::new(config.clone());
+        let result = invoke(
+            &config,
+            &executor,
+            &RejectServe,
+            "tailcat_serve",
+            json!({"port":port}),
+        )
+        .await?;
+        assert!(!result.success);
+        let _connection = tokio::net::TcpStream::connect(service.local_addr()?).await?;
+        let _accepted = service.accept().await?;
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[tokio::test]
     #[ignore = "downloads the pinned official Tailcat release"]
     async fn live_installer_downloads_and_runs_pinned_release() -> Result<()> {

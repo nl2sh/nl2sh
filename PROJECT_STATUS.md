@@ -4,6 +4,10 @@ Last Updated: 2026-10-04
 
 ## Recent Changes
 
+- Tailcat 对话路由补充：工具启用时优先调用受管工具，明确配置路径、安装审批及已有服务转发语义，避免 PATH 探测和同端口 nc 替代。
+
+- Tailcat 自动安装补齐 Android x86_64 → 固定官方 Linux amd64 静态包映射，按设备 ABI 优先级选择，保留 SHA-256、ELF 与运行版本校验。明确 `tailcat_serve` 的参数为已有 localhost 服务的目标端口，不重复绑定；检查与启动错误显示程序路径及显式安装恢复建议，监听启动失败保留有界原始诊断。固定 v0.7.0 在 API 26–28 的上游 DNS 限制单独说明，可经显式 HTTPS 代理启动。安装确认、共享强确认、Root 与 PTY 边界保持不变；同步双语工具说明与派生参考。`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 和文档严格构建/派生参考检查通过。Android API 26 x86_64 测试编译及 API 27 运行验证通过：安装下载/校验/版本检查、8 项工具回归、显式 HTTPS 代理下已有 HTTP 服务端口转发；主机真实端口转发回归通过。
+
 - TUI `/config` 新增“工具”分类，支持 APK/JADX、Tailcat 组及全部可选单项工具开关；复用既有配置、优先级和保存重载路径，组切换清除组内覆盖。长列表跟随选中项展示；同步双语使用说明与更新记录。无新增公共配置字段，不改 Android 执行、安全审批、PTY 与终端恢复逻辑。`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 与新增工具设置伪终端回归通过；Android API 26 AArch64 `cargo check --target aarch64-linux-android` 通过；代码派生参考、双语文档检查、`mkdocs build --strict` 和站点路由检查通过。
 
 - 补齐开发构建运行、用户运行及 Bash/PowerShell/CMD 一键安装入口的三 ABI 帮助说明；安装器复用旧双 ABI 目录时明确提示缺少 x86_64 和新目录迁移方法，保留既有 ARM 安装的复用行为。同步双语安装文档；未改变程序配置、安全确认、Android 执行与 PTY 实现。 Bash 语法、各入口 `--help`、14 项脚本回归及旧 ARM 安装的提示/启动/配置保留验证通过；双语文档检查、严格构建、站点检查和 `git diff --check` 通过。
