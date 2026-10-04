@@ -223,7 +223,7 @@ AST 以重定向节点判断真实写入，文字参数中的 `>` 不作为重�
 
 Termux TUR/APT 构建不启用 `self-update` Cargo feature：不执行启动更新检查，也不替换包管理器拥有的 `$PREFIX/bin/nl2sh`，手工更新入口只提示 `pkg upgrade nl2sh`。TUR 配方从固定 tag 和 SHA-256 源码归档通过 `termux_setup_rust` 构建。直接 Android 发布仍默认启用校验后自更新。Termux 默认配置遵循 XDG config 目录，日志与会话遵循 XDG state 目录；非 Termux直接部署和显式配置路径继续保持配置相邻状态。
 
-`/config` 与别名 `/setting` 使用单一 TUI 设置面板承载服务、模型与 Agent、执行与安全、界面和网络分类；其他分散配置命令不再暴露。两者属于严格本地命令，打开面板后不得进入模型上下文。服务分类与旧向导共享内置 Provider 预设，选择预设只联动 Endpoint，保留 API Key、模型和协议，自定义 Endpoint 显示为 Custom。Tab/Shift+Tab 只切分类，Up/Down 只移动字段，Left/Right 只调整当前值；保存后主循环重新加载配置和客户端。界面分类独立控制佛像与小火车 ASCII Art，并提供显式的日志清除操作；日志清除仅截断当前 JSONL 文件并恢复后续记录能力，不清理当前会话或改变安全链。
+`/config` 与别名 `/setting` 使用单一 TUI 设置面板承载服务、模型与 Agent、执行与安全、界面、网络、知识库和工具分类；其他分散配置命令不再暴露。两者属于严格本地命令，打开面板后不得进入模型上下文。服务分类与旧向导共享内置 Provider 预设，选择预设只联动 Endpoint，保留 API Key、模型和协议，自定义 Endpoint 显示为 Custom。Tab/Shift+Tab 只切分类，Up/Down 只移动字段，Left/Right 只调整当前值；保存后主循环重新加载配置和客户端。“工具”分类按组或单项编辑 APK/JADX、Tailcat 可用性，单项显示有效状态与覆盖来源；切换组清除组内单项覆盖，与 Web 语义一致。长列表围绕选中字段显示有界窗口。界面分类独立控制佛像与小火车 ASCII Art，并提供显式的日志清除操作；日志清除仅截断当前 JSONL 文件并恢复后续记录能力，不清理当前会话或改变安全链。
 
 Agent TUI 在输入分发边界保留 `/` 前缀命名空间：所有去除前导空白后以 `/` 开头的输入均为本地命令，已知命令执行本地动作，未知命令只产生本地提示。任何斜杠命令都不得写入模型用户历史或调用 LLM。
 

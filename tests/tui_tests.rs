@@ -276,6 +276,43 @@ async fn slash_config_reconfigures_and_returns_to_tui() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn settings_tools_save_and_return_to_tui() -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "endpoint='http://127.0.0.1:9999/v1'\nui_language='en'\nshow_train_ascii_art=false\nshow_buddha_ascii_art=false\n",
+    )?;
+    let mut process = spawn_tui(&config)?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+    process.master.write_all(b"/config\r")?;
+    wait_for_text(&mut process.master, "Ctrl+S", Duration::from_secs(3)).await?;
+    process.master.write_all(b"\t\t\t\t\t\t")?;
+    wait_for_text(&mut process.master, "APK/JADX", Duration::from_secs(3)).await?;
+    process.master.write_all(b" ")?;
+    process.master.write_all(&[0x13])?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+    let loaded = nl2sh::config::load_from(&config)?;
+    assert_eq!(loaded.tool_groups.get("jadx"), Some(&true));
+    assert!(nl2sh::tools::tool_enabled(&loaded, "inspect_apk"));
+    assert!(!nl2sh::tools::tool_enabled(&loaded, "tailcat_check"));
+    process.master.write_all(b"/config\r")?;
+    wait_for_text(&mut process.master, "Ctrl+S", Duration::from_secs(3)).await?;
+    process.master.write_all(b"\t\t\t\t\t\t")?;
+    wait_for_text(
+        &mut process.master,
+        "APK/JADX: true",
+        Duration::from_secs(3),
+    )
+    .await?;
+    process.master.write_all(&[0x11])?;
+    assert!(timeout(Duration::from_secs(3), process.child.wait())
+        .await??
+        .success());
+    Ok(())
+}
+
+#[tokio::test]
 async fn new_session_and_local_command_typo_stay_local() -> anyhow::Result<()> {
     let directory = tempdir()?;
     let config = directory.path().join("config.toml");

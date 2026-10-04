@@ -25,3 +25,7 @@
 所有可用命令见 [Slash Commands](../reference/slash-commands.md)，审批与精确许可见 [安全确认](security-confirmation.md)。
 
 ![TUI 存储分析](../../assets/tui.png)
+
+## 工具配置
+
+输入 `/config`（或 `/setting`），用 Tab/Shift+Tab 切到“工具”。Up/Down 选择 APK/JADX、Tailcat 组或单项工具，Left/Right 或空格切换，Ctrl+S 保存并自动重载，Esc 放弃。长列表跟随选中项显示。单项显示实际启用状态及“继承组”或“单项”来源；切换组会清除组内单项覆盖。两组默认关闭，启用不代表批准执行，安全分类、Root 检查和确认仍按原规则执行。ima 开关和凭据位于“知识库”分类。

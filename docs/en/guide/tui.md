@@ -25,3 +25,7 @@ Running tools show bounded live output, then collapse completed results. Replies
 See [slash commands](../reference/slash-commands.md) and [safety approvals](security-confirmation.md).
 
 ![TUI storage analysis](../../assets/tui.png)
+
+## Tool configuration
+
+Open `/config` (or `/setting`) and use Tab/Shift+Tab to select Tools. Up/Down selects an APK/JADX or Tailcat group or an individual tool; Left/Right or Space toggles it. Ctrl+S saves and reloads configuration; Esc discards edits. Long lists follow the selection. Each tool shows its effective enabled state and whether it inherits the group or has an override. Changing a group clears its tool overrides. Both groups default off. Enabling tools does not approve execution: risk classification, Root checks, and confirmation still apply. The ima switch and credentials remain in Knowledge.

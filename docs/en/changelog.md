@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add group and per-tool enable switches to TUI `/config`, with configuration reload on save, group override reset, and a selection-following list.
+
 - Updated launcher and one-click installer messaging for all three ABIs, with migration guidance when reusing older packages without x86_64.
 
 - Validated native execution on Android 8.1/API 27 x86_64 emulators, including TUI/PTY, mutation and dangerous-action confirmation, timeouts, terminal restoration, resizing, and Web-only pages/APIs.

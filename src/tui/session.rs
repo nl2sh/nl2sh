@@ -1665,21 +1665,23 @@ fn format_balances(balances: &[AccountBalance]) -> String {
         .join(" / ")
 }
 
-const SETTINGS_TABS_ZH: [&str; 6] = [
+const SETTINGS_TABS_ZH: [&str; 7] = [
     "服务",
     "模型与智能体",
     "执行与安全",
     "界面",
     "网络",
     "知识库",
+    "工具",
 ];
-const SETTINGS_TABS_EN: [&str; 6] = [
+const SETTINGS_TABS_EN: [&str; 7] = [
     "Provider",
     "Model & Agent",
     "Execution",
     "Interface",
     "Network",
     "Knowledge",
+    "Tools",
 ];
 
 struct SessionPicker {
@@ -1953,7 +1955,7 @@ impl SettingsEditor {
             provider,
             ollama_endpoint,
             custom_endpoint: config.endpoint.clone(),
-            tab: tab.min(5),
+            tab: tab.min(6),
             selected: 0,
             text_cursor: 0,
             models: Vec::new(),
@@ -1966,7 +1968,15 @@ impl SettingsEditor {
     }
 
     fn field_count(&self) -> usize {
-        [4, 6, 6, 7, 6, 7][self.tab]
+        [
+            4,
+            6,
+            6,
+            7,
+            6,
+            7,
+            2 + crate::tools::optional_tool_names().len(),
+        ][self.tab]
     }
 
     fn view(&self, cursor_visible: bool) -> PopupView {
@@ -2025,7 +2035,9 @@ impl SettingsEditor {
             .collect::<Vec<_>>()
             .join("  ");
         let mut lines = vec![tab_line, String::new()];
-        for (index, (label, value)) in self.fields().into_iter().enumerate() {
+        let fields = self.fields();
+        let start = self.selected.saturating_sub(7);
+        for (index, (label, value)) in fields.into_iter().enumerate().skip(start).take(8) {
             let marker = if index == self.selected { ">" } else { " " };
             if index == self.selected && self.is_text_field() {
                 let value = self.input_with_cursor(&value, cursor_visible);
@@ -2033,6 +2045,14 @@ impl SettingsEditor {
             } else {
                 lines.push(format!("{marker} {label}: {value}"));
             }
+        }
+        if self.tab == 6 {
+            lines.push(format!("{}/{}", self.selected + 1, self.field_count()));
+            lines.push(if self.config.ui_language == UiLanguage::ZhCn {
+                "切换组清除组内单项覆盖；启用工具仍需安全审批".into()
+            } else {
+                "Group switches reset overrides; enabled tools still require safety approval".into()
+            });
         }
         if let Some(error) = &self.model_error {
             lines.push(format!("⚠ {error}"));
@@ -2253,6 +2273,49 @@ impl SettingsEditor {
                     self.config.proxy_bypass.clone(),
                 ),
             ],
+            6 => {
+                let mut fields = vec![
+                    (
+                        "APK/JADX",
+                        self.config
+                            .tool_groups
+                            .get("jadx")
+                            .copied()
+                            .unwrap_or(false)
+                            .to_string(),
+                    ),
+                    (
+                        "Tailcat",
+                        self.config
+                            .tool_groups
+                            .get("tailcat")
+                            .copied()
+                            .unwrap_or(false)
+                            .to_string(),
+                    ),
+                ];
+                fields.extend(crate::tools::optional_tool_names().iter().map(|&name| {
+                    let source = if self.config.tool_overrides.contains_key(name) {
+                        if zh {
+                            "单项"
+                        } else {
+                            "override"
+                        }
+                    } else if zh {
+                        "继承组"
+                    } else {
+                        "group"
+                    };
+                    (
+                        name,
+                        format!(
+                            "{} ({source})",
+                            crate::tools::tool_enabled(&self.config, name)
+                        ),
+                    )
+                }));
+                fields
+            }
             _ => vec![
                 (
                     if zh {
@@ -2312,16 +2375,16 @@ impl SettingsEditor {
             KeyCode::Esc => SettingsAction::Cancel,
             KeyCode::Tab => {
                 self.tab = if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.tab.checked_sub(1).unwrap_or(5)
+                    self.tab.checked_sub(1).unwrap_or(6)
                 } else {
-                    (self.tab + 1) % 6
+                    (self.tab + 1) % 7
                 };
                 self.selected = 0;
                 self.sync_text_cursor();
                 SettingsAction::Continue
             }
             KeyCode::BackTab => {
-                self.tab = self.tab.checked_sub(1).unwrap_or(5);
+                self.tab = self.tab.checked_sub(1).unwrap_or(6);
                 self.selected = 0;
                 self.sync_text_cursor();
                 SettingsAction::Continue
@@ -2615,6 +2678,24 @@ impl SettingsEditor {
                 )
             }
             (5, 0) => self.config.ima_enabled = !self.config.ima_enabled,
+            (6, 0 | 1) => {
+                let group = if self.selected == 0 {
+                    "jadx"
+                } else {
+                    "tailcat"
+                };
+                let enabled = !self.config.tool_groups.get(group).copied().unwrap_or(false);
+                self.config
+                    .tool_overrides
+                    .retain(|name, _| !crate::tools::tool_in_group(name, group));
+                self.config.tool_groups.insert(group.into(), enabled);
+            }
+            (6, index) => {
+                if let Some(&name) = crate::tools::optional_tool_names().get(index - 2) {
+                    let enabled = !crate::tools::tool_enabled(&self.config, name);
+                    self.config.tool_overrides.insert(name.into(), enabled);
+                }
+            }
             _ => {}
         }
     }
@@ -3478,6 +3559,43 @@ mod tests {
             editor.config.ima_knowledge_base_id.as_deref(),
             Some("kb-id")
         );
+    }
+
+    #[test]
+    fn settings_tool_switches_reset_overrides_and_filter_registry() -> anyhow::Result<()> {
+        let config = Config::default();
+        let mut editor = SettingsEditor::new(&config, 6);
+        assert!(!crate::tools::tool_enabled(&editor.config, "inspect_apk"));
+        editor.selected = 2;
+        editor.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert!(crate::tools::tool_enabled(&editor.config, "inspect_apk"));
+        assert!(!crate::tools::tool_enabled(&config, "inspect_apk"));
+        editor.selected = 0;
+        editor.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+        assert!(!editor.config.tool_overrides.contains_key("inspect_apk"));
+        assert!(crate::tools::tool_enabled(
+            &editor.config,
+            "decompile_apk_class"
+        ));
+        editor.selected = 2;
+        editor.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert!(!crate::tools::tool_enabled(&editor.config, "inspect_apk"));
+        let restored: Config = toml::from_str(&toml::to_string(&editor.config)?)?;
+        let registry = crate::tools::ToolRegistry::for_config(&restored, &[]);
+        assert!(registry.get("inspect_apk").is_none());
+        assert!(registry.get("decompile_apk_class").is_some());
+        editor.selected = editor.field_count() - 1;
+        let view = editor.view(false);
+        assert!(view
+            .lines
+            .iter()
+            .any(|line| line.contains("> tailcat_stop")));
+        assert!(!view.lines.iter().any(|line| line.contains("inspect_apk")));
+        editor.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(editor.tab, 0);
+        editor.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE));
+        assert_eq!(editor.tab, 6);
+        Ok(())
     }
 
     #[test]

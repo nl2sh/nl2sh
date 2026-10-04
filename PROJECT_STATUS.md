@@ -4,6 +4,8 @@ Last Updated: 2026-10-04
 
 ## Recent Changes
 
+- TUI `/config` 新增“工具”分类，支持 APK/JADX、Tailcat 组及全部可选单项工具开关；复用既有配置、优先级和保存重载路径，组切换清除组内覆盖。长列表跟随选中项展示；同步双语使用说明与更新记录。无新增公共配置字段，不改 Android 执行、安全审批、PTY 与终端恢复逻辑。`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 与新增工具设置伪终端回归通过；Android API 26 AArch64 `cargo check --target aarch64-linux-android` 通过；代码派生参考、双语文档检查、`mkdocs build --strict` 和站点路由检查通过。
+
 - 补齐开发构建运行、用户运行及 Bash/PowerShell/CMD 一键安装入口的三 ABI 帮助说明；安装器复用旧双 ABI 目录时明确提示缺少 x86_64 和新目录迁移方法，保留既有 ARM 安装的复用行为。同步双语安装文档；未改变程序配置、安全确认、Android 执行与 PTY 实现。 Bash 语法、各入口 `--help`、14 项脚本回归及旧 ARM 安装的提示/启动/配置保留验证通过；双语文档检查、严格构建、站点检查和 `git diff --check` 通过。
 
 - 新增 Android API 26+ x86_64：交叉编译、Linux/Windows 构建与启动、统一发布包、自更新、Termux deb/APT 及 A2A 候选构建补齐 `x86_64-linux-android`。支持 ARM 转译的 x86_64 设备优先使用原生 ABI；签名 APT 合并同时兼容旧双架构与新三架构快照，逐架构验签及校验摘要。同步中英文安装、构建、发布和排障文档；无新增程序配置字段，安全确认链及 PTY 实现保持不变。 主机 `cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`、自更新定向回归、`cargo clippy --all-targets -- -D warnings`、14 项脚本回归、Bash 语法与 `git diff --check` 通过；代码派生参考检查、双语文档检查、`mkdocs build --strict` 和站点路由检查通过。Android API 26 x86_64 默认及 `--no-default-features` release 构建与 Termux deb 打包通过，ELF 核验为 x86-64 PIE、解释器 `/system/bin/linker64`。 Android 8.1/API 27 x86_64 模拟器运行验证通过：四个实例完成 `--version`、设备 ELF SHA-256 和 `bridge inspect`；普通 shell UID 下完成 TUI 启动、PTY `id`、修改批准/拒绝、危险 `eval` 二次确认后取消、命令超时、`/shell` 返回、窗口 resize、Ctrl+Q 退出与终端模式/控制字符/有效波特率恢复。Web-only 的 HTML/内嵌 JavaScript、版本/工具目录/设备概览 HTTP 接口和 SIGINT 退出通过；设备盘点按设计以 `partial` 保留未取得的磁盘容量字段。
