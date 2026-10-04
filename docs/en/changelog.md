@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix TUI Ctrl+C/Ctrl+Q getting stuck while awaiting a model response by connecting request-scoped cancellation while preserving execution cleanup and terminal restoration.
+
 - Fix Tailcat installation on Android x86_64 using the pinned official static amd64 archive with full verification. Clarify that port sharing forwards to an existing service without rebinding its port, and provide approved-install recovery for missing executables.
 
 - Add group and per-tool enable switches to TUI `/config`, with configuration reload on save, group override reset, and a selection-following list.

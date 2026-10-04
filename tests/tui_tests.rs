@@ -341,6 +341,79 @@ async fn new_session_and_local_command_typo_stay_local() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn ctrl_q_cancels_pending_model_request_and_restores_terminal() -> anyhow::Result<()> {
+    pending_model_cancellation(false).await
+}
+
+#[tokio::test]
+async fn ctrl_c_cancels_pending_model_request_and_allows_another_task() -> anyhow::Result<()> {
+    pending_model_cancellation(true).await
+}
+
+async fn pending_model_cancellation(cancel_then_retry: bool) -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(30)))
+        .mount(&server)
+        .await;
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    std::fs::write(&config, format!(
+        "api_key=''\nmodel='test'\nendpoint='{}/v1'\napi_type='responses'\nui_language='en'\nshow_buddha_ascii_art=false\nshow_train_ascii_art=false\n",
+        server.uri()
+    ))?;
+    let mut process = spawn_tui(&config)?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+    process.master.write_all(b"pending request\r")?;
+    wait_for_model_requests(&server, 1).await?;
+    if cancel_then_retry {
+        process.master.write_all(b"\x03")?;
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            // Drain redraws so a full PTY buffer cannot block the TUI before cancellation.
+            let mut redraw = [0u8; 8192];
+            loop {
+                match process.master.read(&mut redraw) {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(error) if error.kind() == ErrorKind::WouldBlock => break,
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            let log =
+                std::fs::read_to_string(directory.path().join("nl2sh.log")).unwrap_or_default();
+            if log.contains("task cancelled by user") {
+                break;
+            }
+            anyhow::ensure!(
+                Instant::now() < deadline,
+                "task cancellation was not logged: {log}"
+            );
+            sleep(Duration::from_millis(20)).await;
+        }
+        anyhow::ensure!(process.child.try_wait()?.is_none(), "Ctrl+C exited the TUI");
+        process.master.write_all(b"second request\r")?;
+        wait_for_model_requests(&server, 2).await?;
+    }
+    process.master.write_all(b"\x11")?;
+    let status = timeout(Duration::from_secs(3), process.child.wait()).await??;
+    anyhow::ensure!(status.success(), "TUI did not exit cleanly: {status}");
+    wait_for_text(&mut process.master, "\x1b[?1049l", Duration::from_secs(3)).await?;
+    Ok(())
+}
+
+async fn wait_for_model_requests(server: &MockServer, count: usize) -> anyhow::Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        if server.received_requests().await.unwrap_or_default().len() >= count {
+            return Ok(());
+        }
+        anyhow::ensure!(Instant::now() < deadline, "model request was not received");
+        sleep(Duration::from_millis(20)).await;
+    }
+}
+
 fn spawn_tui(config: &std::path::Path) -> anyhow::Result<PtyChild> {
     let pair = openpty(
         Some(&Winsize {

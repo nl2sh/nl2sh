@@ -49,7 +49,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 
 const BALANCE_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 const RECENT_SESSION_LIMIT: usize = 20;
@@ -244,6 +244,9 @@ async fn run_inner(
     let mut update_prompt: Option<UpdatePrompt> = None;
     let mut update_manual = false;
     let mut model_list_active: Option<ModelListFuture> = None;
+    // SIGINT interrupts shell execution, while a persistent task signal also cancels
+    // model requests and prevents the Agent from starting another tool after rejection.
+    let mut task_cancel: Option<watch::Sender<bool>> = None;
     let mut quit_after_cancel = false;
     let mut cancel_signal_pending = false;
     let mut was_suspended = false;
@@ -526,7 +529,10 @@ async fn run_inner(
 
         if let Some(result) = completed {
             active = None;
+            task_cancel = None;
+            cancel_signal_pending = false;
             confirmation = None;
+            question_prompt = None;
             match result {
                 Ok(ActiveOutcome::Agent(outcome)) => {
                     append_transcript(&history, &outcome, config.ascii_symbols, &log)?;
@@ -775,6 +781,9 @@ async fn run_inner(
             last_cursor_blink = Instant::now();
             if key.code == KeyCode::Char('q') && key.modifiers == KeyModifiers::CONTROL {
                 if active.is_some() {
+                    if let Some(cancel) = &task_cancel {
+                        cancel.send_replace(true);
+                    }
                     if let Some(pending) = confirmation.as_mut() {
                         pending.finish(ConfirmationDecision::Reject);
                         confirmation = None;
@@ -801,6 +810,9 @@ async fn run_inner(
                 && key.code == KeyCode::Char('c')
                 && key.modifiers == KeyModifiers::CONTROL
             {
+                if let Some(cancel) = &task_cancel {
+                    cancel.send_replace(true);
+                }
                 if let Some(pending) = confirmation.as_mut() {
                     pending.finish(ConfirmationDecision::Reject);
                     confirmation = None;
@@ -1481,11 +1493,14 @@ async fn run_inner(
                             "正在请求模型 / 执行工具",
                             "requesting LLM / executing tools",
                         );
+                        let (cancel_sender, cancel_receiver) = watch::channel(false);
+                        task_cancel = Some(cancel_sender);
                         active = Some(Box::pin(run_agent_active(
                             &runner,
                             agent_input,
                             model_history.clone(),
                             &stream_sink,
+                            cancel_receiver,
                         )));
                     }
                 }
@@ -1579,9 +1594,10 @@ async fn run_agent_active(
     input: String,
     history: Vec<Vec<ConversationItem>>,
     stream_sink: &SessionTextSink,
+    cancel: watch::Receiver<bool>,
 ) -> Result<ActiveOutcome> {
     runner
-        .run_with_history_streaming_owned(input, history, stream_sink)
+        .run_with_history_streaming_cancellable(input, history, stream_sink, cancel)
         .await
         .map(ActiveOutcome::Agent)
 }

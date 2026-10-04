@@ -4,6 +4,8 @@ Last Updated: 2026-10-04
 
 ## Recent Changes
 
+- TUI Ctrl+C/Ctrl+Q 接入 Agent 任务级 watch 取消信号，等待模型响应时及时返回或安全退出；保留 SIGINT 命令中断、子进程清理、待决审批拒绝及终端恢复，结束时清除取消和补充信息状态。新增延迟模型响应的伪终端回归覆盖取消后再次发起任务及退出恢复 alternate screen；同步双语使用说明和更新记录。`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`（含 10 项 TUI 回归）、Android API 26 x86_64 `cargo check --target x86_64-linux-android` 及双语文档检查、严格构建和站点路由检查通过。
+
 - Tailcat 对话路由补充：工具启用时优先调用受管工具，明确配置路径、安装审批及已有服务转发语义，避免 PATH 探测和同端口 nc 替代。
 
 - Tailcat 自动安装补齐 Android x86_64 → 固定官方 Linux amd64 静态包映射，按设备 ABI 优先级选择，保留 SHA-256、ELF 与运行版本校验。明确 `tailcat_serve` 的参数为已有 localhost 服务的目标端口，不重复绑定；检查与启动错误显示程序路径及显式安装恢复建议，监听启动失败保留有界原始诊断。固定 v0.7.0 在 API 26–28 的上游 DNS 限制单独说明，可经显式 HTTPS 代理启动。安装确认、共享强确认、Root 与 PTY 边界保持不变；同步双语工具说明与派生参考。`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 和文档严格构建/派生参考检查通过。Android API 26 x86_64 测试编译及 API 27 运行验证通过：安装下载/校验/版本检查、8 项工具回归、显式 HTTPS 代理下已有 HTTP 服务端口转发；主机真实端口转发回归通过。

@@ -14,6 +14,8 @@ Run `nl2sh` without arguments for the multi-turn Agent. Missing configuration st
 | Settings | `/config`, `/setting` |
 | New session / restore | `/new`, `/sessions` |
 
+Ctrl+C cancels a pending model request and returns to idle so you can send another task. Ctrl+Q cancels the current task, completes necessary cleanup, exits, and restores the terminal without waiting for the model request to time out. Pending approval or additional-input requests are rejected or cancelled, and subsequent tools do not execute.
+
 Type `/` for suggestions, select with Up/Down, and complete with Enter. Unknown slash commands never go to the model. Shift+drag and the host terminal context menu copy text; Windows ADB launchers use wheel-to-Up/Down compatibility.
 
 Running tools show bounded live output, then collapse completed results. Replies support Markdown, fenced-code highlighting, Unicode tables, and narrow-screen fallback. The status bar reports observed token use and budgets; missing usage remains unknown. Supported provider balances stay in memory only.
