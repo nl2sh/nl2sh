@@ -11,6 +11,7 @@
 | 文件传输与端口服务 | [Tailcat](tailcat.md) |
 | 公网 HTTP / TLS | [网络](network.md) |
 | ima、便签、图表 | [知识与呈现](knowledge.md) |
+| nl2sh 配置查询、修改与重置 | [自身配置](configuration.md) |
 
 APK/JADX 和 Tailcat 默认关闭，Web 工具页或 TUI `/config` 的“工具”分类可按组或单项启用。`tool_overrides` 优先于 `tool_groups`；关闭工具不会进入模型定义或直接调用。切换组开关会清除组内单项覆盖。新 Web 任务读取配置；TUI 保存后自动重载，无需重启。开启工具不等于批准动作。ima 需要独立凭据。
 

@@ -4,6 +4,8 @@
 
 Path priority: `--config` → nonempty `NL2SH_CONFIG` → default path. Direct Android uses `config.toml` beside the resolved executable; Termux uses XDG config `nl2sh/config.toml`. Field priority: CLI overrides → applicable environment variables → file → defaults.
 
+Models can also inspect, change, or reset the active configuration using [nl2sh_config](../tools/configuration.md). Writes require approval, credentials remain user-managed, and the current task does not hot-reload.
+
 ## Common settings
 
 `api_type` accepts `auto/responses/chat_completions`; auto is omitted on serialization but remains the default. `security_level` accepts `strict/balanced/unsafe`; `execute_confirm_policy` accepts `always/risk_only/never`. Permissive preferences still retain mandatory mutation and dangerous-action approval. Bridge auto-approval is a separate explicit default-off setting; see [safety approvals](../guide/security-confirmation.md).

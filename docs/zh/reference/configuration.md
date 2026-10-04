@@ -4,6 +4,8 @@
 
 路径优先级：`--config` → 非空 `NL2SH_CONFIG` → 默认路径。直接 Android 默认解析后的可执行文件旁 `config.toml`；Termux 默认 XDG config 的 `nl2sh/config.toml`。字段优先级：CLI 覆盖 → 对应环境变量 → 文件 → 默认值。
 
+也可让模型通过 [nl2sh_config](../tools/configuration.md) 查询、修改或重置当前配置；修改需确认，凭据由用户管理，当前任务不热重载。
+
 ## 常用设置
 
 `api_type` 可选 `auto/responses/chat_completions`；auto 省略序列化但仍为默认。`security_level` 可选 `strict/balanced/unsafe`，`execute_confirm_policy` 可选 `always/risk_only/never`；宽松设置也不能解除强制修改或危险确认。桥接自动批准是单独、默认关闭的显式设置，见 [安全确认](../guide/security-confirmation.md)。

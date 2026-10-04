@@ -11,6 +11,7 @@ An explicit registry gives models tool names and JSON schemas. Arguments are val
 | File transfers and port service | [Tailcat](tailcat.md) |
 | Public HTTP / TLS | [Networking](network.md) |
 | ima, notes, charts | [Knowledge and presentation](knowledge.md) |
+| Inspect, change, or reset nl2sh settings | [Self configuration](configuration.md) |
 
 APK/JADX and Tailcat default off. Enable groups or individual tools in Web or the Tools category of TUI `/config`; `tool_overrides` takes precedence over `tool_groups`. Disabled tools are absent from model definitions and direct calls. Changing a group switch clears its per-tool overrides. New Web tasks load configuration; saving TUI settings reloads configuration without a restart. Enabling a tool does not approve actions. ima needs separate credentials.
 

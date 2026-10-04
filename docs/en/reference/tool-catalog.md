@@ -1643,6 +1643,49 @@ List a bounded number of direct children without using shell commands. Absolute 
 }
 ```
 
+## `nl2sh_config`
+
+Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Writes preserve other fields and comments and do not hot-reload the current task. New Web tasks/bridge processes reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.
+
+```json
+{
+  "$defs": {
+    "Action": {
+      "enum": [
+        "list",
+        "get",
+        "set",
+        "reset"
+      ],
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/Action",
+      "description": "list/get are read-only; set/reset require confirmation."
+    },
+    "key": {
+      "default": null,
+      "description": "Exact configuration key; required except for list. Supports tool_groups.jadx and tool_overrides.tailcat_check.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "value": {
+      "default": null,
+      "description": "Native JSON value for set (boolean, number, string, array or object). Use reset to remove an override; null is not a set value."
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "type": "object"
+}
+```
+
 ## `read_file`
 
 Read a size-limited UTF-8 text file. Absolute paths, parent components, and symlinks are supported.

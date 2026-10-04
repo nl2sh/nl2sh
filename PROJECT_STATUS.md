@@ -4,6 +4,8 @@ Last Updated: 2026-10-04
 
 ## Recent Changes
 
+- 新增 `nl2sh_config` 自身配置工具，支持 list/get/set/reset、受限点分工具键、枚举合法值、默认/磁盘/加载解析/当前任务快照。固定当前配置来源，凭据仅显示配置状态且拒绝模型改写；普通修改确认，安全、Root、桥接、工具、网络和审计配置强确认。共享配置加载语义，保留其他字段与注释，不把环境/CLI 值写盘；有界读取、审批后内容复核、工具写入锁及私有原子替换。当前任务不热重载，新 Web 任务/bridge 进程加载，TUI 重启应用；同步双语工具页、导航、参考和更新记录，不修改 PTY/终端恢复实现。
+
 - TUI Ctrl+C/Ctrl+Q 接入 Agent 任务级 watch 取消信号，等待模型响应时及时返回或安全退出；保留 SIGINT 命令中断、子进程清理、待决审批拒绝及终端恢复，结束时清除取消和补充信息状态。新增延迟模型响应的伪终端回归覆盖取消后再次发起任务及退出恢复 alternate screen；同步双语使用说明和更新记录。`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`（含 10 项 TUI 回归）、Android API 26 x86_64 `cargo check --target x86_64-linux-android` 及双语文档检查、严格构建和站点路由检查通过。
 
 - Tailcat 对话路由补充：工具启用时优先调用受管工具，明确配置路径、安装审批及已有服务转发语义，避免 PATH 探测和同端口 nc 替代。
@@ -358,6 +360,8 @@ Last Updated: 2026-10-04
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- 自身配置工具：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings`、完整 `cargo test`（343 项通过、4 项显式 live 测试忽略）和 10 项新增配置工具回归通过；一次 TUI 取消日志文字匹配失败后，单独及全量重跑通过。Android API 26 AArch64、ARMv7 与 x86_64 的 `cargo check --target <target> --no-default-features` 通过。Web 27 项测试与生产构建、代码派生参考 `--check`、49 对页面检查、`mkdocs build --strict`、构建后站点检查、11 项 APT 回归及现有软件源的签名/摘要验证与合并通过。CLI bridge 只读调用验证当前来源、环境凭据脱敏和磁盘内容保留。
 
 - A2A/MCP 与组织文档核对：`cargo fmt --all -- --check`、`cargo check` 和完整 `cargo test` 通过（323 项有效测试，3 项显式 live 测试按设计忽略）；Python 3.11 全新虚拟环境安装网关并运行 19 项协议/HTTP MCP/stdio 测试通过。48 对页面的双语/链接检查、代码派生参考 `--check`、`mkdocs build --strict`、构建后语言路由/编辑链接检查和 7 项 APT 回归通过；现有线上 APT 经签名与摘要验证后合并成功。Compose 示例配置解析、中英文 Codex TOML 示例、辅助项目文档链接及组织 Issue YAML 结构检查通过。
 

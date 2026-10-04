@@ -112,10 +112,15 @@ pub fn load_from(path: &Path) -> Result<Config> {
 fn load_from_unvalidated(path: &Path) -> Result<Config> {
     let text = fs::read_to_string(path)
         .with_context(|| format!("cannot read config {}", path.display()))?;
+    parse_unvalidated(&text, path)
+}
+
+/// Parses a snapshot with the same presets and environment overlays as file loading.
+pub(crate) fn parse_unvalidated(text: &str, path: &Path) -> Result<Config> {
     let mut config: Config =
-        toml::from_str(&text).with_context(|| format!("invalid config {}", path.display()))?;
+        toml::from_str(text).with_context(|| format!("invalid config {}", path.display()))?;
     let document: toml::Value =
-        toml::from_str(&text).with_context(|| format!("invalid config {}", path.display()))?;
+        toml::from_str(text).with_context(|| format!("invalid config {}", path.display()))?;
     if document.get("agent_mode").is_some() {
         let mode: AgentMode = config.agent_mode;
         let explicit_steps = config.max_agent_steps;

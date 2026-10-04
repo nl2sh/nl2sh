@@ -30,6 +30,7 @@ pub mod android;
 pub mod apk;
 pub mod audio;
 pub mod chart;
+mod configuration;
 mod extended;
 pub mod file;
 mod ima;
@@ -253,6 +254,8 @@ pub enum ToolCategory {
     Network,
     /// Private Agent state.
     Memory,
+    /// nl2sh configuration management.
+    Configuration,
     /// Presentation-only chart data.
     Chart,
 }
@@ -400,6 +403,7 @@ impl ToolRegistry {
             Box::new(SearchTextTool),
             Box::new(ApplyPatchTool),
             Box::new(ChartTool),
+            Box::new(configuration::ConfigTool),
             Box::new(ImaListTool),
             Box::new(ImaSearchTool),
             Box::new(ImaReadTool),
@@ -452,7 +456,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 53);
+        assert_eq!(names.len(), 54);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()
@@ -464,6 +468,7 @@ mod tests {
             "inspect_android_environment",
             "android_clipboard",
             "agent_memory",
+            "nl2sh_config",
             "inspect_tls",
         ] {
             assert!(names.contains(&name.to_string()), "missing {name}");

@@ -283,6 +283,46 @@
     }
   },
   {
+    "description": "Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Writes preserve other fields and comments and do not hot-reload the current task. New Web tasks/bridge processes reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.",
+    "name": "nl2sh_config",
+    "parameters": {
+      "$defs": {
+        "Action": {
+          "enum": [
+            "list",
+            "get",
+            "set",
+            "reset"
+          ],
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "list/get are read-only; set/reset require confirmation."
+        },
+        "key": {
+          "default": null,
+          "description": "Exact configuration key; required except for list. Supports tool_groups.jadx and tool_overrides.tailcat_check.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "default": null,
+          "description": "Native JSON value for set (boolean, number, string, array or object). Use reset to remove an override; null is not a set value."
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "description": "List knowledge bases accessible through the configured read-only Tencent ima connector. Credentials are never exposed.",
     "name": "ima_list_knowledge_bases",
     "parameters": {

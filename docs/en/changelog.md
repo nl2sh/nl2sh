@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add model-facing `nl2sh_config` with list/get/set/reset, dotted tool switches, and persisted/current-task inspection. Credentials are redacted and user-managed; writes require approval and sensitive policies require strong approval. Preserve other fields/comments and reject stale-preview overwrites. Changes apply on reload, without altering the current task.
+
 - Fix TUI Ctrl+C/Ctrl+Q getting stuck while awaiting a model response by connecting request-scoped cancellation while preserving execution cleanup and terminal restoration.
 
 - Fix Tailcat installation on Android x86_64 using the pinned official static amd64 archive with full verification. Clarify that port sharing forwards to an existing service without rebinding its port, and provide approved-install recovery for missing executables.

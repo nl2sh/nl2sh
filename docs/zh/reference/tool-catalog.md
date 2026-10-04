@@ -1643,6 +1643,49 @@ DeviceIdle 与白名单证据。
 }
 ```
 
+## `nl2sh_config`
+
+查询 nl2sh 当前配置、默认值及磁盘/任务快照；set/reset 经确认保存，安全/Root/工具/网络/审计修改强确认，凭据只显示配置状态且由用户管理，当前任务不热重载。
+
+```json
+{
+  "$defs": {
+    "Action": {
+      "enum": [
+        "list",
+        "get",
+        "set",
+        "reset"
+      ],
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/Action",
+      "description": "list/get are read-only; set/reset require confirmation."
+    },
+    "key": {
+      "default": null,
+      "description": "Exact configuration key; required except for list. Supports tool_groups.jadx and tool_overrides.tailcat_check.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "value": {
+      "default": null,
+      "description": "Native JSON value for set (boolean, number, string, array or object). Use reset to remove an override; null is not a set value."
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "type": "object"
+}
+```
+
 ## `read_file`
 
 有界 UTF-8 文件读取，支持绝对/父目录/符号链接。

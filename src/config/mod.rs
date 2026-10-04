@@ -2,6 +2,8 @@ mod loader;
 mod model;
 mod wizard;
 
+pub(crate) use loader::parse_unvalidated;
+
 pub use loader::{
     default_config_path, load, load_from, load_or_default_unvalidated, load_unvalidated, state_dir,
 };

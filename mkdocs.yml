@@ -71,6 +71,7 @@ plugins:
         Tailcat: Tailcat
         网络工具: Networking
         知识与图表: Knowledge and charts
+        自身配置: Self configuration
         进阶: Advanced
         Agent 模式: Agent modes
         自定义 Provider: Custom providers
@@ -145,6 +146,7 @@ nav:
   - Tailcat: tools/tailcat.md
   - 网络工具: tools/network.md
   - 知识与图表: tools/knowledge.md
+  - 自身配置: tools/configuration.md
 - 进阶:
   - Agent 模式: advanced/agent-mode.md
   - 自定义 Provider: advanced/custom-provider.md
