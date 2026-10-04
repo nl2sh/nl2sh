@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Expand Tailcat documentation for the Android 8/9 DNS protocol incompatibility, diagnostics, and recovery. Record portrait emulator comparisons using the same v0.7.0 binary: failure on Android 8.1/API 27 and successful HTTP forwarding on Android 15/API 35, with explicit validation limits.
+
 - Add model-facing `nl2sh_config` with list/get/set/reset, dotted tool switches, and persisted/current-task inspection. Credentials are redacted and user-managed; writes require approval and sensitive policies require strong approval. Preserve other fields/comments and reject stale-preview overwrites. Changes apply on reload, without altering the current task.
 
 - Fix TUI Ctrl+C/Ctrl+Q getting stuck while awaiting a model response by connecting request-scoped cancellation while preserving execution cleanup and terminal restoration.

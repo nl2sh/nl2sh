@@ -23,6 +23,33 @@ x86_64 设备使用固定官方 Linux amd64 静态发行包，保留相同的摘
 
 ## Android 8/9 的 DNS 限制
 
-固定的 Tailcat v0.7.0 在 Android API 26–28 上可能因系统 DNS 协议差异报 `androiddns: bogus answer length`；版本检查通过不代表网络启动可用。启动失败会返回有界的原始诊断，遇到此错误不要更改目标服务端口。可在启动 nl2sh 前设置设备可达的 `HTTPS_PROXY`（如同时使用 HTTP，请设置 `HTTP_PROXY`），让 Tailcat 的 HTTPS 引导流量经代理解析；配置中的代理字段用于 nl2sh 自身的安装下载，不会自动转换为 Tailcat 子进程的环境变量。没有可用代理时，需要手工提供包含[上游旧 Android DNS 修复](https://github.com/tailscale/tailcat/issues/126)的兼容程序，并配置 `tailcat_binary_path`。安装和共享的确认要求仍然适用。
+固定安装的 Tailcat v0.7.0 在 Android 8/9（API 26–28）上可能在获取 `https://tailcat.dev/derpmap.json` 时失败，典型诊断为：
+
+```text
+lookup tailcat.dev on [::1]:53: androiddns: bogus answer length 1131375981
+```
+
+### 协议原因与诊断边界
+
+Tailcat 的纯 Go Android DNS 适配通过 `/dev/socket/dnsproxyd` 调用系统解析服务。原始 DNS 查询命令 `resnsend` 从 Android 10（API 29）才可用；旧系统返回文本错误 `500 Command not recognized`。缺少旧协议回退的实现把该文本按二进制应答解析，其中 `Comm` 的四个字节被当作长度，得到 `1131375981`。这与异常长度报错一致；不是目标 TCP 服务端口冲突。[上游 DNS 实现](https://github.com/tailscale/tailscale/blob/main/feature/androiddns/androiddns.go)已提供识别文本错误并回退到 `getaddrinfo` 的处理，相关报告见 [Tailcat #126](https://github.com/tailscale/tailcat/issues/126)。
+
+版本检查通过只证明程序能启动，不代表 DNS 引导或端口转发可用。错误中的 `[::1]:53` 是 Go 解析错误所显示的地址，不能单凭它判断实际向 IPv6 回环地址发送了 DNS 请求；此适配使用的是系统 Unix socket。nl2sh 工具结果中附加的兼容性与代理建议来自 nl2sh，本身不属于 Tailcat 原始 stderr。
+
+### 已验证的对照结果
+
+使用同一 x86_64 Tailcat v0.7.0 二进制进行模拟器对照：
+
+| 系统 | 屏幕 | 结果 |
+| --- | --- | --- |
+| Android 8.1 / API 27 | 1080×2400 竖屏 | DNS 引导报上述异常长度，无法生成服务地址 |
+| Android 15 / API 35 | 1080×2400 竖屏，420 dpi | 成功生成服务地址；转发至已有 9999 测试服务，客户端收到 HTTP 200 和预期正文 |
+
+Android 15 对照未给 Tailcat 设置 `HTTPS_PROXY`。验证覆盖直接运行 `tailcat --key=new serve 9999` 的引导与实际请求转发，不代表完整模型对话、nl2sh 审批流程或所有 Android 版本已通过；分辨率不是这次 DNS 失败的原因。
+
+### 恢复方法
+
+启动失败会返回有界的原始诊断；遇到此错误不要更改目标服务端口或停止已有服务。可在启动 nl2sh 前设置设备可达的 `HTTPS_PROXY`（如同时使用 HTTP，请设置 `HTTP_PROXY`），让 Tailcat 的 HTTPS 引导流量经代理解析。配置中的代理字段用于 nl2sh 自身的安装下载，不会自动转换为 Tailcat 子进程的环境变量。
+
+没有可用代理时，手工提供包含上述旧 Android DNS 回退的兼容程序，并配置 `tailcat_binary_path`；上游修复不代表当前固定安装的 v0.7.0 已包含它，重复安装同一版本不能据此视为修复。安装和共享的确认要求仍然适用。
 
 Agent 在 Tailcat 工具启用时优先使用内置检查、安装及转发工具；安装仍需审批，已有服务监听端口是转发目标。

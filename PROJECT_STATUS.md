@@ -1,8 +1,10 @@
 # Project Status
 
-Last Updated: 2026-10-04
+Last Updated: 2026-10-05
 
 ## Recent Changes
+
+- 完善双语 Tailcat DNS 排障文档，说明旧 Android 不支持 `resnsend` 时文本错误被误读为长度的原因、Go 错误地址与实际 Unix socket 解析路径的区别，以及代理和兼容二进制恢复方案；记录 API 27/API 35 的同二进制竖屏对照。仅更新文档，不改变公共接口、安全确认、Android 执行或 PTY/终端恢复实现。
 
 - 新增 `nl2sh_config` 自身配置工具，支持 list/get/set/reset、受限点分工具键、枚举合法值、默认/磁盘/加载解析/当前任务快照。固定当前配置来源，凭据仅显示配置状态且拒绝模型改写；普通修改确认，安全、Root、桥接、工具、网络和审计配置强确认。共享配置加载语义，保留其他字段与注释，不把环境/CLI 值写盘；有界读取、审批后内容复核、工具写入锁及私有原子替换。当前任务不热重载，新 Web 任务/bridge 进程加载，TUI 重启应用；同步双语工具页、导航、参考和更新记录，不修改 PTY/终端恢复实现。
 
@@ -345,6 +347,8 @@ Last Updated: 2026-10-04
 
 ## Pending / Known Issues
 
+- 固定 Tailcat v0.7.0 在 Android 8/9（API 26–28）存在 DNS 协议兼容性限制：旧系统不支持 `resnsend`，可报 `androiddns: bogus answer length 1131375981`；API 27 已复现。API 35 同二进制直接启动与 HTTP 转发通过，不代表旧系统问题已修复。需显式设备可达的 HTTPS 代理或包含旧协议回退的兼容程序，详见双语 Tailcat 工具文档。
+
 - 根包若通过 crates.io `cargo package` 发布，需先发布版本匹配的 `nl2sh-tool-macros` 编译期依赖；GitHub/TUR 的完整源码归档构建及单 ELF 运行交付不受影响。
 - 真机矩阵已覆盖 root/非 root、超时和全屏交互程序；未覆盖的设备、su 或终端实现仍可能存在兼容差异。
 - 源码编译启动脚本仅自动映射 `arm64-v8a` 与 `armeabi-v7a`；其他设备 ABI 会明确拒绝，显式 `RUST_TARGET` 与设备不匹配时也会停止。
@@ -360,6 +364,10 @@ Last Updated: 2026-10-04
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- Tailcat DNS 文档：`python3 scripts/check-docs.py`、`mkdocs build --strict`、`python3 scripts/check-docs.py --site site`、`cargo fmt --all -- --check` 和 `git diff --check` 通过；49 对页面的语言路由、编辑链接和同页语言切换完整。
+
+- Tailcat DNS 对照：同一 x86_64 v0.7.0 二进制以 `tailcat --key=new serve <port>` 直接运行，Android 8.1/API 27 的 1080×2400 竖屏模拟器复现异常长度；Android 15/API 35 的 1080×2400、420 dpi 竖屏模拟器在未给 Tailcat 设置 HTTPS_PROXY 时生成服务地址，转发至已有 9999 测试服务后客户端收到 HTTP 200 与预期正文。临时服务停止；验证覆盖 Tailcat 引导与请求转发，不包含完整模型对话或 nl2sh 审批回归。
 
 - 自身配置工具：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings`、完整 `cargo test`（343 项通过、4 项显式 live 测试忽略）和 10 项新增配置工具回归通过；一次 TUI 取消日志文字匹配失败后，单独及全量重跑通过。Android API 26 AArch64、ARMv7 与 x86_64 的 `cargo check --target <target> --no-default-features` 通过。Web 27 项测试与生产构建、代码派生参考 `--check`、49 对页面检查、`mkdocs build --strict`、构建后站点检查、11 项 APT 回归及现有软件源的签名/摘要验证与合并通过。CLI bridge 只读调用验证当前来源、环境凭据脱敏和磁盘内容保留。
 

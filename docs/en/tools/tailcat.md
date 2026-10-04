@@ -23,6 +23,33 @@ For example, “forward 9999 with Tailcat” maps to `tailcat_serve({"port":9999
 
 ## DNS limitation on Android 8/9
 
-Pinned Tailcat v0.7.0 may report `androiddns: bogus answer length` on Android API 26–28 due to differences in the system DNS protocol. A successful version check does not establish network startup capability. Startup failures return bounded original diagnostics; do not change the destination service port in response to this error. Set a device-reachable `HTTPS_PROXY` before starting nl2sh (and `HTTP_PROXY` if needed) to resolve Tailcat HTTPS bootstrap traffic through a proxy. Configuration proxy fields control nl2sh installation downloads; they are not automatically converted to Tailcat child-process environment variables. Without a usable proxy, supply a compatible binary containing the [upstream older-Android DNS fix](https://github.com/tailscale/tailcat/issues/126) and configure `tailcat_binary_path`. Installation and sharing still require their normal approvals.
+The pinned Tailcat v0.7.0 may fail while fetching `https://tailcat.dev/derpmap.json` on Android 8/9 (API 26–28), with diagnostics such as:
+
+```text
+lookup tailcat.dev on [::1]:53: androiddns: bogus answer length 1131375981
+```
+
+### Protocol cause and diagnostic limits
+
+Tailcat's pure Go Android DNS adapter calls the system resolver through `/dev/socket/dnsproxyd`. The raw DNS command `resnsend` is available from Android 10 (API 29); older systems reply with the text error `500 Command not recognized`. An implementation without the older-protocol fallback parses this text as a binary reply, interpreting the four bytes `Comm` as the length `1131375981`. This explains the reported length and is unrelated to a destination TCP port conflict. The [upstream DNS implementation](https://github.com/tailscale/tailscale/blob/main/feature/androiddns/androiddns.go) now detects text errors and falls back to `getaddrinfo`; see also [Tailcat #126](https://github.com/tailscale/tailcat/issues/126).
+
+A successful version check establishes only that the executable can run, not that DNS bootstrap or forwarding works. `[::1]:53` is an address displayed by Go's resolver error; it does not establish that a DNS request was actually sent to IPv6 loopback. This adapter uses the system Unix socket. Compatibility and proxy advice appended to nl2sh tool results comes from nl2sh, rather than Tailcat's original stderr.
+
+### Verified comparison
+
+Emulator tests used the same x86_64 Tailcat v0.7.0 binary:
+
+| System | Display | Result |
+| --- | --- | --- |
+| Android 8.1 / API 27 | 1080×2400 portrait | DNS bootstrap fails with the length error above, without producing a service address |
+| Android 15 / API 35 | 1080×2400 portrait, 420 dpi | Produces a service address; forwarding to an existing test service on 9999 returns HTTP 200 and the expected body to the client |
+
+The Android 15 comparison did not set `HTTPS_PROXY` for Tailcat. Tests covered bootstrap and actual request forwarding through a direct `tailcat --key=new serve 9999` invocation, without validating a complete model conversation, nl2sh's approval flow, or every Android version. Display resolution did not cause this DNS failure.
+
+### Recovery
+
+Startup failures return bounded original diagnostics. Do not change the destination service port or stop its existing service in response to this error. Set a device-reachable `HTTPS_PROXY` before starting nl2sh (and `HTTP_PROXY` if needed) to resolve Tailcat HTTPS bootstrap traffic through a proxy. Configuration proxy fields control nl2sh installation downloads; they are not automatically converted to Tailcat child-process environment variables.
+
+Without a usable proxy, supply a compatible binary containing the older-Android DNS fallback described above and configure `tailcat_binary_path`. An upstream fix does not mean the pinned v0.7.0 already includes it; reinstalling that same version cannot be assumed to fix the issue. Installation and sharing still require their normal approvals.
 
 When Tailcat tools are enabled, the Agent prefers the built-in check, install, and forwarding tools. Installation still requires approval; an existing service listener is the forwarding destination.
