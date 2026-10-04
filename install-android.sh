@@ -18,6 +18,8 @@ die() {
 usage() {
   cat <<'EOF'
 Usage: install-android.sh [options]
+Supported Android ABIs: arm64-v8a, armeabi-v7a, x86_64 (API 26+).
+The launcher detects the device ABI and prefers native x86_64.
   --provider NAME       openrouter, openai, deepseek, moonshot, siliconflow,
                         ollama, or custom (default: openrouter)
   --model NAME          model name; provider default is used when omitted
@@ -120,6 +122,9 @@ if [[ -e "${INSTALL_DIR}" ]]; then
     || ! -f "${INSTALL_DIR}/bin/arm64-v8a/nl2sh" \
     || ! -f "${INSTALL_DIR}/bin/armeabi-v7a/nl2sh" ]]; then
     die "install directory exists but is incomplete: ${INSTALL_DIR}"
+  fi
+  if [[ ! -f "${INSTALL_DIR}/bin/x86_64/nl2sh" ]]; then
+    echo "warning: existing package lacks x86_64; ARM devices can continue. For x86_64, back up config.toml and use --install-dir with a new directory and a release containing bin/x86_64/nl2sh." >&2
   fi
   chmod +x "${INSTALL_DIR}/android-run-linux.sh"
   if [[ "${CONFIG_REQUESTED}" == true || ! -f "${EXISTING_CONFIG}" ]]; then

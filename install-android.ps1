@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+Download, verify, and launch the Android release package.
+.DESCRIPTION
+Supported Android ABIs: arm64-v8a, armeabi-v7a, x86_64 (API 26+).
+The device ABI is detected automatically; native x86_64 takes priority.
+x86_64 devices require a release containing bin/x86_64/nl2sh.
+#>
 [CmdletBinding()]
 param(
     [ValidateSet("openrouter", "openai", "deepseek", "moonshot", "kimi", "siliconflow", "ollama", "custom")]
@@ -12,6 +20,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Write-Host "Supported Android ABIs: arm64-v8a, armeabi-v7a, x86_64 (API 26+)."
 $Repository = $Repository.TrimEnd('/')
 if ([string]::IsNullOrEmpty($ApiKey)) { $ApiKey = $env:NL2SH_API_KEY }
 
@@ -64,6 +73,7 @@ function Write-InstallerConfig([string]$Path, [bool]$MergeExisting) {
 $ExistingLauncher = Join-Path $InstallDir "android-run-windows.bat"
 $ExistingArm64 = Join-Path $InstallDir "bin\arm64-v8a\nl2sh"
 $ExistingArmv7 = Join-Path $InstallDir "bin\armeabi-v7a\nl2sh"
+$ExistingX86 = Join-Path $InstallDir "bin\x86_64\nl2sh"
 $ExistingConfig = Join-Path $InstallDir "config.toml"
 if (Test-Path -LiteralPath $InstallDir) {
     if (-not (Test-Path -LiteralPath $InstallDir -PathType Container)) {
@@ -74,6 +84,9 @@ if (Test-Path -LiteralPath $InstallDir) {
         (Test-Path -LiteralPath $ExistingArmv7 -PathType Leaf))
     if (-not $Complete) {
         throw "install directory exists but is incomplete: $InstallDir"
+    }
+    if (-not (Test-Path -LiteralPath $ExistingX86 -PathType Leaf)) {
+        Write-Warning "Existing package lacks x86_64; ARM devices can continue. For x86_64, back up config.toml and use -InstallDir with a new directory and a release containing bin/x86_64/nl2sh."
     }
     if (-not $KeepExistingConfig -or -not (Test-Path -LiteralPath $ExistingConfig -PathType Leaf)) {
         Write-InstallerConfig $ExistingConfig $true

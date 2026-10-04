@@ -62,3 +62,5 @@ API Key 通过环境变量传入；请在自己的私有终端中填写真实值
 继续阅读：[日常启动](android-adb.md)、[Termux](termux.md)、[源码构建](../development/build.md)。
 
 x86_64 设备与模拟器需要包含该 ABI 的新版发布包；旧的双 ABI 安装目录需先备份配置，再解压新版包到新目录。启动器优先选择原生 x86_64，不依赖 ARM 转译。内置自更新使用 `nl2sh-android-x86_64` 和对应 `.sha256`；Termux 包仍通过包管理器更新。
+
+安装器复用旧目录时，若缺少 `bin/x86_64/nl2sh` 会明确警告；旧 ARM 安装仍可继续使用。x86_64 用户请备份 `config.toml`，用 Bash/CMD 的 `--install-dir` 或 PowerShell 的 `-InstallDir` 指向新目录，选择包含 x86_64 的发行包。脚本帮助已列明三种 ABI 与原生 x86_64 优先策略。

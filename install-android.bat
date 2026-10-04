@@ -132,6 +132,8 @@ exit /b 1
 
 :usage
 echo Usage: install-android.bat [options]
+echo Supported Android ABIs: arm64-v8a, armeabi-v7a, x86_64 ^(API 26+^).
+echo The launcher detects the device ABI and prefers native x86_64.
 echo   --provider NAME       openrouter, openai, deepseek, moonshot, siliconflow,
 echo                         ollama, or custom ^(default: openrouter^)
 echo   --model NAME          model name; provider default is used when omitted

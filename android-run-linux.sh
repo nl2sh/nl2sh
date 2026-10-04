@@ -9,6 +9,8 @@ WEB_ONLY=false
 
 usage() {
   echo "Usage: android-run-linux.sh [--web-only]"
+  echo "Supported Android ABIs: arm64-v8a, armeabi-v7a, x86_64 (API 26+)."
+  echo "Device ABI is detected automatically; native x86_64 takes priority."
 }
 
 while (($# > 0)); do

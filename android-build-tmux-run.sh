@@ -104,7 +104,7 @@ case ",${ABILIST}," in
   *,x86_64,*) TARGET="x86_64-linux-android"; TERMUX_ARCH="x86_64" ;;
   *,arm64-v8a,*) TARGET="aarch64-linux-android"; TERMUX_ARCH="aarch64" ;;
   *,armeabi-v7a,*) TARGET="armv7-linux-androideabi"; TERMUX_ARCH="arm" ;;
-  *) die "unsupported device ABI '${ABILIST}'" ;;
+  *) die "unsupported device ABI '${ABILIST}'; supported ABIs are arm64-v8a, armeabi-v7a and x86_64" ;;
 esac
 echo "Device ABI: ${ABILIST}"
 echo "Selected Rust target: ${TARGET} (${TERMUX_ARCH})"

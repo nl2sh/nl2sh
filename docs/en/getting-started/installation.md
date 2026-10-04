@@ -62,3 +62,5 @@ Direct Android builds support `nl2sh update` or TUI `/update`: download the ABI-
 Continue with [daily startup](android-adb.md), [Termux](termux.md), or [source builds](../development/build.md).
 
 x86_64 devices and emulators require a new release archive containing that ABI. For an existing two-ABI installation, back up configuration and extract the new archive into a new directory. Launchers prefer native x86_64 without relying on ARM translation. Self-update uses `nl2sh-android-x86_64` and its `.sha256`; Termux packages continue to use package-manager updates.
+
+When reusing an older directory without `bin/x86_64/nl2sh`, installers issue a warning while allowing existing ARM installations to continue. For x86_64, back up `config.toml` and select a new directory with Bash/CMD `--install-dir` or PowerShell `-InstallDir`, using a release that contains x86_64. Script help lists all three ABIs and the native x86_64 preference.

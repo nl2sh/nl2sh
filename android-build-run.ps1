@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+Build and run nl2sh on Android.
+.DESCRIPTION
+Supported Android ABIs: arm64-v8a, armeabi-v7a, x86_64 (API 26+).
+The device ABI is detected automatically; native x86_64 takes priority.
+Requires the x86_64-linux-android Rust target and an Android NDK for x86_64 devices.
+#>
 param([switch]$WebOnly)
 
 $ErrorActionPreference = "Stop"
