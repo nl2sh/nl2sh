@@ -4,6 +4,12 @@ Last Updated: 2026-10-05
 
 ## Recent Changes
 
+- 新增 `tailcat_adb_pair`：Android 11+/shell-root 环境下强确认的 setup/share，引导 Settings 并读取当前配对信息，一个受管监听器共享双 ADB 和显式可选 Web 端口。配对码按用户需求返回模型/对话；审批后及启动前后复核配对码与端口，拒绝已有监听器自动替换；停止不关闭系统无线调试或撤销配对。同步双语指南、派生 Schema、Web 工具入口与 Agent 提示；复用既有确认链和子进程生命周期，不修改 PTY/终端恢复实现。
+
+- 无线 ADB 可行性：Android 15/API 35 竖屏模拟器通过 UI 启用开发者选项、无线调试及读取配对信息；直接 Tailcat 双端口共享/对端 forward 后，`adb pair`、`adb connect` 与隧道内 shell 读取 API 35 成功。测试使用独立 ADB 服务及临时密钥；该次原型结果未覆盖 Agent 审批或三端口共享；当时内置共享工具仅支持单端口，后续工具实现与验证见新增记录。
+
+- 补齐双语 Tailcat 使用指南：覆盖八个工具参数、远端 `forward` 访问 9999/不同本地端口、双向原始流与接收箱配套操作、scp 前提和进程监听器生命周期。仅文档变更，不改变公共接口、Android 执行、安全审批或 PTY/终端恢复。参数与对端语法已核对工具实现和 Tailcat v0.7.0 CLI 帮助；双语完整性、严格 MkDocs 构建、构建后站点检查及 `git diff --check` 通过。
+
 - 完善双语 Tailcat DNS 排障文档，说明旧 Android 不支持 `resnsend` 时文本错误被误读为长度的原因、Go 错误地址与实际 Unix socket 解析路径的区别，以及代理和兼容二进制恢复方案；记录 API 27/API 35 的同二进制竖屏对照。仅更新文档，不改变公共接口、安全确认、Android 执行或 PTY/终端恢复实现。
 
 - 新增 `nl2sh_config` 自身配置工具，支持 list/get/set/reset、受限点分工具键、枚举合法值、默认/磁盘/加载解析/当前任务快照。固定当前配置来源，凭据仅显示配置状态且拒绝模型改写；普通修改确认，安全、Root、桥接、工具、网络和审计配置强确认。共享配置加载语义，保留其他字段与注释，不把环境/CLI 值写盘；有界读取、审批后内容复核、工具写入锁及私有原子替换。当前任务不热重载，新 Web 任务/bridge 进程加载，TUI 重启应用；同步双语工具页、导航、参考和更新记录，不修改 PTY/终端恢复实现。
@@ -364,6 +370,9 @@ Last Updated: 2026-10-05
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- `tailcat_adb_pair`：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings` 与完整 `cargo test` 通过（350 项通过，4 项显式 live 测试忽略），新增 7 项安全/状态/配对信息回归；Web 构建和 27 项测试通过。Android API 26 x86_64 的 `tailcat_adb_pair_device_check` release 示例构建及 AArch64/ARMv7 `cargo check --no-default-features` 通过；API 35 竖屏模拟器工具级验证通过 setup、返回配对码、拒绝审批、三端口共享、对端配对/连接/设备 shell、HTTP 200、已有监听器拒绝替换及停止清理。示例复用 Tool Runtime 并逐项要求 CONFIRM，不请求模型，未覆盖完整 TUI/Web 审批界面或厂商设备。
+
 
 - Tailcat DNS 文档：`python3 scripts/check-docs.py`、`mkdocs build --strict`、`python3 scripts/check-docs.py --site site`、`cargo fmt --all -- --check` 和 `git diff --check` 通过；49 对页面的语言路由、编辑链接和同页语言切换完整。
 

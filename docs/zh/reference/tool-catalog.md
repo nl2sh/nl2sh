@@ -1731,6 +1731,70 @@ DeviceIdle 与白名单证据。
 }
 ```
 
+## `tailcat_adb_pair`
+
+Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界面；share 强确认后共享当前配对/连接及可选 Web 端口，返回配对码与对端命令。需 shell/root；不自动配对远端，不替换已有监听器。
+
+```json
+{
+  "$defs": {
+    "Action": {
+      "enum": [
+        "setup",
+        "share"
+      ],
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/Action",
+      "description": "setup opens Settings and the pairing dialog; share approves current ports and starts Tailcat."
+    },
+    "local_connect_port": {
+      "default": 13702,
+      "description": "Peer-local ADB connection listener used in the generated command. Default 13702.",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "local_pair_port": {
+      "default": 13701,
+      "description": "Peer-local pairing listener used in the generated command. Default 13701.",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "local_web_port": {
+      "default": 19999,
+      "description": "Peer-local optional Web listener used in the generated command. Default 19999.",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "web_port": {
+      "default": null,
+      "description": "Optional existing localhost Web service to share as well, e.g. 9999. Omitted by default.",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "type": "object"
+}
+```
+
 ## `tailcat_check`
 
 检查已配置程序及版本，不下载。

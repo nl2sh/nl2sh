@@ -128,6 +128,7 @@ pub fn disable_managed_tailcat_for_bridge(config: &mut Config) {
         "tailcat_receive",
         "tailcat_receive_stream",
         "tailcat_serve",
+        "tailcat_adb_pair",
         "tailcat_status",
         "tailcat_stop",
     ] {
@@ -148,6 +149,7 @@ pub fn optional_tool_names() -> &'static [&'static str] {
         "tailcat_receive_stream",
         "tailcat_send_file",
         "tailcat_serve",
+        "tailcat_adb_pair",
         "tailcat_status",
         "tailcat_stop",
     ]
@@ -165,6 +167,7 @@ pub fn optional_group(name: &str) -> Option<&'static str> {
         | "tailcat_receive_stream"
         | "tailcat_send_file"
         | "tailcat_serve"
+        | "tailcat_adb_pair"
         | "tailcat_status"
         | "tailcat_stop" => Some("tailcat"),
         _ => None,
@@ -504,6 +507,7 @@ mod tests {
         assert!(registry.get("inspect_apk").is_some());
         assert!(registry.get("tailcat_check").is_some());
         assert!(registry.get("tailcat_install").is_some());
+        assert!(registry.get("tailcat_adb_pair").is_some());
         assert!(registry.get("decompile_apk_class").is_none());
         assert!(registry.get("tailcat_serve").is_none());
         config.tool_groups.insert("tailcat".into(), false);
@@ -520,6 +524,7 @@ mod tests {
         assert!(bridge.get("tailcat_check").is_some());
         assert!(bridge.get("tailcat_receive").is_none());
         assert!(bridge.get("tailcat_serve").is_none());
+        assert!(bridge.get("tailcat_adb_pair").is_none());
     }
 
     #[test]

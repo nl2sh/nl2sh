@@ -1,5 +1,7 @@
 //! Opt-in Tailcat operations with argv-only execution and managed listeners.
 
+mod adb_pair;
+
 use super::{
     definition, parse_args, PreparedExecution, PreparedToolCall, Tool, ToolCategory, ToolContext,
     ToolMetadata, ToolOutput, ToolRisk,
@@ -34,6 +36,7 @@ static META: &[ToolMetadata] = &[
     ToolMetadata { name: "tailcat_receive_stream", description: "Start a managed raw Tailcat receiver, saving one incoming byte stream to a new file. Return its address.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_send_file", description: "Send an existing file to a Tailcat address. Use mode=stream for a raw receiver or mode=copy for a file drop box (requires scp).", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_serve", description: "Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
+    ToolMetadata { name: "tailcat_adb_pair", description: "Guide Android 11+ wireless debugging with action=setup, then action=share to expose the current pairing and TLS connection ports plus an optional Web port through one managed Tailcat listener. Strong confirmation is required. Returns the current pairing code to the model/conversation after approval. Requires shell/root and an installed Tailcat. Does not pair the remote computer automatically or stop an existing listener.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_status", description: "Inspect this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::ReadOnly, requires: &[], parallel_safe: true },
     ToolMetadata { name: "tailcat_stop", description: "Stop this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
 ];
@@ -93,11 +96,15 @@ impl Tool for TailcatTool {
             "tailcat_receive_stream" => definition::<ReceiveStream>(name, description),
             "tailcat_send_file" => definition::<SendFile>(name, description),
             "tailcat_serve" => definition::<Serve>(name, description),
+            "tailcat_adb_pair" => definition::<adb_pair::Args>(name, description),
             _ => definition::<Empty>(name, description),
         }
     }
 
     async fn prepare(&self, ctx: &ToolContext<'_>, arguments: Value) -> Result<PreparedToolCall> {
+        if self.0.name == "tailcat_adb_pair" {
+            return adb_pair::prepare(ctx, parse_args(self.0.name, arguments)?).await;
+        }
         let binary = ctx
             .config
             .context("Tailcat configuration unavailable")?

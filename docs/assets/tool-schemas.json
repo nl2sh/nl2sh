@@ -473,6 +473,67 @@
     }
   },
   {
+    "description": "Guide Android 11+ wireless debugging with action=setup, then action=share to expose the current pairing and TLS connection ports plus an optional Web port through one managed Tailcat listener. Strong confirmation is required. Returns the current pairing code to the model/conversation after approval. Requires shell/root and an installed Tailcat. Does not pair the remote computer automatically or stop an existing listener.",
+    "name": "tailcat_adb_pair",
+    "parameters": {
+      "$defs": {
+        "Action": {
+          "enum": [
+            "setup",
+            "share"
+          ],
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "setup opens Settings and the pairing dialog; share approves current ports and starts Tailcat."
+        },
+        "local_connect_port": {
+          "default": 13702,
+          "description": "Peer-local ADB connection listener used in the generated command. Default 13702.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "local_pair_port": {
+          "default": 13701,
+          "description": "Peer-local pairing listener used in the generated command. Default 13701.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "local_web_port": {
+          "default": 19999,
+          "description": "Peer-local optional Web listener used in the generated command. Default 19999.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "web_port": {
+          "default": null,
+          "description": "Optional existing localhost Web service to share as well, e.g. 9999. Omitted by default.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "description": "Inspect this nl2sh process's managed Tailcat listener.",
     "name": "tailcat_status",
     "parameters": {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Add strongly confirmed `tailcat_adb_pair`: guide Android 11+ Wireless debugging, revalidate current pairing information, share pairing/connection and optional Web ports, and return the pairing code and peer commands; reject stale approvals and replacement of existing listeners.
+
+- Document arguments for all eight Tailcat tools, peer-side `forward` access to port 9999 and port mappings, and raw-stream/drop-box transfers in both directions.
+
 - Expand Tailcat documentation for the Android 8/9 DNS protocol incompatibility, diagnostics, and recovery. Record portrait emulator comparisons using the same v0.7.0 binary: failure on Android 8.1/API 27 and successful HTTP forwarding on Android 15/API 35, with explicit validation limits.
 
 - Add model-facing `nl2sh_config` with list/get/set/reset, dotted tool switches, and persisted/current-task inspection. Credentials are redacted and user-managed; writes require approval and sensitive policies require strong approval. Preserve other fields/comments and reject stale-preview overwrites. Changes apply on reload, without altering the current task.
