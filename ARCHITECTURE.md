@@ -8,6 +8,8 @@ nl2sh 是以 Android 原生 shell 为一等环境、Termux 为兼容环境的类
 
 Android companion 与 JADX helper 源码分别由 `nl2sh/android-bridge` 和 `nl2sh/jadx-helper` 独立 Git 仓库维护，采用独立 Gradle 根工程、CI 和标签发布；主仓库不通过相邻目录或 submodule 构建它们。包名、ContentProvider authority 与 `com.nl2sh.jadx.Main` 入口保持兼容。主仓库 Release 不再重发 helper；运行时保留历史 `v1.0.4` URL 与固定摘要，新 helper 仍需显式来源与摘要配置。
 
+Android API 26+ 原生发行支持 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`，分别映射 `aarch64-linux-android`、`armv7-linux-androideabi`、`x86_64-linux-android`。主机启动器优先选择 x86_64 原生 ABI，统一包、自更新资产与 Termux aarch64/arm/x86_64 deb/APT 使用相同发布矩阵；文档合并继续兼容既有双架构签名快照。
+
 ## 系统整体架构
 
 ```text

@@ -44,19 +44,25 @@ for /f "usebackq delims=" %%A in (`adb -s "!SERIAL!" shell getprop ro.product.cp
 if not defined ABILIST for /f "usebackq delims=" %%A in (`adb -s "!SERIAL!" shell getprop ro.product.cpu.abi 2^>nul`) do if not defined ABILIST set "ABILIST=%%A"
 echo Device ABI: !ABILIST!
 
-echo(!ABILIST!| findstr /i /c:"arm64-v8a" >nul
+echo(,!ABILIST!,| findstr /i /c:",x86_64," >nul
 if not errorlevel 1 (
-  set "LOCAL_BINARY=%~dp0bin\arm64-v8a\nl2sh"
-  set "SELECTED_ABI=arm64-v8a (64-bit)"
+  set "LOCAL_BINARY=%~dp0bin\x86_64\nl2sh"
+  set "SELECTED_ABI=x86_64 (64-bit)"
 ) else (
-  echo(!ABILIST!| findstr /i /c:"armeabi-v7a" >nul
-  if errorlevel 1 (
-    echo ERROR: unsupported device ABI: !ABILIST!
-    echo This package supports arm64-v8a and armeabi-v7a only.
-    goto :fail
+  echo(,!ABILIST!,| findstr /i /c:",arm64-v8a," >nul
+  if not errorlevel 1 (
+    set "LOCAL_BINARY=%~dp0bin\arm64-v8a\nl2sh"
+    set "SELECTED_ABI=arm64-v8a (64-bit)"
+  ) else (
+    echo(,!ABILIST!,| findstr /i /c:",armeabi-v7a," >nul
+    if errorlevel 1 (
+      echo ERROR: unsupported device ABI: !ABILIST!
+      echo This package supports arm64-v8a, armeabi-v7a and x86_64.
+      goto :fail
+    )
+    set "LOCAL_BINARY=%~dp0bin\armeabi-v7a\nl2sh"
+    set "SELECTED_ABI=armeabi-v7a (32-bit)"
   )
-  set "LOCAL_BINARY=%~dp0bin\armeabi-v7a\nl2sh"
-  set "SELECTED_ABI=armeabi-v7a (32-bit)"
 )
 if not exist "!LOCAL_BINARY!" (
   echo ERROR: packaged binary is missing: !LOCAL_BINARY!

@@ -93,7 +93,12 @@ def verify(repo, fingerprint=FINGERPRINT, base=None):
         if verified.read_bytes() != (stable / 'Release').read_bytes():
             raise ValueError('InRelease and Release disagree')
     release = (stable / 'Release').read_text()
-    if not re.search(r'^Codename: stable$', release, re.M) or not re.search(r'^Architectures: aarch64 arm$', release, re.M):
+    architectures = re.search(r'^Architectures: (.+)$', release, re.M)
+    arches = architectures.group(1).split() if architectures else []
+    # Keep pre-x86_64 stable snapshots publishable until the next release.
+    if not re.search(r'^Codename: stable$', release, re.M) or set(arches) not in (
+        {'aarch64', 'arm'}, {'aarch64', 'arm', 'x86_64'}
+    ) or len(arches) != len(set(arches)):
         raise ValueError('unexpected APT distribution or architectures')
     hashes = {}
     active = False
@@ -109,7 +114,7 @@ def verify(repo, fingerprint=FINGERPRINT, base=None):
                 raise ValueError('invalid release digest')
             hashes[name] = (int(size), digest)
     packages = {}
-    for arch in ('aarch64', 'arm'):
+    for arch in arches:
         for suffix in ('Packages', 'Packages.gz'):
             name = f'main/binary-{arch}/{suffix}'
             size, digest = hashes[name]

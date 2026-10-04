@@ -4,6 +4,8 @@ Last Updated: 2026-10-04
 
 ## Recent Changes
 
+- 新增 Android API 26+ x86_64：交叉编译、Linux/Windows 构建与启动、统一发布包、自更新、Termux deb/APT 及 A2A 候选构建补齐 `x86_64-linux-android`。支持 ARM 转译的 x86_64 设备优先使用原生 ABI；签名 APT 合并同时兼容旧双架构与新三架构快照，逐架构验签及校验摘要。同步中英文安装、构建、发布和排障文档；无新增程序配置字段，安全确认链及 PTY 实现保持不变。 主机 `cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`、自更新定向回归、`cargo clippy --all-targets -- -D warnings`、14 项脚本回归、Bash 语法与 `git diff --check` 通过；代码派生参考检查、双语文档检查、`mkdocs build --strict` 和站点路由检查通过。Android API 26 x86_64 默认及 `--no-default-features` release 构建与 Termux deb 打包通过，ELF 核验为 x86-64 PIE、解释器 `/system/bin/linker64`。 Android 8.1/API 27 x86_64 模拟器运行验证通过：四个实例完成 `--version`、设备 ELF SHA-256 和 `bridge inspect`；普通 shell UID 下完成 TUI 启动、PTY `id`、修改批准/拒绝、危险 `eval` 二次确认后取消、命令超时、`/shell` 返回、窗口 resize、Ctrl+Q 退出与终端模式/控制字符/有效波特率恢复。Web-only 的 HTML/内嵌 JavaScript、版本/工具目录/设备概览 HTTP 接口和 SIGINT 退出通过；设备盘点按设计以 `partial` 保留未取得的磁盘容量字段。
+
 - 按实现完善 A2A/MCP 双语部署与协议文档：说明任务/设备结果、直接调用与咨询、审批及显式自动审批、HTTP/stdio 传输、大小/超时限制、会话存储与失败处理；移除尚未推送的安装步骤，补充独立项目与组织文档入口。文档和配置注释变更不修改运行时接口、安全分类、Android 或 PTY 行为。
 
 - Android 项目拆分：Android Bridge 与 JADX helper 的模块 Git 历史分别提取为独立 `nl2sh/android-bridge`、`nl2sh/jadx-helper` 工程；各自维护 Gradle Wrapper、Android CI、标签 Release、许可证和双语文档。主仓库移除两个源码目录及 helper 构建/重发流程，改为链接独立项目；现有运行时继续固定历史 `v1.0.4` helper URL 与摘要。包名、Binder authority、DEX 入口、安全分类、确认链及 PTY 行为保持兼容。

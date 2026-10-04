@@ -32,6 +32,7 @@ jobs:
         include:
           - target: aarch64-linux-android
           - target: armv7-linux-androideabi
+          - target: x86_64-linux-android
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -98,6 +99,7 @@ jobs:
           case "${{ matrix.target }}" in
             aarch64-linux-android) ABI="arm64-v8a" ;;
             armv7-linux-androideabi) ABI="armeabi-v7a" ;;
+            x86_64-linux-android) ABI="x86_64" ;;
           esac
           ASSET="nl2sh-android-${ABI}"
           cp "target/${{ matrix.target }}/release/nl2sh" "${ASSET}"
@@ -150,19 +152,27 @@ jobs:
           name: binary-armv7-linux-androideabi
           path: artifacts/armv7-linux-androideabi
 
+      - name: Download x86_64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-x86_64-linux-android
+          path: artifacts/x86_64-linux-android
+
       - name: Assemble package
         run: |
           set -euo pipefail
           NAME="nl2sh-android"
-          mkdir -p "dist/${NAME}/bin/arm64-v8a" "dist/${NAME}/bin/armeabi-v7a"
+          mkdir -p "dist/${NAME}/bin/arm64-v8a" "dist/${NAME}/bin/armeabi-v7a" "dist/${NAME}/bin/x86_64"
           cp artifacts/aarch64-linux-android/nl2sh "dist/${NAME}/bin/arm64-v8a/nl2sh"
           cp artifacts/armv7-linux-androideabi/nl2sh "dist/${NAME}/bin/armeabi-v7a/nl2sh"
+          cp artifacts/x86_64-linux-android/nl2sh "dist/${NAME}/bin/x86_64/nl2sh"
           cp android-run-linux.sh android-run-windows.bat install-android.sh install-android.bat install-android.ps1 config.toml.example README.md README_EN.md LICENSE AGENTS.md "dist/${NAME}/"
           cp -r docs "dist/${NAME}/docs"
           chmod +x "dist/${NAME}/android-run-linux.sh" \
             "dist/${NAME}/install-android.sh" \
             "dist/${NAME}/bin/arm64-v8a/nl2sh" \
-            "dist/${NAME}/bin/armeabi-v7a/nl2sh"
+            "dist/${NAME}/bin/armeabi-v7a/nl2sh" \
+            "dist/${NAME}/bin/x86_64/nl2sh"
 
       - name: Create archives
         run: |
@@ -195,12 +205,18 @@ jobs:
         with:
           name: termux-armv7-linux-androideabi
           path: artifacts/arm
+      - uses: actions/download-artifact@v4
+        with:
+          name: termux-x86_64-linux-android
+          path: artifacts/x86_64
       - name: Build architecture-specific debs
         run: |
           set -euo pipefail
-          chmod +x artifacts/aarch64/nl2sh artifacts/arm/nl2sh
+          chmod +x artifacts/aarch64/nl2sh artifacts/arm/nl2sh artifacts/x86_64/nl2sh
           packaging/termux/build-deb.sh aarch64 artifacts/aarch64/nl2sh dist
           packaging/termux/build-deb.sh arm artifacts/arm/nl2sh dist
+          packaging/termux/build-deb.sh x86_64 artifacts/x86_64/nl2sh dist
+          dpkg-deb --info dist/nl2sh_*_x86_64.deb
           dpkg-deb --info dist/nl2sh_*_aarch64.deb
           dpkg-deb --info dist/nl2sh_*_arm.deb
       - uses: actions/upload-artifact@v4
@@ -281,4 +297,6 @@ jobs:
             artifacts/**/nl2sh-android-arm64-v8a.sha256
             artifacts/**/nl2sh-android-armeabi-v7a
             artifacts/**/nl2sh-android-armeabi-v7a.sha256
+            artifacts/**/nl2sh-android-x86_64
+            artifacts/**/nl2sh-android-x86_64.sha256
             artifacts/**/*.deb

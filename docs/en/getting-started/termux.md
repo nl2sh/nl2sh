@@ -13,7 +13,7 @@ Use `/config` to configure a model on first launch. Termux is a compatibility ru
 
 ## Independent signed APT repository
 
-This channel publishes `aarch64` and `arm` only. Add the source:
+This channel publishes `aarch64`, `arm`, and `x86_64`. Add the source:
 
 ```bash
 mkdir -p "$PREFIX/etc/apt/keyrings"
@@ -27,7 +27,7 @@ The public key fingerprint is `5230 D3A7 CCBE ED46 16D3 9C51 FC6A D1BC 63F7 D4D8
 
 ## Local deb
 
-Download the matching Release package, check `dpkg --print-architecture`, and run `apt install ./nl2sh_VERSION_aarch64.deb` or the `_arm.deb` equivalent. Select one version at a time. Desktop Linux binaries and Android debs are not interchangeable; this Release channel does not publish x86 packages.
+Download the matching Release package, check `dpkg --print-architecture`, and run `apt install ./nl2sh_VERSION_aarch64.deb` or the `_arm.deb` / `_x86_64.deb` equivalent. Select one version at a time. Desktop Linux binaries and Android debs are not interchangeable; this Release channel does not publish 32-bit x86 (i686) packages.
 
 ## Configuration, updates, and removal
 

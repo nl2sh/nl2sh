@@ -2,14 +2,14 @@
 
 | 使用环境 | 安装方式 | 所需条件 |
 | --- | --- | --- |
-| 电脑连接 Android | Release ZIP + ADB 启动器 | 主机 adb，Android API 26+，ARM64/ARMv7 |
+| 电脑连接 Android | Release ZIP + ADB 启动器 | 主机 adb，Android API 26+，ARM64/ARMv7/x86_64 |
 | 电脑一键安装 | Bash / PowerShell / CMD 安装脚本 | 主机联网及 adb |
 | Android Termux | TUR 或签名 APT / 本地 deb | Termux 包管理器 |
 | 开发者 | 源码交叉编译 | stable Rust、Node.js 22+、Android NDK |
 
 ## Release 安装
 
-从 [GitHub Releases](https://github.com/nl2sh/nl2sh/releases/latest) 下载 `nl2sh-android.zip` 与 `SHA256SUMS`，核对 ZIP 的 SHA-256 后完整解压。包同时包含 `bin/arm64-v8a/nl2sh` 与 `bin/armeabi-v7a/nl2sh`，启动器自动选择 ABI；不要只拿桌面 Linux 二进制推送到 Android。
+从 [GitHub Releases](https://github.com/nl2sh/nl2sh/releases/latest) 下载 `nl2sh-android.zip` 与 `SHA256SUMS`，核对 ZIP 的 SHA-256 后完整解压。包同时包含 `bin/arm64-v8a/nl2sh` 、`bin/armeabi-v7a/nl2sh` 与 `bin/x86_64/nl2sh`，启动器自动选择 ABI；不要只拿桌面 Linux 二进制推送到 Android。
 
 ```bash
 sha256sum nl2sh-android.zip
@@ -60,3 +60,5 @@ API Key 通过环境变量传入；请在自己的私有终端中填写真实值
 直接 Android 版本可使用 `nl2sh update` 或 TUI `/update`，按 ABI 下载裸二进制、核对 SHA-256 后原子替换；下次启动使用新程序。安装目录中的启动器仍会依据本地包摘要部署本地版本，因此要同步下载新版包，避免再次启动旧包覆盖设备更新。Termux 包管理构建使用 `pkg upgrade nl2sh`。
 
 继续阅读：[日常启动](android-adb.md)、[Termux](termux.md)、[源码构建](../development/build.md)。
+
+x86_64 设备与模拟器需要包含该 ABI 的新版发布包；旧的双 ABI 安装目录需先备份配置，再解压新版包到新目录。启动器优先选择原生 x86_64，不依赖 ARM 转译。内置自更新使用 `nl2sh-android-x86_64` 和对应 `.sha256`；Termux 包仍通过包管理器更新。

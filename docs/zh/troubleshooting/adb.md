@@ -17,6 +17,6 @@ adb shell ls -l /data/local/tmp/nl2sh
 adb shell file /data/local/tmp/nl2sh
 ```
 
-ARM64 使用 `aarch64-linux-android`；32 位 ARM 使用 `armv7-linux-androideabi`。`file` 并非每台设备都有，可在主机检查下载程序。不要复制桌面 glibc 程序。
+ARM64 使用 `aarch64-linux-android`；32 位 ARM 使用 `armv7-linux-androideabi`；x86_64 使用 `x86_64-linux-android`。`file` 并非每台设备都有，可在主机检查下载程序。不要复制桌面 glibc 程序。
 
 配置不可读时核对启动身份与文件属主，不放宽密钥文件权限。滚轮异常时用 PageUp/PageDown；Windows 使用官方 BAT 启动器的 alternate-scroll 模式。正常退出用 Ctrl+Q，避免直接关闭终端；异常后可在主机终端用 `reset` 恢复显示。

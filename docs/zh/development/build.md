@@ -17,10 +17,11 @@ cargo build --release
 主机安装 NDK r28c 或兼容版本与 Rust targets：
 
 ```bash
-rustup target add aarch64-linux-android armv7-linux-androideabi
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 export ANDROID_NDK_HOME=/path/to/android-ndk
 ./cross-compile.sh
 RUST_TARGET=armv7-linux-androideabi ./cross-compile.sh
+RUST_TARGET=x86_64-linux-android ./cross-compile.sh
 ./android-build-run.sh
 ```
 
@@ -33,9 +34,17 @@ $env:ANDROID_NDK_HOME = 'C:/Android/Sdk/ndk/28.2.13676358'
 
 脚本按设备 ABI 选择目标，显式目标不匹配时拒绝。设备不需要 Termux、Bash 或 GNU 工具。不要把本地 SDK 路径提交到项目。
 
+支持的映射如下；x86_64 设备优先使用原生程序，即使 ABI 列表也含 ARM 转译支持。统一打包脚本 `pack-release.sh` / `pack-release.ps1` 构建三个 ABI。
+
+| Android ABI | Rust target | Termux |
+| --- | --- | --- |
+| `arm64-v8a` | `aarch64-linux-android` | `aarch64` |
+| `armeabi-v7a` | `armv7-linux-androideabi` | `arm` |
+| `x86_64` | `x86_64-linux-android` | `x86_64` |
+
 ## Termux 打包
 
-`./pack-termux-release.sh` 输出 aarch64/arm deb。Windows `pack-termux-release.ps1` 用 Windows NDK 编译、WSL dpkg-deb 封包；WSL 不重复编译。包管理构建 `NL2SH_PACKAGE_MANAGER_BUILD=1` 禁用 self-update。
+`./pack-termux-release.sh` 输出 aarch64/arm/x86_64 deb。Windows `pack-termux-release.ps1` 用 Windows NDK 编译、WSL dpkg-deb 封包；WSL 不重复编译。包管理构建 `NL2SH_PACKAGE_MANAGER_BUILD=1` 禁用 self-update。
 
 开发部署 `android-build-tmux-run.sh` 前，在 Termux 配置 openssh/tmux、passwd、sshd；脚本按 ABI 构建并 SSH/tmux 安装，变量见 [环境参考](../reference/environment-variables.md)。
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Validated native execution on Android 8.1/API 27 x86_64 emulators, including TUI/PTY, mutation and dangerous-action confirmation, timeouts, terminal restoration, resizing, and Web-only pages/APIs.
+
+- Added native Android API 26+ x86_64 builds, launchers, self-update assets, combined release archives, and self-hosted Termux deb/APT packages. Launchers prefer native x86_64; signed APT merging remains compatible with older two-architecture snapshots.
+
 - Document A2A/MCP wire formats, task/result semantics, limits, approval and troubleshooting; refresh client setup and explain independently maintained Android projects.
 
 ### Added

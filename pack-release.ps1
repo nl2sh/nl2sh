@@ -20,7 +20,8 @@ $Toolchain = Join-Path $NdkDir "toolchains\llvm\prebuilt\windows-x86_64"
 $Ar = Join-Path $Toolchain "bin\llvm-ar.exe"
 $Targets = @(
     @{ Rust = "aarch64-linux-android"; Clang = "aarch64-linux-android"; Prefix = "AARCH64_LINUX_ANDROID"; Suffix = "aarch64_linux_android"; Abi = "arm64-v8a" },
-    @{ Rust = "armv7-linux-androideabi"; Clang = "armv7a-linux-androideabi"; Prefix = "ARMV7_LINUX_ANDROIDEABI"; Suffix = "armv7_linux_androideabi"; Abi = "armeabi-v7a" }
+    @{ Rust = "armv7-linux-androideabi"; Clang = "armv7a-linux-androideabi"; Prefix = "ARMV7_LINUX_ANDROIDEABI"; Suffix = "armv7_linux_androideabi"; Abi = "armeabi-v7a" },
+    @{ Rust = "x86_64-linux-android"; Clang = "x86_64-linux-android"; Prefix = "X86_64_LINUX_ANDROID"; Suffix = "x86_64_linux_android"; Abi = "x86_64" }
 )
 
 $InstalledTargets = @(& rustup target list --installed)
@@ -45,9 +46,10 @@ try {
         } finally { Pop-Location }
     }
 
-    New-Item -ItemType Directory -Force -Path (Join-Path $PackageDir "bin\arm64-v8a"), (Join-Path $PackageDir "bin\armeabi-v7a"), $DistDir | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $PackageDir "bin\arm64-v8a"), (Join-Path $PackageDir "bin\armeabi-v7a"), (Join-Path $PackageDir "bin\x86_64"), $DistDir | Out-Null
     Copy-Item -LiteralPath (Join-Path $ProjectDir "target\aarch64-linux-android\release\nl2sh") -Destination (Join-Path $PackageDir "bin\arm64-v8a\nl2sh")
     Copy-Item -LiteralPath (Join-Path $ProjectDir "target\armv7-linux-androideabi\release\nl2sh") -Destination (Join-Path $PackageDir "bin\armeabi-v7a\nl2sh")
+    Copy-Item -LiteralPath (Join-Path $ProjectDir "target\x86_64-linux-android\release\nl2sh") -Destination (Join-Path $PackageDir "bin\x86_64\nl2sh")
     foreach ($File in @("android-run-linux.sh", "android-run-windows.bat", "install-android.sh", "install-android.bat", "install-android.ps1", "config.toml.example", "README.md", "README_EN.md", "LICENSE", "AGENTS.md")) {
         Copy-Item -LiteralPath (Join-Path $ProjectDir $File) -Destination $PackageDir
     }

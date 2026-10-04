@@ -17,6 +17,6 @@ adb shell ls -l /data/local/tmp/nl2sh
 adb shell file /data/local/tmp/nl2sh
 ```
 
-ARM64 uses `aarch64-linux-android`; 32-bit ARM uses `armv7-linux-androideabi`. Not every device has `file`; inspect the downloaded binary on the host if needed. Never deploy desktop glibc executables.
+ARM64 uses `aarch64-linux-android`; 32-bit ARM uses `armv7-linux-androideabi`; x86_64 uses `x86_64-linux-android`. Not every device has `file`; inspect the downloaded binary on the host if needed. Never deploy desktop glibc executables.
 
 For unreadable config, check identity/ownership instead of weakening key-file permissions. Use PageUp/PageDown for wheel trouble; official Windows BAT enables alternate-scroll compatibility. Quit normally with Ctrl+Q. A host `reset` can restore display after abnormal termination.

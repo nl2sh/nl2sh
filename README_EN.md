@@ -10,7 +10,7 @@ Let AI complete real tasks in Android Shell. nl2sh is a multi-turn tool-calling 
 
 ## Capabilities
 
-- Native Android API 26+ ARM64/ARMv7 deployment, without Termux or device Rust/Node.js.
+- Native Android API 26+ ARM64/ARMv7/x86_64 deployment, without Termux or device Rust/Node.js.
 - OpenAI-compatible models, multi-turn Agent, streaming replies, recovery, and @ file references.
 - Device/UI/file/network/audio tools; optional APK/JADX, Tailcat, and ima.
 - Local TUI/Web risk classification and approvals, retained for Root and edited commands.

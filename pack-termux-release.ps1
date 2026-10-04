@@ -28,7 +28,8 @@ $Toolchain = Join-Path $NdkDir "toolchains\llvm\prebuilt\windows-x86_64"
 $Ar = Join-Path $Toolchain "bin\llvm-ar.exe"
 $Targets = @(
     @{ Rust = "aarch64-linux-android"; Clang = "aarch64-linux-android"; Prefix = "AARCH64_LINUX_ANDROID"; Suffix = "aarch64_linux_android"; Termux = "aarch64" },
-    @{ Rust = "armv7-linux-androideabi"; Clang = "armv7a-linux-androideabi"; Prefix = "ARMV7_LINUX_ANDROIDEABI"; Suffix = "armv7_linux_androideabi"; Termux = "arm" }
+    @{ Rust = "armv7-linux-androideabi"; Clang = "armv7a-linux-androideabi"; Prefix = "ARMV7_LINUX_ANDROIDEABI"; Suffix = "armv7_linux_androideabi"; Termux = "arm" },
+    @{ Rust = "x86_64-linux-android"; Clang = "x86_64-linux-android"; Prefix = "X86_64_LINUX_ANDROID"; Suffix = "x86_64_linux_android"; Termux = "x86_64" }
 )
 
 $InstalledTargets = @(& rustup target list --installed)
@@ -74,5 +75,5 @@ foreach ($Target in $Targets) {
 
 Write-Host "Created Termux packages:"
 Get-ChildItem -LiteralPath $DistDir -File | Where-Object {
-    $_.Name -match '^nl2sh_.+_(aarch64|arm)\.deb$'
+    $_.Name -match '^nl2sh_.+_(aarch64|arm|x86_64)\.deb$'
 } | ForEach-Object { Write-Host $_.FullName }

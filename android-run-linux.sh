@@ -119,14 +119,17 @@ if [[ -z "${ABILIST}" ]]; then
   ABILIST="$("${ADB[@]}" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
 fi
 echo "Device ABI: ${ABILIST}"
-if [[ ",${ABILIST}," == *",arm64-v8a,"* ]]; then
+if [[ ",${ABILIST}," == *",x86_64,"* ]]; then
+  LOCAL_BINARY="${SCRIPT_DIR}/bin/x86_64/nl2sh"
+  SELECTED_ABI="x86_64 (64-bit)"
+elif [[ ",${ABILIST}," == *",arm64-v8a,"* ]]; then
   LOCAL_BINARY="${SCRIPT_DIR}/bin/arm64-v8a/nl2sh"
   SELECTED_ABI="arm64-v8a (64-bit)"
 elif [[ ",${ABILIST}," == *",armeabi-v7a,"* ]]; then
   LOCAL_BINARY="${SCRIPT_DIR}/bin/armeabi-v7a/nl2sh"
   SELECTED_ABI="armeabi-v7a (32-bit)"
 else
-  die "unsupported device ABI '${ABILIST}'; this package supports arm64-v8a and armeabi-v7a"
+  die "unsupported device ABI '${ABILIST}'; this package supports arm64-v8a, armeabi-v7a and x86_64"
 fi
 [[ -f "${LOCAL_BINARY}" ]] || die "packaged binary is missing: ${LOCAL_BINARY}"
 echo "Selected binary: ${SELECTED_ABI}"

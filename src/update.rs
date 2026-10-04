@@ -115,9 +115,17 @@ fn asset_url(assets: &[GithubAsset], name: &str) -> Result<String> {
 }
 
 fn android_abi() -> Result<&'static str> {
-    match std::env::consts::ARCH {
+    if !cfg!(target_os = "android") {
+        bail!("self-update is only supported on Android")
+    }
+    android_abi_for_arch(std::env::consts::ARCH)
+}
+
+fn android_abi_for_arch(arch: &str) -> Result<&'static str> {
+    match arch {
         "aarch64" => Ok("arm64-v8a"),
         "arm" => Ok("armeabi-v7a"),
+        "x86_64" => Ok("x86_64"),
         other => bail!("self-update is unsupported on architecture {other}"),
     }
 }
@@ -176,6 +184,21 @@ fn sha256_hex(input: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selects_android_update_assets() -> Result<()> {
+        assert_eq!(android_abi_for_arch("aarch64")?, "arm64-v8a");
+        assert_eq!(android_abi_for_arch("arm")?, "armeabi-v7a");
+        assert_eq!(android_abi_for_arch("x86_64")?, "x86_64");
+        assert!(android_abi_for_arch("x86").is_err());
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(not(target_os = "android"))]
+    fn rejects_android_update_on_host() {
+        assert!(android_abi().is_err());
+    }
 
     #[test]
     fn compares_numeric_versions() -> Result<()> {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
-  echo "usage: $0 <aarch64|arm> <android-binary> <output-directory>" >&2
+  echo "usage: $0 <aarch64|arm|x86_64> <android-binary> <output-directory>" >&2
   exit 2
 fi
 
@@ -12,7 +12,7 @@ OUTPUT_DIR="$3"
 VERSION="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
 
 case "${TERMUX_ARCH}" in
-  aarch64|arm) ;;
+  aarch64|arm|x86_64) ;;
   *) echo "unsupported Termux architecture: ${TERMUX_ARCH}" >&2; exit 2 ;;
 esac
 

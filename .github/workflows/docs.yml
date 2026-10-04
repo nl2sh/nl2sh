@@ -46,7 +46,7 @@ jobs:
         run: |
           cargo run --quiet --example docs_export > "$RUNNER_TEMP/reference.json"
           python scripts/update-docs-reference.py "$RUNNER_TEMP/reference.json" --check
-      - name: Test APT preservation checks
+      - name: Test Android packaging and APT preservation
         run: python -m unittest discover -s scripts/tests -v
       - name: Strict bilingual build
         run: mkdocs build --strict

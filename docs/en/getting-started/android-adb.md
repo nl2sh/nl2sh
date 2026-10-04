@@ -11,7 +11,7 @@ adb shell getprop ro.product.cpu.abi
 adb shell getprop ro.product.cpu.abilist
 ```
 
-The state must be `device`, with API 26 or newer. Use `getprop` for supported ABIs; `uname -m` alone cannot prove 64-bit Android support. Launchers support ARM64 and ARMv7. Set `ADB_SERIAL` for multiple devices.
+The state must be `device`, with API 26 or newer. Use `getprop` for supported ABIs; `uname -m` alone cannot prove 64-bit Android support. Launchers support ARM64, ARMv7, and x86_64. Set `ADB_SERIAL` for multiple devices.
 
 Wireless Debugging uses `adb pair DEVICE_IP:PAIRING_PORT` followed by `adb connect DEVICE_IP:CONNECTION_PORT`; these ports can differ. Classic TCP ADB uses `adb tcpip 5555` while connected over USB, then a connection to the device IP on port 5555.
 

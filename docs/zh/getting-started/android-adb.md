@@ -11,7 +11,7 @@ adb shell getprop ro.product.cpu.abi
 adb shell getprop ro.product.cpu.abilist
 ```
 
-设备状态必须为 `device`，API 至少 26。以 `getprop` 的 ABI 为准；`uname -m` 不能证明 Android 支持 64 位程序。启动器支持 ARM64 与 ARMv7。多设备可设置 `ADB_SERIAL`。
+设备状态必须为 `device`，API 至少 26。以 `getprop` 的 ABI 为准；`uname -m` 不能证明 Android 支持 64 位程序。启动器支持 ARM64、ARMv7 与 x86_64。多设备可设置 `ADB_SERIAL`。
 
 无线调试先用 `adb pair DEVICE_IP:PAIRING_PORT` 配对，再 `adb connect DEVICE_IP:CONNECTION_PORT`；这两个端口可能不同。传统 TCP ADB 在 USB 连接时执行 `adb tcpip 5555`，再连接设备 IP 的 5555 端口。
 

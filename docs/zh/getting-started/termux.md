@@ -13,7 +13,7 @@ nl2sh
 
 ## 自建签名 APT
 
-独立自建渠道仅发布 `aarch64` 与 `arm`。添加源：
+独立自建渠道发布 `aarch64`、`arm` 与 `x86_64`。添加源：
 
 ```bash
 mkdir -p "$PREFIX/etc/apt/keyrings"
@@ -27,7 +27,7 @@ pkg install nl2sh
 
 ## 本地 deb
 
-从 Release 下载匹配包，用 `dpkg --print-architecture` 核对，执行 `apt install ./nl2sh_版本_aarch64.deb` 或 `_arm.deb`。每次只选一个版本。桌面 Linux 程序与 Android deb 不可互换；当前自建 Release 不发布 x86 包。
+从 Release 下载匹配包，用 `dpkg --print-architecture` 核对，执行 `apt install ./nl2sh_版本_aarch64.deb` 、`_arm.deb` 或 `_x86_64.deb`。每次只选一个版本。桌面 Linux 程序与 Android deb 不可互换；自建 Release 不发布 32 位 x86（i686）包。
 
 ## 配置、更新与卸载
 

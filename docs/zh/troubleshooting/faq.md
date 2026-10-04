@@ -4,7 +4,7 @@
 
 **必须 Termux 或 Root 吗？** 不必。直接 ADB 部署只需 Android API 26+ 与匹配 ABI；权限决定可用能力。[安装](../getting-started/installation.md) / [权限排查](permissions.md)。
 
-**支持哪些 ABI？** 官方直接部署包为 ARM64/ARMv7；自建 Termux 包为 aarch64/arm。不要从硬件 CPU 推断系统支持 64 位。[ADB 排查](adb.md)。
+**支持哪些 ABI？** 官方直接部署包为 ARM64/ARMv7/x86_64；自建 Termux 包为 aarch64/arm/x86_64。不要从硬件 CPU 推断系统支持 64 位。[ADB 排查](adb.md)。
 
 ## 模型与 Agent
 

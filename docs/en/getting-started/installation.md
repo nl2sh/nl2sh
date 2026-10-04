@@ -2,14 +2,14 @@
 
 | Environment | Installation | Requirements |
 | --- | --- | --- |
-| Computer connected to Android | Release ZIP and ADB launcher | Host adb, Android API 26+, ARM64/ARMv7 |
+| Computer connected to Android | Release ZIP and ADB launcher | Host adb, Android API 26+, ARM64/ARMv7/x86_64 |
 | Computer bootstrap | Bash / PowerShell / CMD installer | Host network access and adb |
 | Android Termux | TUR, signed APT, or local deb | Termux package manager |
 | Developer | Cross-compile source | Stable Rust, Node.js 22+, Android NDK |
 
 ## Release installation
 
-Download `nl2sh-android.zip` and `SHA256SUMS` from [GitHub Releases](https://github.com/nl2sh/nl2sh/releases/latest), compare the ZIP SHA-256, and extract the entire archive. It includes both `bin/arm64-v8a/nl2sh` and `bin/armeabi-v7a/nl2sh`; launchers select the ABI automatically. Desktop Linux binaries cannot replace Android builds.
+Download `nl2sh-android.zip` and `SHA256SUMS` from [GitHub Releases](https://github.com/nl2sh/nl2sh/releases/latest), compare the ZIP SHA-256, and extract the entire archive. It includes `bin/arm64-v8a/nl2sh`, `bin/armeabi-v7a/nl2sh`, and `bin/x86_64/nl2sh`; launchers select the ABI automatically. Desktop Linux binaries cannot replace Android builds.
 
 ```bash
 sha256sum nl2sh-android.zip
@@ -60,3 +60,5 @@ Explicitly select [Gitee](https://gitee.com/nl2sh/nl2sh): replace the script URL
 Direct Android builds support `nl2sh update` or TUI `/update`: download the ABI-specific executable, verify SHA-256, and atomically replace it. Restart to use the new program. Launchers deploy their local package according to its digest, so download the updated host package too; launching an old package can overwrite the device update. Termux package-manager builds use `pkg upgrade nl2sh`.
 
 Continue with [daily startup](android-adb.md), [Termux](termux.md), or [source builds](../development/build.md).
+
+x86_64 devices and emulators require a new release archive containing that ABI. For an existing two-ABI installation, back up configuration and extract the new archive into a new directory. Launchers prefer native x86_64 without relying on ARM translation. Self-update uses `nl2sh-android-x86_64` and its `.sha256`; Termux packages continue to use package-manager updates.

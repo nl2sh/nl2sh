@@ -32,7 +32,16 @@ RUST_TARGET=armv7-linux-androideabi \
   target/armv7-linux-androideabi/release/nl2sh \
   "${DIST_DIR}"
 
+echo "Building x86_64 Termux package..."
+RUST_TARGET=x86_64-linux-android \
+  NL2SH_PACKAGE_MANAGER_BUILD=1 \
+  ./cross-compile.sh
+./packaging/termux/build-deb.sh \
+  x86_64 \
+  target/x86_64-linux-android/release/nl2sh \
+  "${DIST_DIR}"
+
 echo "Created Termux packages:"
 find "${DIST_DIR}" -maxdepth 1 -type f \
-  \( -name 'nl2sh_*_aarch64.deb' -o -name 'nl2sh_*_arm.deb' \) \
+  \( -name 'nl2sh_*_aarch64.deb' -o -name 'nl2sh_*_arm.deb' -o -name 'nl2sh_*_x86_64.deb' \) \
   -print

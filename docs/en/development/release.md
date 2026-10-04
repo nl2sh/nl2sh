@@ -2,7 +2,7 @@
 
 ## Android releases
 
-`.github/workflows/release.yml` builds AArch64/ARMv7 with NDK r28c/API 26 on `v*` tags, along with JADX helper, self-update binaries/digests, combined ZIP/TAR, Termux debs, and signed APT snapshots before GitHub Release publication. Manual workflow_dispatch creates a draft; drafts do not update the live site.
+`.github/workflows/release.yml` builds AArch64/ARMv7/x86_64 with NDK r28c/API 26 on `v*` tags, along with self-update binaries/digests, combined ZIP/TAR, Termux debs, and signed APT snapshots before GitHub Release publication. Manual workflow_dispatch creates a draft; drafts do not update the live site.
 
 Local `pack-release.sh` / `pack-release.ps1` produces the same ZIP layout. Archives include bilingual README website links plus bilingual getting-started Markdown and media, without the deleted 使用说明.md. Termux debs contain both language entry points and use package-manager updates.
 

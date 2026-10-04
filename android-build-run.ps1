@@ -69,9 +69,10 @@ Write-Host "Selected device: $SelectedSerial"
 $AbiList = (& adb @AdbArgs shell getprop ro.product.cpu.abilist 2>$null | Out-String).Trim()
 if ([string]::IsNullOrWhiteSpace($AbiList)) { $AbiList = (& adb @AdbArgs shell getprop ro.product.cpu.abi 2>$null | Out-String).Trim() }
 Write-Host "Device ABI: $AbiList"
-if (($AbiList -split ',') -contains "arm64-v8a") { $DetectedTarget = "aarch64-linux-android" }
+if (($AbiList -split ',') -contains "x86_64") { $DetectedTarget = "x86_64-linux-android" }
+elseif (($AbiList -split ',') -contains "arm64-v8a") { $DetectedTarget = "aarch64-linux-android" }
 elseif (($AbiList -split ',') -contains "armeabi-v7a") { $DetectedTarget = "armv7-linux-androideabi" }
-else { throw "unsupported device ABI '$AbiList'; supported ABIs are arm64-v8a and armeabi-v7a" }
+else { throw "unsupported device ABI '$AbiList'; supported ABIs are arm64-v8a, armeabi-v7a and x86_64" }
 if ($env:RUST_TARGET -and $env:RUST_TARGET -ne $DetectedTarget) { throw "RUST_TARGET=$($env:RUST_TARGET) does not match device ABI $AbiList ($DetectedTarget)" }
 $Target = if ($env:RUST_TARGET) { $env:RUST_TARGET } else { $DetectedTarget }
 $LocalBinary = Join-Path $ProjectDir "target\$Target\release\nl2sh"
@@ -80,6 +81,7 @@ Write-Host "Selected Rust target: $Target"
 switch ($Target) {
     "aarch64-linux-android" { $ClangTarget = "aarch64-linux-android"; $CargoPrefix = "AARCH64_LINUX_ANDROID"; $CcSuffix = "aarch64_linux_android" }
     "armv7-linux-androideabi" { $ClangTarget = "armv7a-linux-androideabi"; $CargoPrefix = "ARMV7_LINUX_ANDROIDEABI"; $CcSuffix = "armv7_linux_androideabi" }
+    "x86_64-linux-android" { $ClangTarget = "x86_64-linux-android"; $CargoPrefix = "X86_64_LINUX_ANDROID"; $CcSuffix = "x86_64_linux_android" }
     default { throw "unsupported Rust target: $Target" }
 }
 

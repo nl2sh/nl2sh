@@ -12,6 +12,7 @@ import tempfile
 
 
 TARGETS = {
+    "x86_64": "x86_64-linux-android",
     "arm64-v8a": "aarch64-linux-android",
     "armeabi-v7a": "armv7-linux-androideabi",
 }

@@ -4,7 +4,7 @@
 
 **Is Termux or Root required?** No. Direct ADB deployment requires Android API 26+ and a matching ABI. Permissions determine available capabilities. See [installation](../getting-started/installation.md) and [permissions](permissions.md).
 
-**Which ABIs are supported?** Direct releases contain ARM64/ARMv7; independent Termux packages contain aarch64/arm. Hardware CPU alone does not prove 64-bit system support. See [ADB](adb.md).
+**Which ABIs are supported?** Direct releases contain ARM64/ARMv7/x86_64; independent Termux packages contain aarch64/arm/x86_64. Hardware CPU alone does not prove 64-bit system support. See [ADB](adb.md).
 
 ## Models and Agent
 

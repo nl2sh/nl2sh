@@ -101,6 +101,7 @@ ABILIST="$("${ADB[@]}" shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d 
 [[ -n "${ABILIST}" ]] \
   || ABILIST="$("${ADB[@]}" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
 case ",${ABILIST}," in
+  *,x86_64,*) TARGET="x86_64-linux-android"; TERMUX_ARCH="x86_64" ;;
   *,arm64-v8a,*) TARGET="aarch64-linux-android"; TERMUX_ARCH="aarch64" ;;
   *,armeabi-v7a,*) TARGET="armv7-linux-androideabi"; TERMUX_ARCH="arm" ;;
   *) die "unsupported device ABI '${ABILIST}'" ;;

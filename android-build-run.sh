@@ -136,12 +136,14 @@ if [[ -z "${ABILIST}" ]]; then
   ABILIST="$("${ADB[@]}" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
 fi
 echo "Device ABI: ${ABILIST}"
-if [[ ",${ABILIST}," == *",arm64-v8a,"* ]]; then
+if [[ ",${ABILIST}," == *",x86_64,"* ]]; then
+  DETECTED_TARGET="x86_64-linux-android"
+elif [[ ",${ABILIST}," == *",arm64-v8a,"* ]]; then
   DETECTED_TARGET="aarch64-linux-android"
 elif [[ ",${ABILIST}," == *",armeabi-v7a,"* ]]; then
   DETECTED_TARGET="armv7-linux-androideabi"
 else
-  die "unsupported device ABI '${ABILIST}'; supported ABIs are arm64-v8a and armeabi-v7a"
+  die "unsupported device ABI '${ABILIST}'; supported ABIs are arm64-v8a, armeabi-v7a and x86_64"
 fi
 if [[ -n "${RUST_TARGET:-}" && "${RUST_TARGET}" != "${DETECTED_TARGET}" ]]; then
   die "RUST_TARGET=${RUST_TARGET} does not match device ABI ${ABILIST} (${DETECTED_TARGET})"

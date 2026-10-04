@@ -10,7 +10,7 @@
 
 ## 核心能力
 
-- Android API 26+，ARM64/ARMv7 原生部署，无需 Termux 或设备端 Rust/Node.js。
+- Android API 26+，ARM64/ARMv7/x86_64 原生部署，无需 Termux 或设备端 Rust/Node.js。
 - OpenAI 兼容模型、多轮 Agent、流式回答、会话恢复与 @ 文件引用。
 - 设备、UI、文件、网络、音频工具，可选 APK/JADX、Tailcat、ima。
 - TUI/Web 本地安全分类与确认，Root、用户编辑和模型都不能跳过检查。

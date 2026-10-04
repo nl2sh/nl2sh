@@ -14,3 +14,5 @@
 输出返回连接地址，只发给预期连接方。接收与服务任务属于当前 TUI/Web 进程；父进程退出会终止子进程。一次性 bridge 暴露安装、检查、发送，不提供跨请求监听管理。关闭工具组不会降低 shell 中 Tailcat 命令的风险。
 
 实测：宿主指定 `NL2SH_TAILCAT_TEST_BINARY` 后运行 `cargo test --test tailcat_live_tests -- --ignored`。连接设备与宿主都已安装 Tailcat 时，用 `TAILCAT_HOST_BIN`、`TAILCAT_DEVICE_BIN`、`ADB_SERIAL` 运行 `./test-tailcat-connected.sh`；脚本仅清理自己的临时文件。
+
+nl2sh 的 x86_64 支持不扩展固定 Tailcat 自动下载列表；仅上报 x86_64/x86 ABI 的设备需手工提供兼容的 Tailcat 程序。

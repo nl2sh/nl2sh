@@ -32,6 +32,11 @@ case "${TARGET}" in
     CARGO_PREFIX="AARCH64_LINUX_ANDROID"
     CC_SUFFIX="aarch64_linux_android"
     ;;
+  x86_64-linux-android)
+    CLANG_TARGET="x86_64-linux-android"
+    CARGO_PREFIX="X86_64_LINUX_ANDROID"
+    CC_SUFFIX="x86_64_linux_android"
+    ;;
   armv7-linux-androideabi)
     CLANG_TARGET="armv7a-linux-androideabi"
     CARGO_PREFIX="ARMV7_LINUX_ANDROIDEABI"

@@ -17,10 +17,11 @@ cargo build --release
 Install NDK r28c or a compatible version and Rust targets on the host:
 
 ```bash
-rustup target add aarch64-linux-android armv7-linux-androideabi
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 export ANDROID_NDK_HOME=/path/to/android-ndk
 ./cross-compile.sh
 RUST_TARGET=armv7-linux-androideabi ./cross-compile.sh
+RUST_TARGET=x86_64-linux-android ./cross-compile.sh
 ./android-build-run.sh
 ```
 
@@ -33,9 +34,17 @@ $env:ANDROID_NDK_HOME = 'C:/Android/Sdk/ndk/28.2.13676358'
 
 Launchers choose by device ABI and reject conflicting explicit targets. Devices need no Termux, Bash, or GNU utilities. Never commit local SDK paths.
 
+Supported mappings are below. x86_64 devices select the native binary even when ARM translation ABIs are advertised. `pack-release.sh` / `pack-release.ps1` build all three ABIs.
+
+| Android ABI | Rust target | Termux |
+| --- | --- | --- |
+| `arm64-v8a` | `aarch64-linux-android` | `aarch64` |
+| `armeabi-v7a` | `armv7-linux-androideabi` | `arm` |
+| `x86_64` | `x86_64-linux-android` | `x86_64` |
+
 ## Termux packaging
 
-`./pack-termux-release.sh` emits aarch64/arm debs. Windows `pack-termux-release.ps1` compiles with Windows NDK and packages with WSL dpkg-deb, without recompiling there. `NL2SH_PACKAGE_MANAGER_BUILD=1` disables self-update.
+`./pack-termux-release.sh` emits aarch64/arm/x86_64 debs. Windows `pack-termux-release.ps1` compiles with Windows NDK and packages with WSL dpkg-deb, without recompiling there. `NL2SH_PACKAGE_MANAGER_BUILD=1` disables self-update.
 
 For `android-build-tmux-run.sh`, prepare Termux openssh/tmux, passwd, and sshd. The script builds by ABI and installs through SSH/tmux; see [environment variables](../reference/environment-variables.md).
 

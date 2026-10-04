@@ -62,6 +62,13 @@
 - [x] 工具目录按中文用途、分类和确认要求展示，并提供可填入输入框的示例提问。
 - [x] Web 对完成任务归纳工具完整、部分和失败结果，弹窗维持键盘焦点并在关闭后恢复。
 
+## Android x86_64 支持
+
+- [x] API 26+ x86_64 Rust/NDK 构建、原生 ABI 优先、Linux/Windows 部署、自更新及三 ABI 统一发布包。
+- [x] 自建 Termux x86_64 deb/APT 和双语文档，签名仓库合并兼容旧双架构快照。
+- [x] Android 8.1/API 27 x86_64 模拟器的普通 shell TUI、PTY、修改/危险确认、超时、终端恢复、resize 与 Web-only 运行验收。
+- [ ] 扩展 x86_64 API 26、Root、全屏交互程序及更多 Android 版本的运行验收。
+
 ## Android 预编译部署优化 — 已实现
 
 - [x] Linux 与 Windows 启动器以主机和设备端实际 SHA-256 判断是否需要推送，推送后再次校验。

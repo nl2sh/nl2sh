@@ -30,13 +30,13 @@ class AptSnapshotTests(unittest.TestCase):
         subprocess.run(['gpgconf', '--homedir', str(cls.home), '--kill', 'all'], check=True, capture_output=True)
         cls.workspace.cleanup()
 
-    def make_repo(self, root):
+    def make_repo(self, root, arches=('aarch64', 'arm', 'x86_64')):
         repo = Path(root) / 'repo'
         stable = repo / 'dists/stable'
         stable.mkdir(parents=True)
         (repo / 'nl2sh-repo.gpg').write_bytes(self.key)
         hashes = []
-        for arch in ('aarch64', 'arm'):
+        for arch in arches:
             name = f'pool/main/n/nl2sh/nl2sh_1.0.0_{arch}.deb'
             package = repo / name
             package.parent.mkdir(parents=True, exist_ok=True)
@@ -47,7 +47,7 @@ class AptSnapshotTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(value)
                 hashes.append(f' {hashlib.sha256(value).hexdigest()} {len(value)} {path.relative_to(stable)}')
-        (stable / 'Release').write_text('Codename: stable\nArchitectures: aarch64 arm\nSHA256:\n' + '\n'.join(hashes) + '\n')
+        (stable / 'Release').write_text('Codename: stable\nArchitectures: ' + ' '.join(arches) + '\nSHA256:\n' + '\n'.join(hashes) + '\n')
         self.sign(stable)
         return repo
 
@@ -58,6 +58,29 @@ class AptSnapshotTests(unittest.TestCase):
     def test_valid_signed_repository(self):
         with tempfile.TemporaryDirectory() as tmp:
             APT.verify(self.make_repo(tmp), self.fingerprint)
+
+    def test_legacy_signed_repository(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            APT.verify(self.make_repo(tmp, ('aarch64', 'arm')), self.fingerprint)
+
+    def test_modified_x86_64_package_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(tmp)
+            next(repo.glob('pool/**/*_x86_64.deb')).write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'SHA-256 mismatch'):
+                APT.verify(repo, self.fingerprint)
+
+    def test_missing_x86_64_index_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(tmp)
+            (repo / 'dists/stable/main/binary-x86_64/Packages').unlink()
+            with self.assertRaises(FileNotFoundError):
+                APT.verify(repo, self.fingerprint)
+
+    def test_unsupported_signed_architecture_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, 'architectures'):
+                APT.verify(self.make_repo(tmp, ('aarch64', 'arm', 'i686')), self.fingerprint)
 
     def test_modified_package_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

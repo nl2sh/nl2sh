@@ -14,3 +14,5 @@ The optional `tailcat` group defaults off. `tailcat_check` reads the configured 
 Results return a connection address; share only with intended peers. Receiver/service jobs belong to the current TUI/Web process and terminate when the parent exits. One-shot bridge exposes install/check/send, without cross-request listener management. Disabling the group does not lower shell Tailcat command risks.
 
 For live testing set `NL2SH_TAILCAT_TEST_BINARY` and run `cargo test --test tailcat_live_tests -- --ignored`. With Tailcat on host and connected device, set `TAILCAT_HOST_BIN`, `TAILCAT_DEVICE_BIN`, and `ADB_SERIAL` for `./test-tailcat-connected.sh`; it removes only its own temporary files.
+
+nl2sh support for x86_64 does not extend the pinned Tailcat download list. Devices advertising only x86_64/x86 ABIs require a manually supplied compatible Tailcat binary.

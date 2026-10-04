@@ -23,7 +23,7 @@ fi
 mkdir -p "${REPO_DIR}/pool/main/n/nl2sh"
 find "${DEB_DIR}" -maxdepth 1 -type f -name 'nl2sh_*.deb' -exec cp {} "${REPO_DIR}/pool/main/n/nl2sh/" \;
 
-for arch in aarch64 arm; do
+for arch in aarch64 arm x86_64; do
   packages_dir="${REPO_DIR}/dists/${CODENAME}/${COMPONENT}/binary-${arch}"
   mkdir -p "${packages_dir}"
   (cd "${REPO_DIR}" && apt-ftparchive -a "${arch}" packages pool) > "${packages_dir}/Packages"
@@ -35,7 +35,7 @@ APT::FTPArchive::Release::Origin "nl2sh";
 APT::FTPArchive::Release::Label "nl2sh Termux repository";
 APT::FTPArchive::Release::Suite "${CODENAME}";
 APT::FTPArchive::Release::Codename "${CODENAME}";
-APT::FTPArchive::Release::Architectures "aarch64 arm";
+APT::FTPArchive::Release::Architectures "aarch64 arm x86_64";
 APT::FTPArchive::Release::Components "${COMPONENT}";
 APT::FTPArchive::Release::Description "Signed nl2sh packages for Termux";
 EOF

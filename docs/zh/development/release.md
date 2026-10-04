@@ -2,7 +2,7 @@
 
 ## Android 发布
 
-`.github/workflows/release.yml` 在 `v*` tag 推送时用 NDK r28c/API 26 构建 AArch64/ARMv7、JADX helper、自更新裸程序和摘要、统一 ZIP/TAR、Termux deb 与签名 APT 快照，再发布 GitHub Release。手动 workflow_dispatch 创建草稿；草稿不更新线上站点。
+`.github/workflows/release.yml` 在 `v*` tag 推送时用 NDK r28c/API 26 构建 AArch64/ARMv7/x86_64、自更新裸程序和摘要、统一 ZIP/TAR、Termux deb 与签名 APT 快照，再发布 GitHub Release。手动 workflow_dispatch 创建草稿；草稿不更新线上站点。
 
 本地 `pack-release.sh` / `pack-release.ps1` 创建同布局 ZIP。包内双语 README 链接到正式网站，并携带双语入门 Markdown 与对应图片；不再依赖已删除的使用说明.md。Termux deb 携带两种语言入口，更新由包管理器负责。
 

@@ -20,21 +20,23 @@ for command in cargo rustup; do
 done
 
 cd "${PROJECT_DIR}"
-for target in aarch64-linux-android armv7-linux-androideabi; do
+for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
   echo "Building ${target}..."
   RUST_TARGET="${target}" ./cross-compile.sh
 done
 
-mkdir -p "${PACKAGE_DIR}/bin/arm64-v8a" "${PACKAGE_DIR}/bin/armeabi-v7a" "${DIST_DIR}"
+mkdir -p "${PACKAGE_DIR}/bin/arm64-v8a" "${PACKAGE_DIR}/bin/armeabi-v7a" "${PACKAGE_DIR}/bin/x86_64" "${DIST_DIR}"
 cp target/aarch64-linux-android/release/nl2sh "${PACKAGE_DIR}/bin/arm64-v8a/nl2sh"
 cp target/armv7-linux-androideabi/release/nl2sh "${PACKAGE_DIR}/bin/armeabi-v7a/nl2sh"
+cp target/x86_64-linux-android/release/nl2sh "${PACKAGE_DIR}/bin/x86_64/nl2sh"
 cp android-run-linux.sh android-run-windows.bat install-android.sh install-android.bat install-android.ps1 \
   config.toml.example README.md README_EN.md LICENSE AGENTS.md "${PACKAGE_DIR}/"
 cp -R docs "${PACKAGE_DIR}/docs"
 chmod +x "${PACKAGE_DIR}/android-run-linux.sh" \
   "${PACKAGE_DIR}/install-android.sh" \
   "${PACKAGE_DIR}/bin/arm64-v8a/nl2sh" \
-  "${PACKAGE_DIR}/bin/armeabi-v7a/nl2sh"
+  "${PACKAGE_DIR}/bin/armeabi-v7a/nl2sh" \
+  "${PACKAGE_DIR}/bin/x86_64/nl2sh"
 
 ARCHIVE="${DIST_DIR}/${PACKAGE_NAME}.zip"
 rm -f -- "${ARCHIVE}"

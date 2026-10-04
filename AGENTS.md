@@ -31,7 +31,7 @@ nl2sh 定位为 Android 原生 shell 版的类 Hermes AI Agent：使用 stable R
 
 ## Android 兼容
 
-不得无条件引入 glibc-only 实现，不依赖 systemd、dbus、Termux、native-tls、`/bin/bash` 或 GNU coreutils。优先 Android toybox 与 `/system/bin/sh`，保持 aarch64-linux-android、API 26+ 和 Bionic libc 可编译。开发主机 fallback 必须条件编译，不得改变 Android 路径。
+不得无条件引入 glibc-only 实现，不依赖 systemd、dbus、Termux、native-tls、`/bin/bash` 或 GNU coreutils。优先 Android toybox 与 `/system/bin/sh`，保持 aarch64-linux-android、armv7-linux-androideabi、x86_64-linux-android、API 26+ 和 Bionic libc 可编译。开发主机 fallback 必须条件编译，不得改变 Android 路径。
 
 ## 安全规则
 
