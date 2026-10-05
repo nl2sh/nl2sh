@@ -8,9 +8,9 @@
 | nl2sh 中的 `a2a_gateway/` | A2A 1.0、HTTP/stdio MCP | 主机 Python 3.11+，adb 固定连接一台设备，直接工具无需设备模型 | [A2A/MCP](../advanced/a2a-mcp.md) |
 | [android-bridge](https://github.com/nl2sh/android-bridge) | 无障碍、Unicode 输入与手势 | 可选安装的 API 26+ APK，provider/广播要求 shell/root，手工启用服务 | [集成](../advanced/android-bridge.md) |
 | [jadx-helper](https://github.com/nl2sh/jadx-helper) | APK 单类反编译 | API 26+ DEX JAR，通过 app_process 运行，不作为 APK 安装 | [APK/JADX](../tools/apk-jadx.md) |
-| [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) | Android ADB 安装与浏览器启动助手 | API 26+ 控制端，TCP 或目标 Android 11+ 无线配对，部署最新 ARM64/ARMv7 Release | 需仓库权限 |
+| [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) | Android ADB 安装与浏览器启动助手 | API 26+ 控制端，TCP 或目标 Android 11+ 无线配对，部署最新 ARM64/ARMv7 Release | [安装](../getting-started/installation.md#nl2sh-helper)（需仓库权限） |
 
-ADB 安装助手与无障碍伴侣用途不同。助手验证发布摘要，管理 `/data/local/tmp/nl2sh-helper/` 并启动目标 9999 端口 Web，不安装伴侣、不提供模型凭据，也不提供 A2A/MCP。其源码与双语指南当前需要仓库权限；公开主项目的安装路径见 [安装](../getting-started/installation.md)。
+ADB 安装助手与无障碍伴侣用途不同。助手验证发布摘要，管理 `/data/local/tmp/nl2sh-helper/` 并启动目标 9999 端口 Web，不安装伴侣、不提供模型凭据，也不提供 A2A/MCP。其源码与双语指南当前需要仓库权限；使用方式见[安装](../getting-started/installation.md#nl2sh-helper)。
 
 伴侣/helper 独立发布。原生 JADX 默认仍固定历史 `nl2sh/nl2sh` v1.0.4 资产与摘要，不自动追踪新 helper Release。Android Bridge 的 release APK 未签名，需签名后安装。协调接口时保持包名、provider authority 与 DEX 入口兼容。
 

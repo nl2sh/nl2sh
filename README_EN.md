@@ -24,6 +24,8 @@ User → Agent → Tool Calling → Security → Confirmation → Android Shell
 
 Install host adb, enable and authorize USB debugging, then download and verify the [Release ZIP](https://github.com/nl2sh/nl2sh/releases/latest). Extract it completely and run `android-run-linux.sh` or `android-run-windows.bat`. Configure a model with `/config`, then ask “Show how much storage this device has left.”
 
+You can also install the [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) APK on an Android controller. Connect by TCP ADB or the target's Wireless debugging; the helper deploys the ARM64/ARMv7 build and opens its Web UI in a browser. Access to the helper repository and Releases is required. See the [installation guide](https://nl2sh.github.io/nl2sh/en/getting-started/installation/#nl2sh-helper).
+
 In Termux:
 
 ```bash

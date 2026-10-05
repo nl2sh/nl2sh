@@ -3,6 +3,7 @@
 | Environment | Installation | Requirements |
 | --- | --- | --- |
 | Computer connected to Android | Release ZIP and ADB launcher | Host adb, Android API 26+, ARM64/ARMv7/x86_64 |
+| Android controller connected to a target device | nl2sh-helper APK | Controller Android API 26+; target ARM64/ARMv7 with TCP ADB or Android 11+ Wireless debugging |
 | Computer bootstrap | Bash / PowerShell / CMD installer | Host network access and adb |
 | Android Termux | TUR, signed APT, or local deb | Termux package manager |
 | Developer | Cross-compile source | Stable Rust, Node.js 22+, Android NDK |
@@ -18,6 +19,12 @@ cd nl2sh-android
 ```
 
 On Windows compare `Get-FileHash ./nl2sh-android.zip -Algorithm SHA256`, extract, and run `android-run-windows.bat`. Prepare the device using [ADB / native Android](android-adb.md).
+
+## nl2sh-helper
+
+If another Android device is your controller, download a signed APK from [nl2sh-helper Releases](https://github.com/nl2sh/nl2sh-helper/releases/latest), which requires repository access, and install it on the controller. In the helper, choose TCP ADB if it is already enabled on the target, or use a pairing code or QR code for a target running Android 11+ Wireless debugging. Accept the ADB authorization prompt on the target for a first TCP connection. For pairing codes, enter the temporary address, port, and code shown on the target.
+
+After connecting, the helper downloads the latest nl2sh ARM64/ARMv7 binary and SHA-256 file for the target ABI, verifies them, deploys the binary to `/data/local/tmp/nl2sh`, and starts its Web service in the background. Tap the button to open nl2sh in a browser, configure a provider and API key in the Web UI's Quick Start, then send your first task. The controller must be able to reach port 9999 on the target. The Web UI has no login and listens on all IPv4 interfaces, so use a trusted network. The helper does not support x86_64 targets, provide the TUI, or set model credentials automatically. See the [helper guide](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/en/guide.md) for connection details and troubleshooting.
 
 ## Bootstrap installation
 
