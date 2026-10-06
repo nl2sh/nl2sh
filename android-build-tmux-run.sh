@@ -22,7 +22,8 @@ restore_host_terminal() {
 collect_devices() {
   DEVICE_SERIALS=()
   local serial="" state=""
-  while read -r serial state _; do
+  # ADB uses a tab separator; wireless mDNS serials may contain spaces.
+  while IFS=$'\t' read -r serial state; do
     if [[ "${state:-}" == "device" ]] \
       && adb -s "${serial}" shell pm path "${TERMUX_PACKAGE}" 2>/dev/null \
         | tr -d '\r' | grep -q '^package:'; then

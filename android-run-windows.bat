@@ -268,7 +268,8 @@ exit /b 0
 
 :collect_devices
 set "DEVICE_COUNT=0"
-for /f "skip=1 tokens=1,2" %%A in ('adb devices 2^>nul') do (
+rem Use only a literal tab as delimiter; mDNS serials may contain spaces.
+for /f "skip=1 tokens=1,2 delims=	" %%A in ('adb devices 2^>nul') do (
   if "%%B"=="device" (
     set /a DEVICE_COUNT+=1
     set "DEVICE_!DEVICE_COUNT!=%%A"

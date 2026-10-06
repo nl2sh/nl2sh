@@ -1,6 +1,6 @@
 # Project Status
 
-Last Updated: 2026-10-05
+Last Updated: 2026-10-06
 
 ## Recent Changes
 
@@ -23,6 +23,10 @@ Last Updated: 2026-10-05
 - TUI `/config` 新增“工具”分类，支持 APK/JADX、Tailcat 组及全部可选单项工具开关；复用既有配置、优先级和保存重载路径，组切换清除组内覆盖。长列表跟随选中项展示；同步双语使用说明与更新记录。无新增公共配置字段，不改 Android 执行、安全审批、PTY 与终端恢复逻辑。`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 与新增工具设置伪终端回归通过；Android API 26 AArch64 `cargo check --target aarch64-linux-android` 通过；代码派生参考、双语文档检查、`mkdocs build --strict` 和站点路由检查通过。
 
 - 快速开始将独立的 nl2sh-helper 作为第二条安装路径，补齐中英文 README、入门和安装指引；说明控制端与目标设备条件、下载签名 APK、连接、Web 配置以及 x86_64 限制。项目边界页同步指向该安装指引。双语文档检查、严格站点构建及构建后路由检查通过。仅修改文档，不影响公共接口、Android 程序、安全确认或 PTY。
+
+- Linux/Windows 源码构建、预编译运行及 Termux/tmux 启动器按 ADB 制表符分隔解析设备列表，保留含空格的无线调试 mDNS 完整序列号，避免已连接设备被误判为空列表；PowerShell 的 ADB 列表查询失败明确报错。同步双语构建说明和更新记录；不改动 Rust 公共接口、设备 ABI 路径、安全确认或 PTY。Bash 语法、PowerShell/BAT 设备选择回归及三份 Bash 脚本的设备选择回归通过，覆盖含空格序列号、多设备选择和离线/未授权状态过滤。
+
+- ADB 序列号修复验证：`cargo fmt --all -- --check`、`cargo check` 与既有 ABI 选择回归通过；`cargo test` 的唯一失败为历史已有的 `agent_reply_remains_in_live_tui_until_ctrl_q` 超时，其余已运行测试通过。
 
 - 补齐开发构建运行、用户运行及 Bash/PowerShell/CMD 一键安装入口的三 ABI 帮助说明；安装器复用旧双 ABI 目录时明确提示缺少 x86_64 和新目录迁移方法，保留既有 ARM 安装的复用行为。同步双语安装文档；未改变程序配置、安全确认、Android 执行与 PTY 实现。 Bash 语法、各入口 `--help`、14 项脚本回归及旧 ARM 安装的提示/启动/配置保留验证通过；双语文档检查、严格构建、站点检查和 `git diff --check` 通过。
 

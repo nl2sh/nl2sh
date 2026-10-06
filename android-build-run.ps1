@@ -47,8 +47,10 @@ if ($env:ADB_SERIAL) {
 } else {
     function Get-AdbDevices {
         $Lines = @(& adb devices 2>$null)
+        if ($LASTEXITCODE -ne 0) { throw "failed to list ADB devices" }
         return @($Lines | Select-Object -Skip 1 | ForEach-Object {
-            if ($_ -match '^(\S+)\s+device\s*$') { $Matches[1] }
+            # ADB separates serial and state with a tab; mDNS serials can contain spaces.
+            if ($_ -match '^([^\t]+)\tdevice\s*$') { $Matches[1] }
         })
     }
     $Devices = @(Get-AdbDevices)

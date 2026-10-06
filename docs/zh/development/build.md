@@ -34,6 +34,8 @@ $env:ANDROID_NDK_HOME = 'C:/Android/Sdk/ndk/28.2.13676358'
 
 脚本按设备 ABI 选择目标，显式目标不匹配时拒绝。设备不需要 Termux、Bash 或 GNU 工具。不要把本地 SDK 路径提交到项目。
 
+源码构建脚本和预编译运行启动器自动选择唯一处于 `device` 状态的 ADB 设备，包括序列号含空格的无线调试 mDNS 设备；多个设备时提示选择，仅没有可用设备时要求输入 IP。也可通过 `$env:ADB_SERIAL` 指定完整序列号。
+
 支持的映射如下；x86_64 设备优先使用原生程序，即使 ABI 列表也含 ARM 转译支持。统一打包脚本 `pack-release.sh` / `pack-release.ps1` 构建三个 ABI。
 
 | Android ABI | Rust target | Termux |

@@ -83,7 +83,8 @@ die() {
 
 collect_devices() {
   DEVICE_SERIALS=()
-  while read -r serial state _; do
+  # ADB uses a tab separator; wireless mDNS serials may contain spaces.
+  while IFS=$'\t' read -r serial state; do
     if [[ "${state:-}" == "device" ]]; then
       DEVICE_SERIALS+=("${serial}")
     fi

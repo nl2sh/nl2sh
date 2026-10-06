@@ -34,6 +34,8 @@ $env:ANDROID_NDK_HOME = 'C:/Android/Sdk/ndk/28.2.13676358'
 
 Launchers choose by device ABI and reject conflicting explicit targets. Devices need no Termux, Bash, or GNU utilities. Never commit local SDK paths.
 
+Source build scripts and precompiled launchers automatically select the only ADB device in the `device` state, including wireless debugging mDNS serials containing spaces. It prompts for a selection when multiple devices are available and requests an IP only when no usable device is connected. Set `$env:ADB_SERIAL` to select a complete serial explicitly.
+
 Supported mappings are below. x86_64 devices select the native binary even when ARM translation ABIs are advertised. `pack-release.sh` / `pack-release.ps1` build all three ABIs.
 
 | Android ABI | Rust target | Termux |

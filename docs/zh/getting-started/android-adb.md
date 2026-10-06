@@ -13,6 +13,8 @@ adb shell getprop ro.product.cpu.abilist
 
 设备状态必须为 `device`，API 至少 26。以 `getprop` 的 ABI 为准；`uname -m` 不能证明 Android 支持 64 位程序。启动器支持 ARM64、ARMv7 与 x86_64。多设备可设置 `ADB_SERIAL`。
 
+Linux 和 Windows 启动器自动选择唯一可用设备，支持含空格的无线调试 mDNS 序列号；多个可用设备时提示选择，只有没有可用设备时才提示输入 IP。指定 `ADB_SERIAL` 时保留完整序列号。
+
 无线调试先用 `adb pair DEVICE_IP:PAIRING_PORT` 配对，再 `adb connect DEVICE_IP:CONNECTION_PORT`；这两个端口可能不同。传统 TCP ADB 在 USB 连接时执行 `adb tcpip 5555`，再连接设备 IP 的 5555 端口。
 
 ## 启动和日常使用
