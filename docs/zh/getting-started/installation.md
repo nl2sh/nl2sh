@@ -3,6 +3,7 @@
 | 使用环境 | 安装方式 | 所需条件 |
 | --- | --- | --- |
 | 电脑连接 Android | Release ZIP + ADB 启动器 | 主机 adb，Android API 26+，ARM64/ARMv7/x86_64 |
+| Android 控制端连接目标设备 | nl2sh-helper APK | 控制端 Android API 26+；目标设备 ARM64/ARMv7、可用的 TCP ADB 或 Android 11+ 无线调试 |
 | 电脑一键安装 | Bash / PowerShell / CMD 安装脚本 | 主机联网及 adb |
 | Android Termux | TUR 或签名 APT / 本地 deb | Termux 包管理器 |
 | 开发者 | 源码交叉编译 | stable Rust、Node.js 22+、Android NDK |
@@ -18,6 +19,12 @@ cd nl2sh-android
 ```
 
 Windows 可用 `Get-FileHash ./nl2sh-android.zip -Algorithm SHA256` 比较摘要，解压后运行 `android-run-windows.bat`。设备准备见 [ADB / 原生 Android](android-adb.md)。
+
+## nl2sh-helper
+
+如果用另一台 Android 设备作控制端，可从需仓库访问权限的 [nl2sh-helper Releases](https://github.com/nl2sh/nl2sh-helper/releases/latest) 下载已签名 APK，并安装在控制端。打开助手后，选择 TCP ADB（目标设备已开启 TCP ADB），或选择配对码/二维码连接目标 Android 11+ 的无线调试。首次 TCP 连接需在目标设备批准 ADB 授权；配对码方式按目标设备显示的临时地址、端口和配对码填写。
+
+连接后，助手按目标 ABI 下载最新 nl2sh ARM64/ARMv7 程序及 SHA-256 文件，校验并部署到 `/data/local/tmp/nl2sh`，然后在目标设备后台启动 Web 服务。点击“在浏览器中打开 nl2sh”，在 Web 的“快速开始”中配置模型服务与 API Key，再发送第一个任务。控制端须能访问目标设备的 9999 端口；Web 无登录且监听所有 IPv4 接口，请仅在可信网络使用。助手不支持 x86_64 目标，也不提供 TUI 或自动配置模型。连接与排障详见[助手指南](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/zh/guide.md)。
 
 ## 一键安装
 
