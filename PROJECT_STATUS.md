@@ -4,6 +4,9 @@ Last Updated: 2026-10-07
 
 ## Recent Changes
 
+- 服务目录校验错误补充路径、当前/实际 UID、权限及切换身份恢复建议；保留跨 UID 拒绝，不自动改属主或接管服务。双语 ADB 排障说明补齐先由原 UID 停止、备份旧运行目录后重建的流程；新增 root 下的属主冲突回归，验证拒绝后目录属主与内容不变。公共参数、安全审批和 PTY 路径不变。
+  验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`、`python3 scripts/check-docs.py`、`mkdocs build --strict` 与构建后 `python3 scripts/check-docs.py --site site` 通过；49 对双语页面及生成站点检查通过。x86_64 Android API 26 release 构建通过；ADB 设备验证 shell 目录停止与备份、root 私有目录重建，以及 `./android-build-run.sh --web-only` 返回 `ready`，随后验证服务正常停止。
+
 - Runtime 重构全部建议已实现并逐阶段提交，完成本地整体验收：三 ABI release、完整 Rust/包管理器特性、三个 Gradle 项目、33 项前端、15 项发布脚本和双语严格文档通过；API 26/35 覆盖协议、service/端口、静态工具、UI 排他/恢复、Helper 健康重连/失败回滚/同摘要更新归属/Bridge 管理/签名夹具，各三项 Helper 设备测试通过。源码本地未附生产签名；实际签名和公开发行仍由既有 GitHub Actions 环境执行，未推送或创建标签/Release。详细验收边界见双语发布文档。
 
 - Web 后端完成职责拆分：server/auth/state/agent/interaction/事件流及七组 routes，保留公开 web_ui API 和全部 HTTP/会话/安全回归。设备概览补齐安装归属、升级入口、实际/签名推荐扩展版本及服务运行状态，未签名策略显示未知。全量 Rust、33 项前端测试与生产构建通过；三 ABI 和双模拟器整体验收继续执行。

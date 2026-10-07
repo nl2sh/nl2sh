@@ -108,7 +108,13 @@ impl Service {
             || metadata.uid() != nix::unistd::geteuid().as_raw()
             || metadata.permissions().mode() & 0o077 != 0
         {
-            bail!("service directory must be owned by the current UID with permissions 0700")
+            bail!(
+                "service directory {} must be a real directory owned by current UID {} with private permissions 0700 (found UID {}, mode {:04o}); use the directory owner's UID to stop the service before switching users, then move the stopped service directory aside; do not chown active service state or relax its permissions",
+                dir.display(),
+                nix::unistd::geteuid().as_raw(),
+                metadata.uid(),
+                metadata.permissions().mode() & 0o7777,
+            )
         }
         Ok(Self { config, dir })
     }
@@ -457,6 +463,25 @@ impl Drop for Cleanup {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn refuses_other_uid_without_changing_ownership() {
+        if !nix::unistd::geteuid().is_root() {
+            return; // Changing a fixture's owner requires root.
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let config = temp.path().join("config.toml");
+        let dir = config.with_extension("service");
+        fs::DirBuilder::new().mode(0o700).create(&dir).unwrap();
+        nix::unistd::chown(&dir, Some(nix::unistd::Uid::from_raw(2000)), None).unwrap();
+        let error = Service::new(&config).err().unwrap().to_string();
+        assert!(error.contains(&dir.display().to_string()));
+        assert!(error.contains("current UID 0"));
+        assert!(error.contains("found UID 2000, mode 0700"));
+        assert!(error.contains("stop the service before switching users"));
+        assert_eq!(fs::symlink_metadata(&dir).unwrap().uid(), 2000);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+    }
+
     #[test]
     fn refuses_shared_directory_and_symlink() {
         let temp = tempfile::tempdir().unwrap();

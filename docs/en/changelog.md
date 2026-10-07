@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Service directory ownership errors report the path, UIDs and permissions, with recovery steps for shell/root transitions; cross-UID takeover remains forbidden.
+
 - Verify Helper installation ownership and checksum before native self-update; runtime information reports the correct update entry point.
 
 - Add native `service start/stop/restart/status --json` with actual ports, health checks, private shutdown tokens, and verified process identity; launcher Web mode uses this interface.

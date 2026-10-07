@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 服务目录属主冲突错误显示路径、UID 和权限，补充 shell/root 切换时的安全恢复步骤；继续拒绝跨 UID 接管。
+
 - 识别 Helper 安装归属与摘要，阻止 CLI/TUI 自更新绕过部署器；运行信息报告正确的更新入口。
 
 - 原生 `service start/stop/restart/status --json` 统一后台服务生命周期、实际端口、健康检查、私有关闭令牌及进程身份核验；启动器 Web 模式改用该接口。
