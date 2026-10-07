@@ -23,7 +23,7 @@
 - [x] Compatibility Manifest、JADX 协议执行校验与资产签名。
 - [x] Helper Bridge 管理和扩展状态。
 - [x] Descriptor、跨进程资源锁、UI Lease 和全入口 Audit Event。
-- [ ] 八项 APK 静态分析与 Web 职责拆分。
+- [x] 八项 APK 静态分析与 Web 职责拆分。
 - [ ] 整体验收及逐阶段完成审计。
 
 ## nl2sh 自身配置工具 — 已实现

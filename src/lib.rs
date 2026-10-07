@@ -41,4 +41,5 @@ pub mod tui;
 /// Signed-by-checksum GitHub Release discovery and self-update support.
 pub mod update;
 /// Embedded browser interface for configuration and Agent sessions.
+mod web;
 pub mod web_ui;
