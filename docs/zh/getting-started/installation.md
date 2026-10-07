@@ -24,7 +24,7 @@ Windows 可用 `Get-FileHash ./nl2sh-android.zip -Algorithm SHA256` 比较摘要
 
 如果用另一台 Android 设备作控制端，可从需仓库访问权限的 [nl2sh-helper Releases](https://github.com/nl2sh/nl2sh-helper/releases/latest) 下载已签名 APK，并安装在控制端。打开助手后，选择 TCP ADB（目标设备已开启 TCP ADB），或选择配对码/二维码连接目标 Android 11+ 的无线调试。首次 TCP 连接需在目标设备批准 ADB 授权；配对码方式按目标设备显示的临时地址、端口和配对码填写。
 
-连接后，助手按目标 ABI 下载最新 nl2sh ARM64/ARMv7 程序及 SHA-256 文件，校验并部署到 `/data/local/tmp/nl2sh`，然后在目标设备后台启动 Web 服务。点击“在浏览器中打开 nl2sh”，在 Web 的“快速开始”中配置模型服务与 API Key，再发送第一个任务。控制端须能访问目标设备的 9999 端口；Web 无登录且监听所有 IPv4 接口，请仅在可信网络使用。助手不支持 x86_64 目标，也不提供 TUI 或自动配置模型。连接与排障详见[助手指南](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/zh/guide.md)。
+连接会复用健康的已安装运行时，不检查发布或重启。首次安装及显式更新从认证的发布 Manifest 选择 ARM64、ARMv7 或 x86_64，验证原生资产大小、摘要与签名，部署到 `/data/local/tmp/nl2sh`。原生 service 返回实际 Web 端口；更新、重启、停止是独立动作，更新失败恢复先前已验证程序与归属。打开返回的浏览器地址，在 Web“快速开始”配置模型凭据。控制端须能访问实际端口；Web 无登录且监听所有 IPv4 接口，仅在可信网络使用。详见[助手指南](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/zh/guide.md)。
 
 ## 一键安装
 
@@ -64,10 +64,12 @@ API Key 通过环境变量传入；请在自己的私有终端中填写真实值
 
 ## 更新
 
-直接 Android 版本可使用 `nl2sh update` 或 TUI `/update`，按 ABI 下载裸二进制、核对 SHA-256 后原子替换；下次启动使用新程序。安装目录中的启动器仍会依据本地包摘要部署本地版本，因此要同步下载新版包，避免再次启动旧包覆盖设备更新。Termux 包管理构建使用 `pkg upgrade nl2sh`。
+直接 Android 版本可使用 `nl2sh update` 或 TUI `/update`，按 ABI 下载裸二进制、校验签名兼容性 Manifest、精确大小、SHA-256、独立 GPG 签名与 ELF ABI 后原子替换；下次启动使用新程序。安装目录中的启动器仍会依据本地包摘要部署本地版本，因此要同步下载新版包，避免再次启动旧包覆盖设备更新。Termux 包管理构建使用 `pkg upgrade nl2sh`。
 
 继续阅读：[日常启动](android-adb.md)、[Termux](termux.md)、[源码构建](../development/build.md)。
 
 x86_64 设备与模拟器需要包含该 ABI 的新版发布包；旧的双 ABI 安装目录需先备份配置，再解压新版包到新目录。启动器优先选择原生 x86_64，不依赖 ARM 转译。内置自更新使用 `nl2sh-android-x86_64` 和对应 `.sha256`；Termux 包仍通过包管理器更新。
 
 安装器复用旧目录时，若缺少 `bin/x86_64/nl2sh` 会明确警告；旧 ARM 安装仍可继续使用。x86_64 用户请备份 `config.toml`，用 Bash/CMD 的 `--install-dir` 或 PowerShell 的 `-InstallDir` 指向新目录，选择包含 x86_64 的发行包。脚本帮助已列明三种 ABI 与原生 x86_64 优先策略。
+
+`/api/info` 返回安装更新归属和内嵌运行时策略状态：已验证、未签名源码构建没有策略、或无效。助手管理的安装应通过助手更新；归属记录损坏时自更新被阻止，需先检查记录。

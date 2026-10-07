@@ -15,11 +15,6 @@ use std::{
 };
 use tokio::{io::AsyncWriteExt, process::Command};
 
-const HELPER_VERSION: &str = "0.1.0";
-const DEFAULT_HELPER_URL: &str =
-    "https://github.com/nl2sh/nl2sh/releases/download/v1.0.4/jadx-helper.jar";
-const DEFAULT_HELPER_SHA256: &str =
-    "b733944a9588abbafee1d9b9d77cb78c02bb95f056301f115c0fcb77307c7328";
 const MAX_HELPER_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SOURCE_BYTES: u64 = 64 * 1024;
 const ENTRYPOINT: &str = "com.nl2sh.jadx.Main";
@@ -28,12 +23,26 @@ static DOWNLOAD_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(())
 
 fn cache_dir() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("NL2SH_JADX_CACHE_DIR").filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(path).join(HELPER_VERSION));
+        return Ok(PathBuf::from(path).join(cache_identity()?));
     }
     let config_path = config::default_config_path()?;
     Ok(config::state_dir(&config_path)?
         .join("runtime/jadx-helper")
-        .join(HELPER_VERSION))
+        .join(cache_identity()?))
+}
+
+fn cache_identity() -> Result<String> {
+    if std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH").is_some() {
+        return Ok("offline".into());
+    }
+    let source = download_source()?;
+    Ok(source.sha)
+}
+
+struct HelperSource {
+    url: String,
+    sha: String,
+    signed: Option<super::manifest::RuntimeArtifact>,
 }
 
 fn parse_sha(sha: String) -> Result<String> {
@@ -74,8 +83,11 @@ pub async fn installed_info(
                 .transpose()?,
         )
     } else {
-        let (_, sha) = download_source()?;
-        (cache_dir()?.join("jadx-helper.jar"), Some(sha))
+        let source = match download_source() {
+            Ok(source) => source,
+            Err(_) => return Ok(None),
+        };
+        (cache_dir()?.join("jadx-helper.jar"), Some(source.sha))
     };
     let verified = tokio::task::spawn_blocking(move || -> Result<Option<PathBuf>> {
         if !path.is_file() {
@@ -106,6 +118,18 @@ pub async fn installed_info(
     }
     let info: JadxInfo =
         serde_json::from_str(&result.stdout).context("invalid Android JADX helper information")?;
+    validate_info(&info, expected_version()?.as_deref())?;
+    Ok(Some(info))
+}
+
+fn expected_version() -> Result<Option<String>> {
+    if std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH").is_some() {
+        return Ok(None);
+    }
+    Ok(download_source()?.signed.map(|artifact| artifact.version))
+}
+
+fn validate_info(info: &JadxInfo, expected: Option<&str>) -> Result<()> {
     if info.protocol != 1
         || info.helper_version.is_empty()
         || info.helper_version.len() > 128
@@ -120,7 +144,10 @@ pub async fn installed_info(
     {
         bail!("unsupported Android JADX helper protocol or features");
     }
-    Ok(Some(info))
+    if expected.is_some_and(|version| version != info.helper_version) {
+        bail!("Android JADX helper version does not match signed policy");
+    }
+    Ok(())
 }
 
 /// Whether an explicit offline helper or validated download source can be used after approval.
@@ -134,27 +161,34 @@ pub fn provisionable() -> bool {
     download_source().is_ok()
 }
 
-fn download_source() -> Result<(String, String)> {
-    let configured_url = std::env::var("NL2SH_JADX_ANDROID_HELPER_URL").ok();
-    let (url, sha) = if let Some(url) = configured_url {
+fn download_source() -> Result<HelperSource> {
+    let source = if let Ok(url) = std::env::var("NL2SH_JADX_ANDROID_HELPER_URL") {
         let sha = std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")
             .context("NL2SH_JADX_ANDROID_HELPER_SHA256 is required with a custom helper URL")?;
-        (url, parse_sha(sha)?)
+        HelperSource {
+            url,
+            sha: parse_sha(sha)?,
+            signed: None,
+        }
     } else {
-        (
-            DEFAULT_HELPER_URL.to_owned(),
-            DEFAULT_HELPER_SHA256.to_owned(),
-        )
+        let artifact = super::manifest::embedded()?
+            .and_then(|manifest| manifest.jadx_helper)
+            .context("this build has no signed default JADX policy; configure an explicit offline helper or HTTPS URL with SHA-256")?;
+        HelperSource {
+            url: artifact.url.clone(),
+            sha: artifact.sha256.to_ascii_lowercase(),
+            signed: Some(artifact),
+        }
     };
-    let parsed = reqwest::Url::parse(&url).context("invalid Android JADX helper URL")?;
+    let parsed = reqwest::Url::parse(&source.url).context("invalid Android JADX helper URL")?;
     if parsed.scheme() != "https"
-        || parsed.username() != ""
+        || !parsed.username().is_empty()
         || parsed.password().is_some()
         || parsed.fragment().is_some()
     {
         bail!("Android JADX helper URL must be HTTPS without credentials or fragment")
     }
-    Ok((url, sha))
+    Ok(source)
 }
 
 fn make_private_dir(path: &Path) -> Result<()> {
@@ -261,7 +295,9 @@ async fn ensure_helper(config: &Config) -> Result<PathBuf> {
         }
         return fs::canonicalize(path).context("cannot resolve Android helper path");
     }
-    let (url, sha) = download_source()?;
+    let source = download_source()?;
+    let url = source.url;
+    let sha = source.sha;
     let dir = cache_dir()?;
     let dest = dir.join("jadx-helper.jar");
     let _guard = DOWNLOAD_LOCK.lock().await;
@@ -320,6 +356,24 @@ async fn ensure_helper(config: &Config) -> Result<PathBuf> {
     if format!("{:x}", hash.finalize()) != sha {
         bail!("Android JADX helper SHA-256 mismatch")
     }
+    if let Some(artifact) = source.signed {
+        if bytes != artifact.size_bytes {
+            bail!("Android JADX helper size mismatch")
+        }
+        let signature = super::manifest::download_bounded(
+            &network::build_http_client(config)?,
+            &artifact.signature_url,
+            super::manifest::MAX_SIGNATURE_BYTES,
+        )
+        .await?;
+        let path = staged.path().to_owned();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let data = fs::read(path)?;
+            super::manifest::verify_signature(&data, &signature)
+        })
+        .await
+        .context("helper signature worker failed")??;
+    }
     let published = dest.clone();
     tokio::task::spawn_blocking(move || -> Result<()> {
         validate_dex_jar(staged.path())?;
@@ -354,19 +408,53 @@ fn helper_command(
     command
 }
 
+async fn probe_info(jar: &Path, work: &Path) -> Result<JadxInfo> {
+    let stdout = tempfile::NamedTempFile::new_in(work)?;
+    let mut child = Command::new("/system/bin/app_process")
+        .env("CLASSPATH", jar)
+        .arg("/")
+        .arg(ENTRYPOINT)
+        .arg("--info")
+        .stdout(std::process::Stdio::from(stdout.reopen()?))
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()?;
+    let status = match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
+        Ok(result) => result?,
+        Err(_) => {
+            child.kill().await?;
+            let _ = child.wait().await;
+            bail!("Android JADX protocol probe timed out")
+        }
+    };
+    if !status.success() || stdout.as_file().metadata()?.len() > 4096 {
+        bail!("Android JADX protocol probe failed or exceeded limit")
+    }
+    let mut bytes = Vec::new();
+    stdout.reopen()?.take(4097).read_to_end(&mut bytes)?;
+    serde_json::from_slice(&bytes).context("invalid Android JADX protocol information")
+}
+
 /// Decompiles one APK class using an Android DEX helper and `app_process`.
 pub async fn decompile_class(config: &Config, apk_path: &str, class_name: &str) -> Result<String> {
     if !cfg!(target_os = "android") {
         bail!("{{\"error\":\"jadx_android_only\",\"detail\":\"DEX helper decompilation requires the Android app_process runtime\"}}")
     }
-    let jar = ensure_helper(config).await.map_err(|error| anyhow::anyhow!("{}", serde_json::json!({
-        "error":"jadx_android_helper_unavailable", "version":HELPER_VERSION, "detail":error.to_string()
-    })))?;
+    let jar = ensure_helper(config).await.map_err(|error| {
+        anyhow::anyhow!(
+            "{}",
+            serde_json::json!({
+                "error":"jadx_android_helper_unavailable", "detail":error.to_string()
+            })
+        )
+    })?;
     let apk =
         fs::canonicalize(apk_path).with_context(|| format!("cannot resolve APK {apk_path}"))?;
     let work_dir = cache_dir()?;
     make_private_dir(&work_dir)?;
     let work = tempfile::tempdir_in(work_dir).context("cannot create JADX work directory")?;
+    let info = probe_info(&jar, work.path()).await?;
+    validate_info(&info, expected_version()?.as_deref())?;
     let source = work.path().join("class.java");
     let stderr =
         tempfile::NamedTempFile::new_in(work.path()).context("cannot stage helper diagnostics")?;
@@ -421,7 +509,7 @@ pub async fn decompile_class(config: &Config, apk_path: &str, class_name: &str) 
     })
     .await
     .context("helper result reader failed")??;
-    Ok(serde_json::json!({"status":"ok","class":class_name,"helper_version":HELPER_VERSION,"source":content.0,"truncated":content.1}).to_string())
+    Ok(serde_json::json!({"status":"ok","class":class_name,"helper_version":info.helper_version,"source":content.0,"truncated":content.1}).to_string())
 }
 
 #[cfg(test)]
@@ -474,15 +562,16 @@ mod tests {
     }
 
     #[test]
-    fn published_helper_defaults_are_pinned() -> Result<()> {
-        assert_eq!(
-            DEFAULT_HELPER_URL,
-            "https://github.com/nl2sh/nl2sh/releases/download/v1.0.4/jadx-helper.jar"
-        );
-        assert_eq!(
-            parse_sha(DEFAULT_HELPER_SHA256.to_owned())?,
-            DEFAULT_HELPER_SHA256
-        );
-        Ok(())
+    fn helper_protocol_and_signed_version_are_enforced() {
+        let mut info = JadxInfo {
+            protocol: 1,
+            helper_version: "0.2.0".into(),
+            jadx_core: "1.5.1".into(),
+            features: vec!["single_class".into()],
+        };
+        assert!(validate_info(&info, Some("0.2.0")).is_ok());
+        assert!(validate_info(&info, Some("0.1.0")).is_err());
+        info.protocol = 2;
+        assert!(validate_info(&info, None).is_err());
     }
 }

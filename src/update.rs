@@ -1,6 +1,6 @@
-//! GitHub Release discovery and checksum-verified executable replacement.
+//! GitHub Release discovery and authenticated executable replacement.
 
-use crate::config::Config;
+use crate::{config::Config, runtime_dependencies::manifest};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -119,8 +119,8 @@ pub struct UpdateRelease {
     pub version: String,
     /// Direct binary download URL.
     pub binary_url: String,
-    /// Direct SHA-256 file download URL.
-    pub checksum_url: String,
+    /// Exact asset authenticated by the signed release manifest.
+    pub artifact: manifest::RuntimeArtifact,
 }
 
 #[derive(Deserialize)]
@@ -142,28 +142,41 @@ pub async fn check(config: &Config) -> Result<Option<UpdateRelease>> {
     }
     require_self_update_owner().await?;
     let abi = android_abi()?;
-    let release: GithubRelease = crate::network::build_http_client(config)?
-        .get(LATEST_RELEASE_URL)
-        .header("User-Agent", concat!("nl2sh/", env!("CARGO_PKG_VERSION")))
-        .send()
-        .await
-        .context("update check failed")?
-        .error_for_status()
-        .context("update server returned an error")?
-        .json()
-        .await
-        .context("invalid update metadata")?;
+    let client = crate::network::build_http_client(config)?;
+    let metadata =
+        manifest::download_bounded(&client, LATEST_RELEASE_URL, manifest::MAX_MANIFEST_BYTES)
+            .await?;
+    let release: GithubRelease =
+        serde_json::from_slice(&metadata).context("invalid update metadata")?;
     let version = release.tag_name.trim_start_matches('v').to_owned();
     if !is_newer(&version, env!("CARGO_PKG_VERSION"))? {
         return Ok(None);
     }
-    let asset_name = format!("nl2sh-android-{abi}");
-    let binary_url = asset_url(&release.assets, &asset_name)?;
-    let checksum_url = asset_url(&release.assets, &format!("{asset_name}.sha256"))?;
+    let root = format!("https://github.com/nl2sh/nl2sh/releases/download/v{version}");
+    let manifest_url = asset_url(&release.assets, "nl2sh-runtime.json")?;
+    let signature_url = asset_url(&release.assets, "nl2sh-runtime.json.sig")?;
+    if manifest_url != format!("{root}/nl2sh-runtime.json")
+        || signature_url != format!("{root}/nl2sh-runtime.json.sig")
+    {
+        bail!("release manifest URL does not match tagged release")
+    }
+    let bytes =
+        manifest::download_bounded(&client, &manifest_url, manifest::MAX_MANIFEST_BYTES).await?;
+    let signature =
+        manifest::download_bounded(&client, &signature_url, manifest::MAX_SIGNATURE_BYTES).await?;
+    let policy = manifest::decode_signed(&bytes, &signature)?;
+    if policy.nl2sh != version {
+        bail!("signed manifest does not match release version")
+    }
+    let artifact = policy
+        .binaries
+        .get(abi)
+        .context("signed release does not support this ABI")?
+        .clone();
     Ok(Some(UpdateRelease {
         version,
-        binary_url,
-        checksum_url,
+        binary_url: artifact.url.clone(),
+        artifact,
     }))
 }
 
@@ -174,33 +187,41 @@ pub async fn install(config: &Config, release: &UpdateRelease) -> Result<()> {
     }
     require_self_update_owner().await?;
     let client = crate::network::build_http_client(config)?;
-    let binary = download(&client, &release.binary_url).await?;
-    let checksum = String::from_utf8(download(&client, &release.checksum_url).await?)
-        .context("update checksum is not UTF-8")?;
-    let expected = checksum
-        .split_whitespace()
-        .next()
-        .context("update checksum is empty")?;
-    let actual = sha256_hex(&binary);
-    if !expected.eq_ignore_ascii_case(&actual) {
-        bail!("update checksum mismatch")
+    let binary = manifest::download_bounded(&client, &release.artifact.url, 32_000_000).await?;
+    let signature = manifest::download_bounded(
+        &client,
+        &release.artifact.signature_url,
+        manifest::MAX_SIGNATURE_BYTES,
+    )
+    .await?;
+    if binary.len() as u64 != release.artifact.size_bytes
+        || !sha256_hex(&binary).eq_ignore_ascii_case(&release.artifact.sha256)
+    {
+        bail!("update asset size or checksum mismatch")
     }
+    manifest::verify_signature(&binary, &signature)?;
+    validate_binary_abi(&binary, android_abi()?)?;
+    require_self_update_owner().await?;
     replace_current_executable(&binary)
 }
 
-async fn download(client: &reqwest::Client, url: &str) -> Result<Vec<u8>> {
-    Ok(client
-        .get(url)
-        .header("User-Agent", concat!("nl2sh/", env!("CARGO_PKG_VERSION")))
-        .send()
-        .await
-        .context("update download failed")?
-        .error_for_status()
-        .context("update asset returned an error")?
-        .bytes()
-        .await
-        .context("cannot read update asset")?
-        .to_vec())
+fn validate_binary_abi(binary: &[u8], abi: &str) -> Result<()> {
+    let machine = match abi {
+        "arm64-v8a" => 183,
+        "armeabi-v7a" => 40,
+        "x86_64" => 62,
+        _ => bail!("unsupported update ABI"),
+    };
+    let class = if abi == "armeabi-v7a" { 1 } else { 2 };
+    if binary.len() < 64
+        || &binary[..4] != b"\x7fELF"
+        || binary[4] != class
+        || binary[5] != 1
+        || u16::from_le_bytes([binary[18], binary[19]]) != machine
+    {
+        bail!("update ELF does not match device ABI")
+    }
+    Ok(())
 }
 
 fn asset_url(assets: &[GithubAsset], name: &str) -> Result<String> {
@@ -313,6 +334,19 @@ mod tests {
     #[cfg(not(target_os = "android"))]
     fn rejects_android_update_on_host() {
         assert!(android_abi().is_err());
+    }
+
+    #[test]
+    fn rejects_cross_abi_and_non_elf_updates() -> Result<()> {
+        let mut header = vec![0; 64];
+        header[..4].copy_from_slice(b"\x7fELF");
+        header[4] = 2;
+        header[5] = 1;
+        header[18..20].copy_from_slice(&62u16.to_le_bytes());
+        validate_binary_abi(&header, "x86_64")?;
+        assert!(validate_binary_abi(&header, "arm64-v8a").is_err());
+        assert!(validate_binary_abi(b"#!/system/bin/sh", "x86_64").is_err());
+        Ok(())
     }
 
     #[test]

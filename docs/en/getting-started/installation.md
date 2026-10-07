@@ -24,7 +24,7 @@ On Windows compare `Get-FileHash ./nl2sh-android.zip -Algorithm SHA256`, extract
 
 If another Android device is your controller, download a signed APK from [nl2sh-helper Releases](https://github.com/nl2sh/nl2sh-helper/releases/latest), which requires repository access, and install it on the controller. In the helper, choose TCP ADB if it is already enabled on the target, or use a pairing code or QR code for a target running Android 11+ Wireless debugging. Accept the ADB authorization prompt on the target for a first TCP connection. For pairing codes, enter the temporary address, port, and code shown on the target.
 
-After connecting, the helper downloads the latest nl2sh ARM64/ARMv7 binary and SHA-256 file for the target ABI, verifies them, deploys the binary to `/data/local/tmp/nl2sh`, and starts its Web service in the background. Tap the button to open nl2sh in a browser, configure a provider and API key in the Web UI's Quick Start, then send your first task. The controller must be able to reach port 9999 on the target. The Web UI has no login and listens on all IPv4 interfaces, so use a trusted network. The helper does not support x86_64 targets, provide the TUI, or set model credentials automatically. See the [helper guide](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/en/guide.md) for connection details and troubleshooting.
+Connecting reuses a healthy installed runtime without checking releases or restarting it. First installation and explicit updates select ARM64, ARMv7 or x86_64 from an authenticated release manifest, verify the binary size/digest/signature, and deploy to `/data/local/tmp/nl2sh`. The native service reports its actual Web port. Explicit update, restart and stop actions are separate. Failed updates restore the previous verified binary and ownership. Open the returned browser address and configure model credentials in Web Quick Start. The controller must reach the actual port; Web has no login and listens on all IPv4 interfaces, so use a trusted network. See the [helper guide](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/en/guide.md).
 
 ## Bootstrap installation
 
@@ -64,10 +64,12 @@ Explicitly select [Gitee](https://gitee.com/nl2sh/nl2sh): replace the script URL
 
 ## Updates
 
-Direct Android builds support `nl2sh update` or TUI `/update`: download the ABI-specific executable, verify SHA-256, and atomically replace it. Restart to use the new program. Launchers deploy their local package according to its digest, so download the updated host package too; launching an old package can overwrite the device update. Termux package-manager builds use `pkg upgrade nl2sh`.
+Direct Android builds support `nl2sh update` or TUI `/update`: download the ABI-specific executable, verify its signed compatibility manifest, exact size, SHA-256, detached GPG signature and ELF ABI, and atomically replace it. Restart to use the new program. Launchers deploy their local package according to its digest, so download the updated host package too; launching an old package can overwrite the device update. Termux package-manager builds use `pkg upgrade nl2sh`.
 
 Continue with [daily startup](android-adb.md), [Termux](termux.md), or [source builds](../development/build.md).
 
-x86_64 devices and emulators require a new release archive containing that ABI. For an existing two-ABI installation, back up configuration and extract the new archive into a new directory. Launchers prefer native x86_64 without relying on ARM translation. Self-update uses `nl2sh-android-x86_64` and its `.sha256`; Termux packages continue to use package-manager updates.
+x86_64 devices and emulators require a new release archive containing that ABI. For an existing two-ABI installation, back up configuration and extract the new archive into a new directory. Launchers prefer native x86_64 without relying on ARM translation. Self-update uses `nl2sh-android-x86_64` and its manifest/signature; Termux packages continue to use package-manager updates.
 
 When reusing an older directory without `bin/x86_64/nl2sh`, installers issue a warning while allowing existing ARM installations to continue. For x86_64, back up `config.toml` and select a new directory with Bash/CMD `--install-dir` or PowerShell `-InstallDir`, using a release that contains x86_64. Script help lists all three ABIs and the native x86_64 preference.
+
+`/api/info` reports installation update ownership and whether the embedded runtime policy is verified, absent in an unsigned source build, or invalid. Helper-managed installations use Helper for updates; a damaged ownership marker blocks self-update until inspected.

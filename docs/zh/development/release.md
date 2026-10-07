@@ -17,3 +17,11 @@ Release 发布签名 `termux-apt-repository.tar.gz` 资产。文档工作流对 
 配置 Pages Source 为 GitHub Actions；github-pages 环境允许 master。现有 APT 私钥 Secret `TERMUX_APT_GPG_PRIVATE_KEY` 只由 Release 签名任务读取，文档构建不读取。公钥指纹改变需显式同步信任配置，不跳过验证。
 
 HTML 只存在构建产物，site/ 不提交到 master。参考 [GitHub Pages 官方工作流](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
+
+### 签名兼容性与资产
+
+`packaging/runtime-components.json` 指定独立 Bridge/JADX 发布及最低助手版本，先发布这些 companion 版本。发布任务获取精确资产，检查包内元数据与 APK 签名，然后签名 `nl2sh-runtime-extensions.json`，再让三个 ABI 的原生构建内嵌它。最终 `nl2sh-runtime.json` 补入实际原生大小和摘要。两个 Manifest 和每个原生/Bridge/JADX 资产都有二进制 SHA-256 独立 GPG 签名。标签必须与 Cargo 版本一致。
+
+签名复用 github-pages 环境中的 `TERMUX_APT_GPG_PRIVATE_KEY`，固定公钥指纹为 `5230D3A7CCBEED4616D39C51FC6AD1BC63F7D4D8`。Bridge 使用其已有 APK keystore secrets。伴侣仓库私有时，`NL2SH_COMPONENTS_TOKEN` 需允许读取对应 Release；否则使用仓库 token。缺失资产、密钥、协议不匹配或 APK 签名无效都会使发布失败。本地可暂缓生产签名；未签名原生源码构建需显式配置离线或自定义 JADX。
+
+原生程序和助手先验证签名 Manifest，再使用其中资产 URL，安装前验证大小、SHA-256 和资产签名。新安装或升级不接受现代未签名发布；连接已安装的健康运行时仍无需检查发布。

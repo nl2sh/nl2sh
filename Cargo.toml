@@ -32,6 +32,7 @@ nix = { version = "0.29", features = ["fs", "process", "signal", "term", "user"]
 nl2sh-tool-macros = { version = "0.1.0", path = "crates/nl2sh-tool-macros" }
 ratatui = "0.29"
 regex = "1"
+pgp = { version = "=0.16.0", default-features = false }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 rust-embed = { version = "8", features = ["interpolate-folder-path"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "socks"] }

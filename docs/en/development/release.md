@@ -17,3 +17,11 @@ Releases publish signed `termux-apt-repository.tar.gz`. Docs PRs validate only; 
 Set Pages Source to GitHub Actions and permit master in github-pages. The existing `TERMUX_APT_GPG_PRIVATE_KEY` secret is read by Release signing only, never docs builds. Key rotation requires explicitly updating trust configuration instead of disabling verification.
 
 Generated HTML remains a build artifact; do not commit site/ to master. See [official GitHub Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+### Signed compatibility and assets
+
+`packaging/runtime-components.json` selects independent Bridge/JADX releases and the minimum Helper version. Publish those companion versions first. The release downloads their exact artifacts, validates packaged metadata and the APK signature, then signs `nl2sh-runtime-extensions.json` before the three native builds embed it. A final `nl2sh-runtime.json` adds actual native sizes/digests. Both manifests and each native/Bridge/JADX asset have binary SHA-256 detached GPG signatures. Tag and Cargo version must agree.
+
+Signing reuses `TERMUX_APT_GPG_PRIVATE_KEY` in the github-pages environment, pinned to fingerprint `5230D3A7CCBEED4616D39C51FC6AD1BC63F7D4D8`. Bridge uses its existing APK keystore secrets. If companion repositories are private, `NL2SH_COMPONENTS_TOKEN` must permit reading their releases; otherwise the job uses the repository token. Missing assets, keys, protocol mismatches or invalid APK signatures fail publication. Local production signing may be deferred; unsigned local native builds require explicit offline/custom JADX configuration.
+
+Native and Helper downloads verify the signed manifest before following its asset URLs and verify size, SHA-256 and asset signature before installation. Modern unsigned releases cannot be used for new installation or upgrade. Connecting to a healthy already installed runtime still works without checking releases.

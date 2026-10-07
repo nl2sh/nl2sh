@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag for the draft release (e.g. v0.2.0)"
+        description: "Tag for the draft release (must match Cargo.toml)"
         required: false
-        default: "v0.2.0-draft"
+        default: "v1.0.6"
 
 permissions:
   contents: write
@@ -23,8 +23,47 @@ env:
   NDK_SHA1: a7b54a5de87fecd125a17d54f73c446199e72a64
 
 jobs:
+  extensions:
+    name: Verify and sign runtime component policy
+    environment: github-pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: build-tools;35.0.0
+          log-accepted-android-sdk-licenses: false
+      - name: Download exact companion releases
+        env:
+          GH_TOKEN: ${{ secrets.NL2SH_COMPONENTS_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p runtime-assets
+          BRIDGE_VERSION="$(python3 -c 'import json; print(json.load(open("packaging/runtime-components.json"))["android_bridge"])')"
+          JADX_VERSION="$(python3 -c 'import json; print(json.load(open("packaging/runtime-components.json"))["jadx_helper"])')"
+          gh release download "v${BRIDGE_VERSION}" --repo nl2sh/android-bridge --pattern nl2sh-android-bridge.apk --dir runtime-assets
+          gh release download "v${JADX_VERSION}" --repo nl2sh/jadx-helper --pattern jadx-helper.jar --dir runtime-assets
+      - name: Generate and sign immutable extension policy
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          TERMUX_APT_GPG_PRIVATE_KEY: ${{ secrets.TERMUX_APT_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/runtime-manifest.py extensions --assets runtime-assets --output runtime-assets/nl2sh-runtime-extensions.json --tag "$RELEASE_TAG" --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          scripts/sign-runtime-assets.sh runtime-assets/nl2sh-runtime-extensions.json runtime-assets/nl2sh-android-bridge.apk runtime-assets/jadx-helper.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-extensions
+          path: runtime-assets/
+          if-no-files-found: error
+
   build:
     name: Build ${{ matrix.target }}
+    needs: extensions
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -36,6 +75,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: runtime-extensions
+          path: runtime-assets
+      - name: Verify embedded extension policy
+        run: |
+          set -euo pipefail
+          gpg --batch --no-default-keyring --keyring ./src/trust/nl2sh-release.gpg --verify runtime-assets/nl2sh-runtime-extensions.json.sig runtime-assets/nl2sh-runtime-extensions.json
+          echo "NL2SH_RUNTIME_MANIFEST=$GITHUB_WORKSPACE/runtime-assets/nl2sh-runtime-extensions.json" >> "$GITHUB_ENV"
+          echo "NL2SH_RUNTIME_MANIFEST_SIGNATURE=$GITHUB_WORKSPACE/runtime-assets/nl2sh-runtime-extensions.json.sig" >> "$GITHUB_ENV"
 
       - name: Install Node.js for embedded Web assets
         uses: actions/setup-node@v4
@@ -257,9 +307,40 @@ jobs:
           name: termux-apt-repository
           path: termux-apt-repository.tar.gz
 
+  signed-runtime:
+    name: Sign final manifest and native assets
+    environment: github-pages
+    needs: [extensions, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: runtime-extensions
+          path: runtime-assets
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: update-*
+          merge-multiple: true
+          path: runtime-assets
+      - name: Verify build input and sign release bytes
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          TERMUX_APT_GPG_PRIVATE_KEY: ${{ secrets.TERMUX_APT_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          gpg --batch --no-default-keyring --keyring ./src/trust/nl2sh-release.gpg --verify runtime-assets/nl2sh-runtime-extensions.json.sig runtime-assets/nl2sh-runtime-extensions.json
+          python3 scripts/runtime-manifest.py complete --assets runtime-assets --extensions runtime-assets/nl2sh-runtime-extensions.json --output runtime-assets/nl2sh-runtime.json --tag "$RELEASE_TAG"
+          scripts/sign-runtime-assets.sh runtime-assets/nl2sh-runtime.json runtime-assets/nl2sh-android-arm64-v8a runtime-assets/nl2sh-android-armeabi-v7a runtime-assets/nl2sh-android-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-runtime
+          path: runtime-assets/
+          if-no-files-found: error
+
   release:
     name: Publish release
-    needs: [package, termux-package, termux-repository]
+    needs: [package, termux-package, termux-repository, signed-runtime]
     if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     steps:
@@ -300,3 +381,7 @@ jobs:
             artifacts/**/nl2sh-android-x86_64
             artifacts/**/nl2sh-android-x86_64.sha256
             artifacts/**/*.deb
+            artifacts/signed-runtime/*.sig
+            artifacts/signed-runtime/*.json
+            artifacts/signed-runtime/*.apk
+            artifacts/signed-runtime/*.jar

@@ -16,7 +16,7 @@ jadx = true
 
 The first three need no extra runtime. Decompilation runs only on Android with `/system/bin/app_process` and a helper containing `classes.dex`; ordinary JVM `.class` JARs are rejected. Arguments/output are bounded with a timeout, and arbitrary large APK support is not guaranteed.
 
-The first approved call downloads the fixed `v1.0.4` [helper](https://github.com/nl2sh/nl2sh/releases/download/v1.0.4/jadx-helper.jar), verifies SHA-256 `b733944a9588abbafee1d9b9d77cb78c02bb95f056301f115c0fcb77307c7328`, and caches atomically. This dependency does not automatically follow the latest program release.
+A signed release embeds an authenticated compatibility policy selecting the helper's exact version, HTTPS URL, SHA-256, size and protocol. The first approved call verifies the downloaded asset and detached GPG signature before publishing it in a private cache keyed by digest. Before decompilation, `--info` must report protocol 1, `single_class`, and the policy's helper version. The historical v1.0.4 asset is no longer a default. An unsigned local source build has no default download; use an explicit offline helper or custom HTTPS source with a user-supplied digest.
 
 Use `NL2SH_JADX_ANDROID_HELPER_PATH` offline. A custom HTTPS source requires both `NL2SH_JADX_ANDROID_HELPER_URL` and `NL2SH_JADX_ANDROID_HELPER_SHA256`. `NL2SH_JADX_CACHE_DIR` selects the private cache root.
 
