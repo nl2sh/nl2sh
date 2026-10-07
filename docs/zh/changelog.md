@@ -4,6 +4,8 @@
 
 - Web 模型回答的围栏代码块新增无文字的复制图标按钮；一键复制完整代码，成功后图标短暂变为对勾，并为辅助技术保留状态名称。Clipboard API 不可用时使用浏览器兼容回退。
 
+- Agent 记忆重构为内嵌 SQLite 事务存储；Android 原生部署保存在可执行文件旁的 `memory/`，Termux 使用状态目录，不依赖系统 `sqlite3`，也不迁移旧 JSON。Web 左侧新增记忆面板，可搜索并增删改查。
+
 - `tailcat_send_file` 省略 `mode` 时默认使用不依赖 scp 的原始流；`copy` 保留为面向接收箱的显式兼容模式，并明确 Android 原生 shell 通常不提供其外部 scp 依赖。
 
 - 新增强确认的 `tailcat_adb_pair`：引导 Android 11+ 无线调试，复核当前配对信息后共享配对/连接及可选 Web 端口，返回配对码和对端命令；拒绝过期审批和已有监听器替换。

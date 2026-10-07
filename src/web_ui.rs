@@ -21,6 +21,7 @@ use crate::{
             diagnostics::{list_android_apps, ListAndroidAppsArgs},
             environment::inspect_environment,
         },
+        memory::domain::{AgentMemory, AgentMemoryAction, AgentMemoryArgs, MemoryEntry},
         Capability, ToolRegistry,
     },
 };
@@ -696,6 +697,9 @@ fn router(state: Arc<Shared>) -> Router {
         .route("/api/tools", get(get_tools))
         .route("/api/tools/toggle", post(toggle_tool))
         .route("/api/apps", get(get_apps))
+        .route("/api/memory", get(get_memory).post(set_memory))
+        .route("/api/memory/delete", post(delete_memory))
+        .route("/api/memory/clear", post(clear_memory))
         .route("/api/file-suggestions", get(get_file_suggestions))
         .route("/api/files", get(get_files))
         .route("/api/file-preview", get(get_file_preview))
@@ -1295,6 +1299,75 @@ async fn get_apps(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<Instal
         })
         .collect();
     Ok(Json(apps))
+}
+
+#[derive(Deserialize)]
+struct MemorySetRequest {
+    key: String,
+    value: String,
+}
+
+#[derive(Deserialize)]
+struct MemoryKeyRequest {
+    key: String,
+}
+
+async fn get_memory(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<MemoryEntry>>> {
+    memory_entries(state.path.clone()).await
+}
+
+async fn set_memory(
+    State(state): State<Arc<Shared>>,
+    Json(request): Json<MemorySetRequest>,
+) -> ApiResult<Json<Vec<MemoryEntry>>> {
+    let path = state.path.clone();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        AgentMemory::open(&path)?.apply(&AgentMemoryArgs {
+            action: AgentMemoryAction::Set,
+            key: Some(request.key),
+            value: Some(request.value),
+        })?;
+        Ok(())
+    })
+    .await??;
+    memory_entries(state.path.clone()).await
+}
+
+async fn delete_memory(
+    State(state): State<Arc<Shared>>,
+    Json(request): Json<MemoryKeyRequest>,
+) -> ApiResult<Json<Vec<MemoryEntry>>> {
+    let path = state.path.clone();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        AgentMemory::open(&path)?.apply(&AgentMemoryArgs {
+            action: AgentMemoryAction::Delete,
+            key: Some(request.key),
+            value: None,
+        })?;
+        Ok(())
+    })
+    .await??;
+    memory_entries(state.path.clone()).await
+}
+
+async fn clear_memory(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<MemoryEntry>>> {
+    let path = state.path.clone();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        AgentMemory::open(&path)?.apply(&AgentMemoryArgs {
+            action: AgentMemoryAction::Clear,
+            key: None,
+            value: None,
+        })?;
+        Ok(())
+    })
+    .await??;
+    memory_entries(state.path.clone()).await
+}
+
+async fn memory_entries(path: PathBuf) -> ApiResult<Json<Vec<MemoryEntry>>> {
+    Ok(Json(
+        tokio::task::spawn_blocking(move || AgentMemory::open(&path)?.entries()).await??,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -3275,6 +3348,71 @@ mod tests {
             path,
             sessions: Mutex::new(BTreeMap::from([("web-test".into(), current)])),
         })
+    }
+
+    #[tokio::test]
+    async fn memory_api_supports_crud_in_the_shared_sqlite_store() -> Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let shared = state(path.clone());
+
+        let Json(initial) = get_memory(State(shared.clone()))
+            .await
+            .map_err(|error| error.error)?;
+        assert!(initial.is_empty());
+
+        let Json(created) = set_memory(
+            State(shared.clone()),
+            Json(MemorySetRequest {
+                key: "user_name".into(),
+                value: "ernest".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        assert_eq!(created.len(), 1);
+        assert_eq!(created[0].key, "user_name");
+        assert_eq!(created[0].value, "ernest");
+
+        let Json(updated) = set_memory(
+            State(shared.clone()),
+            Json(MemorySetRequest {
+                key: "user_name".into(),
+                value: "Ernest".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        assert_eq!(updated[0].value, "Ernest");
+
+        let Json(deleted) = delete_memory(
+            State(shared.clone()),
+            Json(MemoryKeyRequest {
+                key: "user_name".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        assert!(deleted.is_empty());
+
+        let _ = set_memory(
+            State(shared.clone()),
+            Json(MemorySetRequest {
+                key: "language".into(),
+                value: "zh-CN".into(),
+            }),
+        )
+        .await
+        .map_err(|error| error.error)?;
+        let Json(cleared) = clear_memory(State(shared))
+            .await
+            .map_err(|error| error.error)?;
+        assert!(cleared.is_empty());
+        assert!(config::memory_dir(&path)?
+            .join("agent-memory.sqlite3")
+            .is_file());
+        assert!(!directory.path().join(".nl2sh-agent-memory.json").exists());
+        Ok(())
     }
 
     #[test]

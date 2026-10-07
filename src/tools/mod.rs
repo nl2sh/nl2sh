@@ -681,7 +681,10 @@ mod tests {
                     .requires_confirmation
             );
         }
-        assert!(!directory.path().join(".nl2sh-agent-memory.json").exists());
+        assert!(!directory
+            .path()
+            .join("memory/agent-memory.sqlite3")
+            .exists());
         Ok(())
     }
 }

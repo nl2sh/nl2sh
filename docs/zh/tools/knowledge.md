@@ -8,7 +8,7 @@
 
 ## 私有便签
 
-`agent_memory` 的动作是 `get/list/set/delete/clear`；`read` 不是合法动作。读取只读，写入/删除需确认。便签是小型持久数据，不替代会话，也不授予执行权限。
+`agent_memory` 的动作是 `get/list/set/delete/clear`；`read` 不是合法动作。读取只读，模型发起的写入/删除需确认。便签使用内嵌 SQLite：Android 原生部署保存在可执行文件旁的 `memory/agent-memory.sqlite3`，Termux 保存在状态目录的 `memory/`；不依赖系统 `sqlite3` 命令，也不迁移旧 `.nl2sh-agent-memory.json`。Web 记忆面板可由用户直接增删改查。便签是小型持久数据，不替代会话，也不授予执行权限。
 
 ## 图表
 

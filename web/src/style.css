@@ -399,6 +399,23 @@ button:disabled { opacity: .45; }
 @media (max-width: 650px) { .pcm-fields { grid-template-columns: 1fr; } }
 .panel-count, .panel-hint { color: var(--text-secondary); font-size: .8rem; }
 .panel-hint { margin: .6rem .7rem; }
+.memory-panel { gap: .55rem; }
+.memory-panel > .panel-hint { margin: 0; }
+.memory-editor { display: grid; gap: .55rem; padding: .7rem; border: 1px solid var(--border); border-radius: 8px; background: var(--background-alt); }
+.memory-editor label { display: grid; gap: .3rem; color: var(--text-secondary); font-size: .8rem; }
+.memory-editor input, .memory-editor textarea { width: 100%; min-width: 0; padding: .5rem; color: var(--text-primary); background: var(--background); border: 1px solid var(--border); border-radius: 7px; font: inherit; }
+.memory-editor textarea { min-height: 6rem; resize: vertical; }
+.memory-editor-actions, .memory-item > div { display: flex; gap: .35rem; }
+.memory-editor small { color: var(--text-secondary); line-height: 1.4; }
+.memory-list-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; color: var(--text-secondary); font-size: .8rem; }
+.memory-list-heading button { flex: none; }
+.memory-list { display: grid; align-content: start; gap: .5rem; }
+.memory-item { min-width: 0; padding: .65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--background-alt); }
+.memory-item header { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.memory-item header strong { min-width: 0; overflow-wrap: anywhere; color: var(--accent); }
+.memory-item header small { flex: none; color: var(--text-secondary); }
+.memory-item p { max-height: 12rem; margin: .5rem 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-clear, .memory-item .danger, .memory-panel .bad { color: var(--error); }
 .tool-catalog .catalog-categories { flex-wrap: wrap; max-height: 92px; overflow-y: auto; }
 .tool-catalog .catalog-list { min-height: 0; }
 .terminal-panel pre { flex: 1; min-height: 0; margin: 0; padding: .6rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--background); font: .78rem/1.5 ui-monospace, monospace; }

@@ -255,8 +255,7 @@ impl Tool for ExtendedTool {
                     args.action,
                     AgentMemoryAction::Get | AgentMemoryAction::List
                 ) {
-                    let memory = AgentMemory::new(ctx.file_tools.base());
-                    let summary = memory.mutation_summary(&args)?;
+                    let summary = AgentMemory::mutation_summary(&args)?;
                     return Ok(PreparedToolCall::operation_with_risk(
                         summary,
                         Box::new(ExtendedAction::MemoryWrite(args)),
@@ -466,9 +465,9 @@ impl PreparedExecution for ExtendedAction {
                 "Media action completed after confirmation.".into()
             }
             Self::MediaQuery(args) => android_tools::media_query(executor(ctx)?, &args).await?,
-            Self::MemoryRead(args) => AgentMemory::new(ctx.file_tools.base()).read(&args)?,
+            Self::MemoryRead(args) => agent_memory(ctx)?.read(&args)?,
             Self::MemoryWrite(args) => {
-                let memory = AgentMemory::new(ctx.file_tools.base());
+                let memory = agent_memory(ctx)?;
                 tokio::task::spawn_blocking(move || memory.apply(&args))
                     .await
                     .context("agent_memory worker failed")??
@@ -490,6 +489,15 @@ impl PreparedExecution for ExtendedAction {
 
 fn executor<'a>(ctx: &'a ToolContext<'_>) -> Result<&'a dyn crate::shell::CommandExecutor> {
     ctx.executor.context("tool executor unavailable")
+}
+
+fn agent_memory(ctx: &ToolContext<'_>) -> Result<AgentMemory> {
+    let config = ctx.config.context("tool config unavailable")?;
+    let path = match config.source.as_deref() {
+        Some(path) => path.to_path_buf(),
+        None => crate::config::default_config_path()?,
+    };
+    AgentMemory::open(&path)
 }
 
 async fn checked_command(ctx: &ToolContext<'_>, command: &str) -> Result<()> {

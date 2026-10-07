@@ -52,6 +52,27 @@ pub fn state_dir(config_path: &Path) -> Result<PathBuf> {
         .to_path_buf())
 }
 
+/// Resolves the private persistent Agent-memory directory.
+///
+/// Direct Android deployments keep memory beside the executable. Termux uses
+/// its XDG-compatible state directory so package-managed binaries stay immutable.
+pub fn memory_dir(config_path: &Path) -> Result<PathBuf> {
+    if is_termux() {
+        return Ok(state_dir(config_path)?.join("memory"));
+    }
+    #[cfg(target_os = "android")]
+    {
+        let exe = env::current_exe().context("cannot locate nl2sh executable")?;
+        let canonical = fs::canonicalize(&exe).unwrap_or(exe);
+        let parent = canonical
+            .parent()
+            .context("nl2sh executable has no parent directory")?;
+        return Ok(parent.join("memory"));
+    }
+    #[cfg(not(target_os = "android"))]
+    Ok(state_dir(config_path)?.join("memory"))
+}
+
 fn executable_relative_config_path() -> Result<PathBuf> {
     let exe = env::current_exe().context("cannot locate nl2sh executable")?;
     let canonical = fs::canonicalize(&exe).unwrap_or(exe);

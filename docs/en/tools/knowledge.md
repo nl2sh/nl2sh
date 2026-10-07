@@ -8,7 +8,7 @@ Tools list bases, search, and read bounded originals, without upload/append/impo
 
 ## Private notes
 
-`agent_memory` actions are `get/list/set/delete/clear`; `read` is invalid. Reads are read-only; writes/deletions require approval. Small persistent notes do not replace sessions or grant execution authority.
+`agent_memory` actions are `get/list/set/delete/clear`; `read` is invalid. Reads are read-only; model-initiated writes/deletions require approval. Notes use embedded SQLite: native Android stores `memory/agent-memory.sqlite3` beside the executable, while Termux uses `memory/` in the state directory. This does not depend on the system `sqlite3` command or migrate the old `.nl2sh-agent-memory.json`. Users can manage entries directly in the Web memory panel. Small persistent notes do not replace sessions or grant execution authority.
 
 ## Charts
 

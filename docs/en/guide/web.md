@@ -14,11 +14,13 @@ After confirming port 9999, open `http://127.0.0.1:9999/`. This mode initializes
 
 ## Interface and sessions
 
-The left icon bar opens sessions, files, apps, tools, safety terminal, and configuration. Adjacent panels minimize, resize by dragging, and remember widths; narrow screens use overlays. The sidebar can create sessions; the logo shows the program version.
+The left icon bar opens sessions, files, apps, tools, safety terminal, memory, and configuration. Adjacent panels minimize, resize by dragging, and remember widths; narrow screens use overlays. The sidebar can create sessions; the logo shows the program version.
 
 Multiple Agent sessions run concurrently; switching does not stop background work, and approvals are independent. Completed first turns generate short titles asynchronously; lists show creation time. Running, pending-approval, or terminal-connected sessions cannot be deleted. Web and TUI keep separate conversations.
 
 Every new Web task loads saved configuration; restart the TUI to load browser changes. See [provider setup](../getting-started/configure-provider.md). The read-only device overview needs no model. Advanced controls show budgets, tokens, Root state, and stage timings. Provider-returned reasoning is displayed separately and excluded from model history.
+
+The memory panel searches, creates, edits, and deletes persistent notes, and can clear all notes after a second confirmation. These are explicit local Web management actions; model-initiated `agent_memory` mutations still pass through security classification and approval. Native Android deployments keep the SQLite database at `memory/agent-memory.sqlite3` beside the nl2sh executable; Termux uses `memory/` under the nl2sh state directory. The old `.nl2sh-agent-memory.json` file is not migrated automatically.
 
 ## Files and output
 

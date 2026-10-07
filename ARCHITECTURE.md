@@ -94,7 +94,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/tools/audio` | WAV/Raw PCM DSP 与 Jev/通用 LLM 质量判断 | 音频 → Feature JSON、`needs_input` 或评分 | Raw PCM 元数据不得猜测；Jev 已配置时失败不回退；不上传原始音频 |
 | `src/tools/chart` | 有界图表规格校验及终端文字回退 | 模型提供的数值 → 结构化 Tool Result | 只读呈现，不采集或验证统计证据 |
 | `src/tools/android` | 固定参数诊断、只读环境盘点、语义 UI 操作、设备聚合、剪贴板与媒体工具 | 严格结构化参数 → 有界证据或待确认动作 | 不提供任意 shell；文字/节点点击在确认前和执行前重读 UI 树；写入必须确认；Unicode 写入后端在确认前固定，不在确认后切换 |
-| `src/tools/memory` | 私有有界键值便签与原子持久化 | get/list 或确认后的 set/delete/clear → JSON | 不把便签当系统指令；限制键、值和条目数，写操作必须确认 |
+| `src/tools/memory` | 私有有界键值便签与内嵌 SQLite 事务持久化 | get/list 或确认后的 set/delete/clear → JSON；Web 显式 CRUD → 条目列表 | 不依赖系统 sqlite3；不把便签当系统指令；限制键、值和条目数；模型写操作必须确认 |
 | `src/sessions` | `SessionStore`、私有原子快照 | 完整对话 turn → 可恢复会话 | 不序列化配置、凭据、余额或任务审批；工具结果保持有界 |
 | `src/llm` | `LlmClient`、`TextDeltaSink`、统一消息/工具类型、两个 HTTP/SSE adapter、retry | `LlmRequest` → 文本增量 + `LlmResponse` | 不进行安全判断或执行工具 |
 | `src/provider_metadata` | `ProviderMetadataClient`、Provider 识别、模型列表与上下文元数据归一化 | Provider 配置 → `ModelMetadata` 列表 | 只读网络访问，不记录凭据/原始账户响应，不参与模型推理与安全判断 |
@@ -105,7 +105,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/tools/apk` | APK ZIP 概览、条目检索、DEX 类索引与单类反编译适配 | 本地 APK → 有界 JSON 证据或 Java 源码 | 前三项纯 Rust 只读；反编译为 Dangerous 强确认，不执行 APK 内容 |
 | `src/tools/tailcat` | 可选 tailcat 检查、一次性接收、文件发送、端口服务和状态/停止 | 校验后的参数 → argv 子进程与当前进程管理的监听器 | 组默认关闭；接收确认，发送及开放端口强确认；临时密钥和父进程退出信号限制监听器生命周期 |
 | `src/runtime_dependencies/jadx` | Android DEX helper 校验/按需下载、私有缓存和受控子进程 | 含 `classes.dex` 的 helper → 带私有 Java 临时目录的 `app_process` → 单类源码 | 仅在反编译强确认后下载；普通 JVM JAR 拒绝；helper 只处理目标类并拒绝 XML 解析；无默认未验证资产 |
-| `src/web_ui` | Axum 0.8 HTTP/SSE/WebSocket、多 Agent 会话、LLM 自动标题、快捷运行设置、浏览器审批、rust-embed 资源 | serde JSON + SSE + WebSocket → 独立 Agent Runner、结构化显示条目、原子配置文件 | 无登录，优先监听 IPv4 9999（占用时使用可用端口）；每会话独立锁和审批通道；WebSocket 终端仍走安全分类和确认；请求有大小上限；不直接执行模型输出 |
+| `src/web_ui` | Axum 0.8 HTTP/SSE/WebSocket、多 Agent 会话、LLM 自动标题、快捷运行设置、记忆 CRUD、浏览器审批、rust-embed 资源 | serde JSON + SSE + WebSocket → 独立 Agent Runner、结构化显示条目、SQLite 记忆、原子配置文件 | 无登录，优先监听 IPv4 9999（占用时使用可用端口）；每会话独立锁和审批通道；直接记忆管理仅代表用户操作，模型写入仍确认；WebSocket 终端仍走安全分类和确认；请求有大小上限；不直接执行模型输出 |
 | `src/tools/ui` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
