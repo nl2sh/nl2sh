@@ -17,8 +17,8 @@
 9. **整体验收**：三 Android ABI 构建；API 26 与当前 Android 模拟器覆盖协议、服务、端口冲突、并发、Helper 重连和更新失败回滚；Rust/Gradle/前端/双语文档及派生参考门禁；各职责独立提交，真实发布与签名产物另核实。
 
 - [x] 扩展端协议基础与 Bridge 诊断页面，API 26 验证。
-- [ ] 主程序运行时能力与健康接口。
-- [ ] 原生 service 与启动器迁移。
+- [x] 主程序运行时能力与健康接口。
+- [x] 原生 service 与启动器迁移。
 - [ ] Helper 生命周期、回滚和更新归属。
 - [ ] Compatibility Manifest、JADX 协议执行校验与资产签名。
 - [ ] Helper Bridge 管理和扩展状态。

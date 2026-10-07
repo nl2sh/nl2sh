@@ -16,10 +16,53 @@ pub enum ApiTypeArg {
 pub enum Command {
     /// Check for and install the latest compatible GitHub Release.
     Update,
+    /// Manage the native background Web service for this configuration.
+    Service {
+        #[command(subcommand)]
+        command: ServiceCommand,
+    },
     /// Machine-readable, non-interactive interface for a trusted local bridge.
     Bridge {
         #[command(subcommand)]
         command: BridgeCommand,
+    },
+}
+#[derive(Debug, Clone, Subcommand)]
+pub enum ServiceCommand {
+    /// Start or return the healthy existing service.
+    Start {
+        #[arg(long)]
+        json: bool,
+        #[arg(long, default_value_t = 9999)]
+        port: u16,
+        #[arg(long)]
+        port_strict: bool,
+    },
+    /// Stop only the service owned by this configuration.
+    Stop {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Stop and start the service, preserving configuration and sessions.
+    Restart {
+        #[arg(long)]
+        json: bool,
+        #[arg(long, default_value_t = 9999)]
+        port: u16,
+        #[arg(long)]
+        port_strict: bool,
+    },
+    /// Report verified process identity and HTTP readiness.
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(hide = true)]
+    Run {
+        #[arg(long)]
+        port: u16,
+        #[arg(long)]
+        port_strict: bool,
     },
 }
 #[derive(Debug, Clone, Subcommand)]

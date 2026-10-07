@@ -5,12 +5,15 @@ Interactive startup also listens on `0.0.0.0:9999`, choosing another available p
 ## Background startup without a terminal
 
 ```bash
-adb shell 'cd /data/local/tmp && nohup ./nl2sh --web-only >nl2sh-web.log 2>&1 </dev/null &'
-adb shell 'cat /data/local/tmp/nl2sh-web.log'
-adb forward tcp:9999 tcp:9999
+adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service start --json'
+adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service status --json'
 ```
 
-After confirming port 9999, open `http://127.0.0.1:9999/`. This mode initializes no TUI/PTY and can survive ADB disconnection. Launchers accept `--web-only` (`-WebOnly` in the PowerShell installer). Cancel active tasks before ending the actual service process. Host launchers stop old nl2sh instances before startup.
+`state=ready` means process identity and the PID, version, and actual port returned by `/api/info` have been verified. Use the returned `port` in `adb forward tcp:9999 tcp:<port>`, then open `http://127.0.0.1:9999/`. Repeated `start` returns a healthy existing service. Use `service restart --json` or `service stop --json` explicitly. `--port 9999` sets the preferred port; `--port-strict` refuses an occupied port instead of selecting another; `--port 0` requests an ephemeral port.
+
+Each configuration has an adjacent private `config.service/` directory with runtime and operation locks, `state.json`, `service.log`. Startup verifies readiness before returning. State records process start identity, executable device/inode, UID, version, and actual port. Stop sends a private shutdown token only to the verified service; it never kills processes by name. Shutdown cancels tasks, rejects pending approvals, and exits. Public status JSON omits the token. After binary replacement, status still reports the running version; `restart` launches the new version. Configuration and session files remain in place.
+
+Background mode initializes no TUI/PTY and survives ADB disconnection. Launcher `--web-only` (`-WebOnly` in the PowerShell installer) uses the native lifecycle interface. `nl2sh --web-only` remains a foreground option for an external process supervisor and does not register a managed service. `start` refuses to replace an owned but unhealthy process; inspect its log and explicitly restart. Legacy launcher or Helper `nohup` processes are unregistered and must first be stopped through their original manager. The new interface does not adopt them.
 
 ## Interface and sessions
 

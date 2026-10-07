@@ -5,12 +5,15 @@
 ## 无终端后台启动
 
 ```bash
-adb shell 'cd /data/local/tmp && nohup ./nl2sh --web-only >nl2sh-web.log 2>&1 </dev/null &'
-adb shell 'cat /data/local/tmp/nl2sh-web.log'
-adb forward tcp:9999 tcp:9999
+adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service start --json'
+adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service status --json'
 ```
 
-确认实际端口是 9999 后打开 `http://127.0.0.1:9999/`。后台模式不初始化 TUI/PTY，适合断开 ADB 后继续运行。启动器也支持 `--web-only`（PowerShell 安装器用 `-WebOnly`）。停止前先取消任务，再按实际进程结束服务；主机启动器会停止旧 nl2sh 实例后启动。
+`state=ready` 表示已验证进程身份及 `/api/info` 返回的 PID、版本和实际端口。按输出中的 `port` 设置 `adb forward tcp:9999 tcp:<port>`，然后打开 `http://127.0.0.1:9999/`。重复 `start` 返回健康的现有服务；显式重启或停止使用 `service restart --json`、`service stop --json`。`--port 9999` 指定首选端口，`--port-strict` 拒绝占用而非切换；`--port 0` 请求系统分配端口。
+
+服务按配置路径管理相邻的私有 `config.service/` 目录，包含运行锁、操作锁、`state.json`、`service.log`。启动返回前核验健康；记录进程启动标识、可执行文件设备/inode、UID、版本与实际端口。停止仅向核验过的服务发送私有关闭令牌，不按进程名批量终止进程；服务会取消任务、拒绝待决审批并退出。状态 JSON 不包含令牌。更新二进制后，`status` 仍显示实际运行版本；采用 `restart` 才启动新版本。配置和会话文件保持原位。
+
+后台模式不初始化 TUI/PTY，断开 ADB 后继续运行。启动器的 `--web-only`（PowerShell 安装器 `-WebOnly`）调用原生服务接口。`nl2sh --web-only` 仍可用于由其他进程管理器托管的前台进程；它不自动注册为受管服务。无响应但身份匹配的服务不会被 `start` 自动替换，应查看日志并显式 `restart`。旧启动器或 Helper 的 `nohup` 服务未注册，须先通过其原管理入口停止，不能用新接口接管。
 
 ## 界面与会话
 

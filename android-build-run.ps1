@@ -19,18 +19,16 @@ $NdkDir = if ($env:ANDROID_NDK_HOME) { $env:ANDROID_NDK_HOME } elseif ($env:ANDR
 $AdbArgs = @()
 
 function Start-WebOnly([bool]$UseSu) {
-    $LogFile = "$AndroidDir/nl2sh-web.log"
-    $RemoteCommand = "cd '$AndroidDir' && nohup '$RemoteBinary' --web-only >'$LogFile' 2>&1 </dev/null &"
+    $RemoteCommand = "'$RemoteBinary' --config '$AndroidDir/config.toml' service start --json"
     if ($UseSu) { & adb @AdbArgs shell su -c $RemoteCommand } else { & adb @AdbArgs shell $RemoteCommand }
-    if ($LASTEXITCODE -ne 0) { throw "failed to start Web-only service" }
-    Write-Host "Web-only service started. Log: $LogFile"
+    if ($LASTEXITCODE -ne 0) { throw "native service startup failed" }
 }
 
 function Stop-ExistingNl2sh([bool]$UseSu) {
-    Write-Host "Stopping existing nl2sh processes on the device..."
-    $StopCommand = 'for process in /proc/[0-9]*; do [ -r "$process/comm" ] || continue; IFS= read -r name < "$process/comm" || continue; [ "$name" = nl2sh ] || continue; kill "${process##*/}" 2>/dev/null || true; done; sleep 1; for process in /proc/[0-9]*; do [ -r "$process/comm" ] || continue; IFS= read -r name < "$process/comm" || continue; [ "$name" = nl2sh ] || continue; kill -9 "${process##*/}" 2>/dev/null || true; done; exit 0'
+    $StopCommand = "'$RemoteBinary' --config '$AndroidDir/config.toml' service stop --json"
+    Write-Host "Stopping the owned native service for this configuration..."
     if ($UseSu) { & adb @AdbArgs shell su -c $StopCommand } else { & adb @AdbArgs shell $StopCommand }
-    if ($LASTEXITCODE -ne 0) { throw "failed to stop existing nl2sh processes" }
+    if ($LASTEXITCODE -ne 0) { throw "native service shutdown failed" }
 }
 
 foreach ($Command in @("adb", "cargo", "rustup")) {

@@ -27,39 +27,40 @@ Natural Language to Shell for Android
 Usage: nl2sh [OPTIONS] [INSTRUCTION] [COMMAND]
 
 Commands:
-  update  Check for and install the latest compatible GitHub Release
-  bridge  Machine-readable, non-interactive interface for a trusted local bridge
-  help    Print this message or the help of the given subcommand(s)
+  update   Check for and install the latest compatible GitHub Release
+  service  Manage the native background Web service for this configuration
+  bridge   Machine-readable, non-interactive interface for a trusted local bridge
+  help     Print this message or the help of the given subcommand(s)
 
 Arguments:
   [INSTRUCTION]
-          
+
 
 Options:
       --config <CONFIG>
-          
+
 
       --mode <MODE>
           [default: agent]
           [possible values: agent, command]
 
       --endpoint <ENDPOINT>
-          
+
 
       --model <MODEL>
-          
+
 
       --api-type <API_TYPE>
           [possible values: auto, chat_completions, responses]
 
       --no-pty
-          
+
 
       --ascii
-          
+
 
       --dry-run
-          
+
 
       --web-only
           Run only the browser UI without initializing a terminal interface
@@ -79,6 +80,97 @@ Usage: update
 Options:
   -h, --help
           Print help
+```
+
+```text
+Manage the native background Web service for this configuration
+
+Usage: service <COMMAND>
+
+Commands:
+  start    Start or return the healthy existing service
+  stop     Stop only the service owned by this configuration
+  restart  Stop and start the service, preserving configuration and sessions
+  status   Report verified process identity and HTTP readiness
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help
+```
+
+```text
+Start or return the healthy existing service
+
+Usage: start [OPTIONS]
+
+Options:
+      --json
+
+
+      --port <PORT>
+          [default: 9999]
+
+      --port-strict
+
+
+  -h, --help
+          Print help
+```
+
+```text
+Stop only the service owned by this configuration
+
+Usage: stop [OPTIONS]
+
+Options:
+      --json
+
+
+  -h, --help
+          Print help
+```
+
+```text
+Stop and start the service, preserving configuration and sessions
+
+Usage: restart [OPTIONS]
+
+Options:
+      --json
+
+
+      --port <PORT>
+          [default: 9999]
+
+      --port-strict
+
+
+  -h, --help
+          Print help
+```
+
+```text
+Report verified process identity and HTTP readiness
+
+Usage: status [OPTIONS]
+
+Options:
+      --json
+
+
+  -h, --help
+          Print help
+```
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: help [COMMAND]...
+
+Arguments:
+  [COMMAND]...
+          Print help for the subcommand(s)
 ```
 
 ```text

@@ -93,9 +93,63 @@ pub fn welcome_url() -> Option<&'static str> {
 pub struct WebServer {
     url: String,
     task: tokio::task::JoinHandle<std::io::Result<()>>,
+    shutdown: tokio::sync::oneshot::Sender<()>,
+    shared: Arc<Shared>,
 }
 
 impl WebServer {
+    /// Actual bound port, including fallback to an ephemeral port.
+    pub fn port(&self) -> u16 {
+        self.shared.port
+    }
+
+    /// Cancel active tasks and pending approvals, then drain HTTP connections.
+    pub async fn shutdown(self) -> Result<()> {
+        if let Ok(sessions) = self.shared.sessions.lock() {
+            for session in sessions.values() {
+                session.cancel.send_replace(true);
+                if let Ok(mut inner) = session.inner.lock() {
+                    if let Some(reply) = inner.reply.take() {
+                        let response = match inner.pending.take() {
+                            Some(Pending::Approval { .. }) => {
+                                Reply::Approval(ConfirmationDecision::Reject)
+                            }
+                            _ => Reply::Questions(None),
+                        };
+                        let _ = reply.send(response);
+                    }
+                }
+            }
+        }
+        let _ = self.shutdown.send(());
+        for _ in 0..50 {
+            let busy = self
+                .shared
+                .sessions
+                .lock()
+                .map(|sessions| {
+                    sessions
+                        .values()
+                        .any(|session| session.inner.lock().map(|inner| inner.busy).unwrap_or(true))
+                })
+                .unwrap_or(true);
+            if !busy {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        let mut task = self.task;
+        match tokio::time::timeout(std::time::Duration::from_secs(5), &mut task).await {
+            Ok(result) => result
+                .context("web shutdown task failed")?
+                .context("web shutdown failed"),
+            Err(_) => {
+                task.abort();
+                let _ = task.await;
+                Ok(())
+            }
+        }
+    }
     /// Address shown in the terminal welcome message.
     pub fn url(&self) -> &str {
         &self.url
@@ -561,6 +615,18 @@ pub async fn start(path: PathBuf) -> Result<WebServer> {
     start_with_listener(path, listener).await
 }
 
+/// Start at a requested port, optionally refusing an occupied port.
+pub async fn start_on_port(path: PathBuf, port: u16, strict: bool) -> Result<WebServer> {
+    let listener = if strict {
+        TcpListener::bind((Ipv4Addr::UNSPECIFIED, port))
+            .await
+            .context("requested web port is unavailable")?
+    } else {
+        bind_web_listener(port).await?
+    };
+    start_with_listener(path, listener).await
+}
+
 async fn bind_web_listener(port: u16) -> Result<TcpListener> {
     match TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await {
         Ok(listener) => Ok(listener),
@@ -595,9 +661,21 @@ async fn start_with_listener(path: PathBuf, listener: TcpListener) -> Result<Web
         path,
         sessions: Mutex::new(sessions),
     });
-    let app = router(shared);
-    let task = tokio::spawn(async move { axum::serve(listener, app).await });
-    Ok(WebServer { url, task })
+    let app = router(shared.clone());
+    let (shutdown, stopped) = tokio::sync::oneshot::channel();
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                let _ = stopped.await;
+            })
+            .await
+    });
+    Ok(WebServer {
+        url,
+        task,
+        shutdown,
+        shared,
+    })
 }
 
 fn local_ipv4() -> Option<Ipv4Addr> {

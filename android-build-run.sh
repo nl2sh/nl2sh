@@ -55,20 +55,18 @@ run_remote() {
 
 run_web_only() {
   local privilege_prefix="$1"
-  local log_file="${ANDROID_DIR}/nl2sh-web.log"
-  local command="cd '${ANDROID_DIR}' && nohup '${REMOTE_BINARY}' --web-only >'${log_file}' 2>&1 </dev/null &"
+  local command="'${REMOTE_BINARY}' --config '${ANDROID_DIR}/config.toml' service start --json"
   if [[ "${privilege_prefix}" == "su" ]]; then
     "${ADB[@]}" shell su -c "${command}"
   else
     "${ADB[@]}" shell "${command}"
   fi
-  echo "Web-only service started. Log: ${log_file}"
 }
 
 stop_existing_nl2sh() {
   local privilege_prefix="$1"
-  local command='for process in /proc/[0-9]*; do [ -r "$process/comm" ] || continue; IFS= read -r name < "$process/comm" || continue; [ "$name" = nl2sh ] || continue; kill "${process##*/}" 2>/dev/null || true; done; sleep 1; for process in /proc/[0-9]*; do [ -r "$process/comm" ] || continue; IFS= read -r name < "$process/comm" || continue; [ "$name" = nl2sh ] || continue; kill -9 "${process##*/}" 2>/dev/null || true; done; exit 0'
-  echo "Stopping existing nl2sh processes on the device..."
+  local command="'${REMOTE_BINARY}' --config '${ANDROID_DIR}/config.toml' service stop --json"
+  echo "Stopping the owned native service for this configuration..."
   if [[ "${privilege_prefix}" == "su" ]]; then
     "${ADB[@]}" shell su -c "${command}"
   else

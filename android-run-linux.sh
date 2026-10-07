@@ -28,20 +28,18 @@ die() {
 
 run_web_only() {
   local privilege_prefix="$1"
-  local log_file="${ANDROID_DIR}/nl2sh-web.log"
-  local command="cd '${ANDROID_DIR}' && nohup '${REMOTE_BINARY}' --web-only >'${log_file}' 2>&1 </dev/null &"
+  local command="'${REMOTE_BINARY}' --config '${ANDROID_DIR}/config.toml' service start --json"
   if [[ "${privilege_prefix}" == "su" ]]; then
     "${ADB[@]}" shell su -c "${command}"
   else
     "${ADB[@]}" shell "${command}"
   fi
-  echo "Web-only service started. Log: ${log_file}"
 }
 
 stop_existing_nl2sh() {
   local privilege_prefix="$1"
-  local command='for process in /proc/[0-9]*; do [ -r "$process/comm" ] || continue; IFS= read -r name < "$process/comm" || continue; [ "$name" = nl2sh ] || continue; kill "${process##*/}" 2>/dev/null || true; done; sleep 1; for process in /proc/[0-9]*; do [ -r "$process/comm" ] || continue; IFS= read -r name < "$process/comm" || continue; [ "$name" = nl2sh ] || continue; kill -9 "${process##*/}" 2>/dev/null || true; done; exit 0'
-  echo "Stopping existing nl2sh processes on the device..."
+  local command="'${REMOTE_BINARY}' --config '${ANDROID_DIR}/config.toml' service stop --json"
+  echo "Stopping the owned native service for this configuration..."
   if [[ "${privilege_prefix}" == "su" ]]; then
     "${ADB[@]}" shell su -c "${command}"
   else
@@ -185,7 +183,7 @@ if [[ -n "${NL2SH_CONFIG_SOURCE:-}" ]]; then
 fi
 
 if [[ "${ADB_IS_ROOT}" == true ]]; then
-  stop_existing_nl2sh root
+  if [[ "${WEB_ONLY}" == false ]]; then stop_existing_nl2sh root; fi
   echo "Starting ${REMOTE_BINARY} through root adbd."
   if [[ "${WEB_ONLY}" == true ]]; then
     run_web_only root
@@ -197,7 +195,7 @@ fi
 
 echo "Trying Android su as a fallback..."
 if "${ADB[@]}" shell su -c id >/dev/null 2>&1; then
-  stop_existing_nl2sh su
+  if [[ "${WEB_ONLY}" == false ]]; then stop_existing_nl2sh su; fi
   echo "su access granted; starting ${REMOTE_BINARY} as root."
   if [[ "${WEB_ONLY}" == true ]]; then
     run_web_only su
@@ -213,7 +211,7 @@ if "${ADB[@]}" shell test -e "${REMOTE_CONFIG}" \
 fi
 
 echo "warning: adb root and su are unavailable; starting as adb shell user." >&2
-stop_existing_nl2sh shell
+if [[ "${WEB_ONLY}" == false ]]; then stop_existing_nl2sh shell; fi
 if [[ "${WEB_ONLY}" == true ]]; then
   run_web_only shell
   exit $?

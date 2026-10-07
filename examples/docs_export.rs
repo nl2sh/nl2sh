@@ -14,11 +14,17 @@ fn main() -> Result<()> {
     catalog_config.tool_groups.insert("jadx".into(), true);
     catalog_config.tool_groups.insert("tailcat".into(), true);
     let mut command = cli::Cli::command();
-    let mut help = vec![command.render_long_help().to_string()];
+    let mut help = vec![clean_help(command.render_long_help().to_string())];
     for child in command.get_subcommands_mut() {
-        help.push(child.render_long_help().to_string());
+        if child.is_hide_set() {
+            continue;
+        }
+        help.push(clean_help(child.render_long_help().to_string()));
         for nested in child.get_subcommands_mut() {
-            help.push(nested.render_long_help().to_string());
+            if nested.is_hide_set() {
+                continue;
+            }
+            help.push(clean_help(nested.render_long_help().to_string()));
         }
     }
     println!(
@@ -30,4 +36,11 @@ fn main() -> Result<()> {
         }))?
     );
     Ok(())
+}
+
+fn clean_help(help: String) -> String {
+    help.lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
 }

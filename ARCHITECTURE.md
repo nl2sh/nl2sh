@@ -254,3 +254,7 @@ JADX installed_info 只验证并探测已有 DEX JAR 的协议，不下载；pro
 `/healthz` 不依赖配置/会话/模型；`/api/info` 的协议 1 提供真实端口、PID、单调运行秒数、ABI 和扩展
 快照，不暴露凭据。ShellExecutor 的固定 discovery probe 独立使用 normal、无 PTY、有界输出与五秒
 超时，沿用 pipeline 的进程组终止和 wait。描述元数据统一和 service 生命周期随后实施。
+
+### Native service lifecycle
+
+`service` binds lifecycle ownership to the canonical configuration parent and a private adjacent runtime directory. An operation flock serializes start/stop/restart; a child-held runtime flock prevents duplicate daemons. Private atomic state records PID, start ticks, executable device/inode, UID, version, actual bound port and a random shutdown token. Public status omits the token and independently verifies process identity plus HTTP PID/version/port. A token-authenticated loopback TCP control channel authorizes graceful shutdown; controllers never kill processes by name or signal stale PIDs. The child detaches with setsid, logs privately, cancels task watches and rejects pending approvals during shutdown. Android uses Bionic-compatible flock, /proc, loopback TCP and signals, with no systemd dependency. Config/session layout and the security/confirmation/execution chain remain unchanged. Foreground --web-only remains available without implicit service registration.

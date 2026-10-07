@@ -1,7 +1,7 @@
 mod cli;
 use anyhow::{Context, Result};
 use clap::Parser;
-use cli::{BridgeCommand, Cli, Command, Mode};
+use cli::{BridgeCommand, Cli, Command, Mode, ServiceCommand};
 use nl2sh::{
     agent::{
         android_shell_constraints, AgentRunner, ConfirmationDecision, Confirmer, StdioConfirmer,
@@ -21,6 +21,47 @@ async fn main() -> Result<()> {
         Some(p) => p.clone(),
         None => config::default_config_path()?,
     };
+    if let Some(Command::Service { command }) = &cli.command {
+        use nl2sh::service::{Operation, Service};
+        let service = Service::new(&path)?;
+        if let ServiceCommand::Run { port, port_strict } = command {
+            return service.serve(*port, *port_strict).await;
+        }
+        let (operation, json) = match command {
+            ServiceCommand::Start {
+                json,
+                port,
+                port_strict,
+            } => (
+                Operation::Start {
+                    port: *port,
+                    strict: *port_strict,
+                },
+                *json,
+            ),
+            ServiceCommand::Restart {
+                json,
+                port,
+                port_strict,
+            } => (
+                Operation::Restart {
+                    port: *port,
+                    strict: *port_strict,
+                },
+                *json,
+            ),
+            ServiceCommand::Stop { json } => (Operation::Stop, *json),
+            ServiceCommand::Status { json } => (Operation::Status, *json),
+            ServiceCommand::Run { .. } => unreachable_service_operation()?,
+        };
+        let status = service.control(operation).await?;
+        if json {
+            println!("{}", serde_json::to_string(&status)?);
+        } else {
+            println!("{}", status.summary());
+        }
+        return Ok(());
+    }
     if let Some(Command::Bridge { command }) = &cli.command {
         let operation = match command {
             BridgeCommand::Inspect => nl2sh::bridge::BridgeOperation::Inspect,
@@ -249,6 +290,10 @@ async fn main() -> Result<()> {
                 )),
         }
     }
+}
+
+fn unreachable_service_operation() -> Result<(nl2sh::service::Operation, bool)> {
+    anyhow::bail!("internal service operation must run in the foreground")
 }
 
 fn validate_cli(cli: &Cli) -> Result<()> {

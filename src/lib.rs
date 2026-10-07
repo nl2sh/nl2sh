@@ -24,6 +24,8 @@ pub mod runtime;
 pub mod runtime_dependencies;
 /// Local shell command classification and confirmation requirements.
 pub mod security;
+/// Private native service lifecycle and verified process ownership.
+pub mod service;
 /// Shared short titles for persisted Web and TUI conversations.
 pub mod session_title;
 /// Private, bounded conversation snapshots used by `/sessions`.
