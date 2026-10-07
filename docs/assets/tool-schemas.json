@@ -420,7 +420,7 @@
     }
   },
   {
-    "description": "Send an existing file to a Tailcat address. Use mode=stream for a raw receiver or mode=copy for a file drop box (requires scp).",
+    "description": "Send an existing file to a Tailcat raw receiver. mode defaults to stream. Explicit mode=copy targets a file drop box and requires an external scp executable, which stock Android does not provide.",
     "name": "tailcat_send_file",
     "parameters": {
       "$defs": {
@@ -446,8 +446,7 @@
       },
       "required": [
         "path",
-        "address",
-        "mode"
+        "address"
       ],
       "type": "object"
     }

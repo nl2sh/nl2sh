@@ -1857,7 +1857,7 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 
 ## `tailcat_send_file`
 
-发送现有文件；stream 用于原始接收，copy 需 scp，强确认。
+发送现有文件；默认 stream 用于原始接收，显式 copy 需外部 scp，强确认。
 
 ```json
 {
@@ -1884,8 +1884,7 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
   },
   "required": [
     "path",
-    "address",
-    "mode"
+    "address"
   ],
   "type": "object"
 }

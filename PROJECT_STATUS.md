@@ -4,6 +4,8 @@ Last Updated: 2026-10-06
 
 ## Recent Changes
 
+- Tailcat Android 默认发送路径改为原始流：`tailcat_send_file` 的 `mode` 现为可选，省略时使用不依赖外部 scp 的 `stream`；显式 `copy` 继续面向文件接收箱，并明确 Android 原生 shell 通常缺少其 scp 前置条件。发送工具仍为危险操作并强确认，不修改 Root、安全分类、PTY 或终端恢复实现；同步双语指南、更新记录、派生 Schema 与回归测试。`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、261 项有效库测试及其余非 TUI 测试、x86_64 Android API 26 `cargo check --no-default-features`、派生参考检查、双语页面检查、`mkdocs build --strict` 及构建后站点检查通过。
+
 - 新增 `tailcat_adb_pair`：Android 11+/shell-root 环境下强确认的 setup/share，引导 Settings 并读取当前配对信息，一个受管监听器共享双 ADB 和显式可选 Web 端口。配对码按用户需求返回模型/对话；审批后及启动前后复核配对码与端口，拒绝已有监听器自动替换；停止不关闭系统无线调试或撤销配对。同步双语指南、派生 Schema、Web 工具入口与 Agent 提示；复用既有确认链和子进程生命周期，不修改 PTY/终端恢复实现。
 
 - 无线 ADB 可行性：Android 15/API 35 竖屏模拟器通过 UI 启用开发者选项、无线调试及读取配对信息；直接 Tailcat 双端口共享/对端 forward 后，`adb pair`、`adb connect` 与隧道内 shell 读取 API 35 成功。测试使用独立 ADB 服务及临时密钥；该次原型结果未覆盖 Agent 审批或三端口共享；当时内置共享工具仅支持单端口，后续工具实现与验证见新增记录。

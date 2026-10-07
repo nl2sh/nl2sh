@@ -1857,7 +1857,7 @@ Start a managed raw Tailcat receiver, saving one incoming byte stream to a new f
 
 ## `tailcat_send_file`
 
-Send an existing file to a Tailcat address. Use mode=stream for a raw receiver or mode=copy for a file drop box (requires scp).
+Send an existing file to a Tailcat raw receiver. mode defaults to stream. Explicit mode=copy targets a file drop box and requires an external scp executable, which stock Android does not provide.
 
 ```json
 {
@@ -1884,8 +1884,7 @@ Send an existing file to a Tailcat address. Use mode=stream for a raw receiver o
   },
   "required": [
     "path",
-    "address",
-    "mode"
+    "address"
   ],
   "type": "object"
 }

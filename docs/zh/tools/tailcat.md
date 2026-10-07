@@ -6,7 +6,7 @@
 | --- | --- |
 | `tailcat_receive_stream` | 把一次原始流写入新文件，需确认 |
 | `tailcat_receive` | 文件接收箱，写入现有目录，需确认 |
-| `tailcat_send_file` | `stream` 对原始接收器；`copy` 对接收箱且发送端需 scp，强确认 |
+| `tailcat_send_file` | 默认 `stream` 对原始接收器；显式 `copy` 对接收箱且发送端需外部 scp，强确认 |
 | `tailcat_serve` | 共享一个本机 TCP 端口，强确认 |
 | `tailcat_adb_pair` | 无线调试引导、配对信息与多端口共享，强确认 |
 | `tailcat_status` | 当前进程监听器状态，只读 |
@@ -36,7 +36,7 @@ tailcat = true
 | `tailcat_serve` | `{"port":9999}` | 共享已有 TCP 服务，返回 `address=tc…` |
 | `tailcat_receive_stream` | `{"path":"/data/local/tmp/incoming.bin"}` | 接收一次原始流到新文件 |
 | `tailcat_receive` | `{"directory":"/data/local/tmp/inbox"}` | 启动文件接收箱 |
-| `tailcat_send_file` | `{"path":"/data/local/tmp/report.txt","address":"tc…","mode":"stream"}` | 向原始流接收器发送；接收箱改用 `"mode":"copy"` |
+| `tailcat_send_file` | `{"path":"/data/local/tmp/report.txt","address":"tc…"}` | 默认向原始流接收器发送；接收箱须显式使用 `"mode":"copy"` |
 | `tailcat_status` | `{}` | 查询当前进程受管理监听器的地址、状态 |
 | `tailcat_stop` | `{}` | 确认后停止该监听器；不停止被共享的 Web 等目标服务 |
 
@@ -64,7 +64,7 @@ tailcat forward tcREPLACE_WITH_RETURNED_ADDRESS 19999:9999
 
 ## 文件传输：双方配套操作
 
-以下 shell 命令在对端运行；替换完整 Tailcat 地址和本地文件名。对端须安装 Tailcat，`cp` 模式还要求发送端有系统 `scp`。
+以下 shell 命令在对端运行；替换完整 Tailcat 地址和本地文件名。对端须安装 Tailcat。nl2sh 默认采用不依赖 `scp` 的原始流；只有显式 `copy` 模式才要求发送端另有系统 `scp`，Android 原生 shell 通常不提供它。
 
 ### 对端发送到设备
 
@@ -73,7 +73,7 @@ tailcat forward tcREPLACE_WITH_RETURNED_ADDRESS 19999:9999
 
 ### 设备发送到对端
 
-- **原始流**：对端先运行 `tailcat --key=new > ./received.bin`，把打印的地址交给设备；设备调用 `tailcat_send_file({"path":"/data/local/tmp/report.txt","address":"tc…","mode":"stream"})` 并强确认。shell 重定向可能覆盖对端已有文件，应自行选择合适的新路径。
+- **原始流（默认）**：对端先运行 `tailcat --key=new > ./received.bin`，把打印的地址交给设备；设备调用 `tailcat_send_file({"path":"/data/local/tmp/report.txt","address":"tc…"})` 并强确认；也可显式写 `"mode":"stream"`。shell 重定向可能覆盖对端已有文件，应自行选择合适的新路径。
 - **接收箱**：对端先准备现有接收目录并运行 `tailcat --key=new recv ./inbox`，把地址交给设备；设备调用同一发送工具并使用 `"mode":"copy"`，经强确认发送。设备上需有 `scp`；`tailcat_install` 不安装它。对端完成后 Ctrl+C 停止接收箱。
 
 原始流与接收箱使用不同协议，`stream` / `copy` 必须匹配接收端。传输成功后可比较双方文件大小与 SHA-256；失败或中断可能留下不完整文件，停止监听不会删除已接收文件。只把地址交给预期发送方。

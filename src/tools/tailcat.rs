@@ -34,7 +34,7 @@ static META: &[ToolMetadata] = &[
     ToolMetadata { name: "tailcat_install", description: "Install the pinned official Tailcat release for this device ABI after checksum verification. Replaces the configured executable.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_receive", description: "Start a managed Tailcat file drop box in an existing directory and return its address. Incoming peers can write files there.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_receive_stream", description: "Start a managed raw Tailcat receiver, saving one incoming byte stream to a new file. Return its address.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
-    ToolMetadata { name: "tailcat_send_file", description: "Send an existing file to a Tailcat address. Use mode=stream for a raw receiver or mode=copy for a file drop box (requires scp).", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
+    ToolMetadata { name: "tailcat_send_file", description: "Send an existing file to a Tailcat raw receiver. mode defaults to stream. Explicit mode=copy targets a file drop box and requires an external scp executable, which stock Android does not provide.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_serve", description: "Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_adb_pair", description: "Guide Android 11+ wireless debugging with action=setup, then action=share to expose the current pairing and TLS connection ports plus an optional Web port through one managed Tailcat listener. Strong confirmation is required. Returns the current pairing code to the model/conversation after approval. Requires shell/root and an installed Tailcat. Does not pair the remote computer automatically or stop an existing listener.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
     ToolMetadata { name: "tailcat_status", description: "Inspect this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::ReadOnly, requires: &[], parallel_safe: true },
@@ -60,11 +60,17 @@ enum SendMode {
     Stream,
     Copy,
 }
+impl Default for SendMode {
+    fn default() -> Self {
+        Self::Stream
+    }
+}
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct SendFile {
     path: String,
     address: String,
+    #[serde(default)]
     mode: SendMode,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -909,6 +915,16 @@ mod tests {
         assert!(install_target(Path::new("tailcat")).is_err());
         std::fs::create_dir(&target)?;
         assert!(install_target(&target).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn send_file_defaults_to_stream_mode() -> Result<()> {
+        let args: SendFile = serde_json::from_value(json!({
+            "path": "/data/local/tmp/report.txt",
+            "address": "tc0123456789abcdef"
+        }))?;
+        assert!(matches!(args.mode, SendMode::Stream));
         Ok(())
     }
 

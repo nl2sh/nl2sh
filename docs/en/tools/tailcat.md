@@ -6,7 +6,7 @@ The optional `tailcat` group defaults off. `tailcat_check` reads the configured 
 | --- | --- |
 | `tailcat_receive_stream` | One raw transfer into a new file; confirmation |
 | `tailcat_receive` | File drop box in an existing directory; confirmation |
-| `tailcat_send_file` | `stream` for raw receivers; `copy` for drop boxes, requiring sender scp; strong confirmation |
+| `tailcat_send_file` | Defaults to `stream` for raw receivers; explicit `copy` targets drop boxes and requires external scp; strong confirmation |
 | `tailcat_serve` | Share one local TCP port; strong confirmation |
 | `tailcat_adb_pair` | Wireless debugging guidance, pairing information, and multi-port sharing; strong confirmation |
 | `tailcat_status` | Read current process listener state |
@@ -36,7 +36,7 @@ These are tool names and JSON argument examples for Agent calls, rather than she
 | `tailcat_serve` | `{"port":9999}` | Share an existing TCP service and return `address=tc…` |
 | `tailcat_receive_stream` | `{"path":"/data/local/tmp/incoming.bin"}` | Receive one raw stream into a new file |
 | `tailcat_receive` | `{"directory":"/data/local/tmp/inbox"}` | Start a file drop box |
-| `tailcat_send_file` | `{"path":"/data/local/tmp/report.txt","address":"tc…","mode":"stream"}` | Send to a raw receiver; use `"mode":"copy"` for a drop box |
+| `tailcat_send_file` | `{"path":"/data/local/tmp/report.txt","address":"tc…"}` | Send to a raw receiver by default; explicitly use `"mode":"copy"` for a drop box |
 | `tailcat_status` | `{}` | Inspect the current process's managed listener address and state |
 | `tailcat_stop` | `{}` | Stop that listener after approval; leaves the destination service, such as Web, running |
 
@@ -64,7 +64,7 @@ Then open `http://127.0.0.1:19999/`. The left port is the peer computer's local 
 
 ## File transfer: operations on both sides
 
-Run the following shell commands on the peer, substituting the complete Tailcat address and local file names. The peer needs Tailcat; `cp` mode also requires system `scp` on the sender.
+Run the following shell commands on the peer, substituting the complete Tailcat address and local file names. The peer needs Tailcat. nl2sh defaults to the raw stream that does not depend on `scp`; only explicit `copy` mode requires a system `scp` executable on the sender, which stock Android shells normally lack.
 
 ### Send from the peer to the device
 
@@ -73,7 +73,7 @@ Run the following shell commands on the peer, substituting the complete Tailcat 
 
 ### Send from the device to the peer
 
-- **Raw stream**: on the peer, run `tailcat --key=new > ./received.bin` and give the printed address to the device. Call `tailcat_send_file({"path":"/data/local/tmp/report.txt","address":"tc…","mode":"stream"})` on the device with strong confirmation. Shell redirection may overwrite an existing peer file, so choose an appropriate new path.
+- **Raw stream (default)**: on the peer, run `tailcat --key=new > ./received.bin` and give the printed address to the device. Call `tailcat_send_file({"path":"/data/local/tmp/report.txt","address":"tc…"})` on the device with strong confirmation; `"mode":"stream"` may still be supplied explicitly. Shell redirection may overwrite an existing peer file, so choose an appropriate new path.
 - **Drop box**: prepare an existing inbox directory on the peer, run `tailcat --key=new recv ./inbox`, and give its address to the device. Call the same sending tool with `"mode":"copy"` and strong confirmation. The device needs `scp`; `tailcat_install` does not install it. Stop the peer's drop box with Ctrl+C when finished.
 
 Raw streams and drop boxes use different protocols: `stream` / `copy` must match the receiver. Compare file sizes and SHA-256 hashes after transfer. Failures or interruptions may leave partial files; stopping a listener does not delete received files. Give addresses only to intended senders.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Make `tailcat_send_file` default to the raw stream when `mode` is omitted, avoiding an scp dependency. Keep `copy` as an explicit drop-box compatibility mode and document that stock Android shells normally lack its external scp executable.
+
 - Add strongly confirmed `tailcat_adb_pair`: guide Android 11+ Wireless debugging, revalidate current pairing information, share pairing/connection and optional Web ports, and return the pairing code and peer commands; reject stale approvals and replacement of existing listeners.
 
 - Document arguments for all eight Tailcat tools, peer-side `forward` access to port 9999 and port mappings, and raw-stream/drop-box transfers in both directions.
