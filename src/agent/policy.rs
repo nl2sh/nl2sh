@@ -35,6 +35,16 @@ pub type QuestionAnswers = BTreeMap<String, String>;
 #[async_trait]
 /// UI-independent approval interface invoked after every assessment.
 pub trait Confirmer: Send + Sync {
+    /// Identifies the local approval interface in execution audits.
+    fn audit_source(&self) -> &'static str {
+        "internal"
+    }
+
+    /// Returns an optional session identity; only its hash is recorded.
+    fn audit_session(&self) -> Option<String> {
+        None
+    }
+
     /// Requests approval, rejection, or an edited replacement command.
     async fn confirm(
         &self,
@@ -83,6 +93,9 @@ pub fn can_remember_approval(assessment: &SecurityAssessment) -> bool {
 
 #[async_trait]
 impl Confirmer for StdioConfirmer {
+    fn audit_source(&self) -> &'static str {
+        "cli"
+    }
     async fn confirm(&self, command: &str, a: &SecurityAssessment) -> Result<ConfirmationDecision> {
         if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
             eprintln!(

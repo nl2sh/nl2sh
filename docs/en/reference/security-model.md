@@ -16,3 +16,11 @@ Structured tools share risk/confirmation policy and implement bounded reads, pre
 - Output can contain device information. Known-credential redaction cannot guarantee arbitrary command output contains no other secrets.
 
 PTY groups, cancellation, timeout, wait, and terminal restoration form an execution-reliability boundary. Control sequences affecting clearing/cursor/alternate screen are filtered before TUI display. See [contributing](../development/contributing.md).
+
+## Managed UI ownership and execution audits
+
+A managed task acquires the Android UI lease before its first UI preparation and keeps it until completion or cancellation, including model and confirmation waits. Other managed processes wait up to ten seconds before reporting that the device is busy. Privileged native Android shell commands share this lease; direct commands hold it during execution. Unrelated static file/APK reads remain available. External touches, ADB and the user-controlled `/shell` can still change device state, so action targets are revalidated.
+
+Contiguous declared read-only calls can run in batches of at most four. Mutating tools, UI tools and shell commands form serial barriers. Prepared risk is checked again; batches cannot execute shell actions or elevated-risk preparations. Results retain their requested order, and budgets and approvals remain in force.
+
+The bounded private JSONL history includes `tool_audit` records for managed Agent, direct tool and CLI/TUI/Web command entries. Records contain task/request/session correlation, interface, risk, preview SHA256, approval, process UID, requested root plan, outcome and elapsed time. Session identifiers are hashed. Arguments, command previews, credentials, output and error text are excluded from these audit records. Other conversation history records still follow the configured history policy. The UID identifies the native process; the root field records the approved request, rather than asserting an observed child UID. Logging stops at the configured file limit. These diagnostics do not grant approval.

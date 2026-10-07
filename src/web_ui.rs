@@ -2242,20 +2242,44 @@ async fn terminal_socket(mut socket: WebSocket, state: Arc<Shared>, current: Arc
 async fn run_terminal_command(
     state: &Shared,
     current: &Arc<WebSession>,
+    command: String,
+) -> Result<String> {
+    let cfg = load_config(state.path.clone()).await?;
+    let session_id = current
+        .inner
+        .lock()
+        .map_err(|_| anyhow!("session lock poisoned"))?
+        .id
+        .clone();
+    crate::audit::tool_scope(
+        &cfg,
+        "web_terminal",
+        Some(session_id),
+        "execute_shell_command",
+        run_terminal_command_scoped(current, command, &cfg),
+    )
+    .await
+}
+
+async fn run_terminal_command_scoped(
+    current: &Arc<WebSession>,
     mut command: String,
+    cfg: &Config,
 ) -> Result<String> {
     if command.trim().is_empty() || command.len() > 16 * 1024 {
         bail!("command must contain 1–16384 bytes")
     }
-    let cfg = load_config(state.path.clone()).await?;
     let confirmer = WebConfirmer {
         session: current.clone(),
         state: None,
     };
     let mut assessment = crate::security::assess(&command, &cfg);
+    crate::audit::record_assessment(&command, &assessment);
     let mut approved_command = None;
     while assessment.requires_confirmation {
-        match confirmer.confirm(&command, &assessment).await? {
+        let decision = confirmer.confirm(&command, &assessment).await?;
+        crate::audit::record_decision(&decision);
+        match decision {
             ConfirmationDecision::Approve
             | ConfirmationDecision::ApproveCaptured
             | ConfirmationDecision::ApproveInteractive
@@ -2267,7 +2291,8 @@ async fn run_terminal_command(
             ConfirmationDecision::Reject => bail!("command rejected"),
             ConfirmationDecision::Edit(edited) => {
                 command = edited;
-                assessment = crate::security::assess(&command, &cfg)
+                assessment = crate::security::assess(&command, &cfg);
+                crate::audit::record_assessment(&command, &assessment);
             }
         }
     }
@@ -2276,7 +2301,7 @@ async fn run_terminal_command(
     let output = Arc::new(WebOutput {
         session: current.clone(),
     });
-    let executor = CapturedExecutor(ShellExecutor::new(cfg).with_output(output));
+    let executor = CapturedExecutor(ShellExecutor::new(cfg.clone()).with_output(output));
     let result = ExecutionBroker::execute(&executor, capability, false).await?;
     Ok(serde_json::json!({"stdout":result.stdout,"stderr":result.stderr,"exit_code":result.exit_code,"timed_out":result.timed_out,"interrupted":result.interrupted}).to_string())
 }
@@ -2919,6 +2944,16 @@ fn approval_explanation(assessment: &SecurityAssessment) -> String {
 
 #[async_trait]
 impl Confirmer for WebConfirmer {
+    fn audit_session(&self) -> Option<String> {
+        self.session
+            .inner
+            .lock()
+            .ok()
+            .map(|session| session.id.clone())
+    }
+    fn audit_source(&self) -> &'static str {
+        "web"
+    }
     async fn confirm(
         &self,
         command: &str,

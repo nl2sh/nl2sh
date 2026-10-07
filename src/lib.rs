@@ -1,6 +1,8 @@
 //! Reusable nl2sh core. UI and CLI are deliberately thin adapters.
 /// Agent loop, conversation policy, confirmation, and built-in tools.
 pub mod agent;
+/// Structured metadata for approved execution and refusal diagnostics.
+pub mod audit;
 /// Bounded machine-readable adapter for an external A2A gateway.
 pub mod bridge;
 /// Validated TOML configuration and initialization wizard.

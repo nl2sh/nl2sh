@@ -106,6 +106,22 @@ impl AgentRunner<'_> {
         text_sink: Option<&dyn TextDeltaSink>,
         cancel: Option<watch::Receiver<bool>>,
     ) -> Result<AgentOutcome> {
+        crate::audit::AuditContext::new(
+            self.config,
+            self.confirmer.audit_source(),
+            self.confirmer.audit_session(),
+        )
+        .scope(self.run_scoped(input, history, text_sink, cancel))
+        .await
+    }
+
+    async fn run_scoped(
+        &self,
+        input: &str,
+        history: &[Vec<ConversationItem>],
+        text_sink: Option<&dyn TextDeltaSink>,
+        cancel: Option<watch::Receiver<bool>>,
+    ) -> Result<AgentOutcome> {
         let mut system = system_prompt(
             self.executor
                 .runtime_context()
@@ -254,7 +270,11 @@ impl AgentRunner<'_> {
             let mut round_calls = Vec::new();
             let mut step_made_progress = false;
             let mut step_had_invalid_arguments = false;
-            'tool_calls: for call in calls.iter().cloned() {
+            let mut parallel_consumed_until = 0;
+            'tool_calls: for (call_index, call) in calls.iter().cloned().enumerate() {
+                if call_index < parallel_consumed_until {
+                    continue;
+                }
                 if cancel.as_ref().is_some_and(|signal| *signal.borrow()) {
                     break 'tool_calls;
                 }
@@ -262,7 +282,71 @@ impl AgentRunner<'_> {
                     stopped_by = Some(LimitType::ToolCalls);
                     break 'tool_calls;
                 }
+                let batch_end = parallel_batch_end(
+                    &calls,
+                    call_index,
+                    &registry,
+                    self.config
+                        .max_tool_calls
+                        .saturating_sub(runtime.tool_calls_used)
+                        .min(4),
+                );
+                if batch_end > call_index + 1 {
+                    let batch = &calls[call_index..batch_end];
+                    runtime.tool_calls_used += batch.len();
+                    round_calls.extend_from_slice(batch);
+                    if let Some(sink) = text_sink {
+                        sink.agent_progress(step, runtime.tool_calls_used, &usage);
+                        sink.agent_activity("tool", None);
+                        for call in batch {
+                            sink.tool_requested(call);
+                            sink.tool_started(&call.id, &call.name);
+                        }
+                    }
+                    let batch_future = self.run_parallel_batch(
+                        batch,
+                        &registry,
+                        &file_tools,
+                        &audio_tools,
+                        ima.as_ref(),
+                        runtime.holds_ui_lease(),
+                    );
+                    let remaining = Duration::from_secs(self.config.max_task_execution_time_secs)
+                        .saturating_sub(runtime.active_time());
+                    let completed = tokio::select! {
+                        results = timeout(remaining, batch_future) => results,
+                        _ = wait_cancel(cancel.clone()) => return Err(AgentRunFailure {
+                            source: anyhow::anyhow!("task cancelled by user"), transcript,
+                        }.into()),
+                    };
+                    match completed {
+                        Ok(completed) => {
+                            for result in completed {
+                                step_made_progress |= result.success;
+                                push_tool_result(&mut results, result, text_sink);
+                            }
+                        }
+                        Err(_) => {
+                            for call in batch {
+                                push_tool_result(
+                                    &mut results,
+                                    self.tool_error_result(
+                                        &call.id,
+                                        "Read-only batch cancelled: task time limit reached."
+                                            .into(),
+                                    ),
+                                    text_sink,
+                                );
+                            }
+                            stopped_by = Some(LimitType::ExecutionTime);
+                            break 'tool_calls;
+                        }
+                    }
+                    parallel_consumed_until = batch_end;
+                    continue;
+                }
                 runtime.tool_calls_used += 1;
+                let _audit = crate::audit::AuditGuard::begin(&call.name, "unassessed");
                 if let Some(sink) = text_sink {
                     sink.agent_progress(step, runtime.tool_calls_used, &usage);
                     sink.agent_activity("tool", Some(&call.name));
@@ -299,6 +383,24 @@ impl AgentRunner<'_> {
                     );
                     continue;
                 };
+                let resource_result = tokio::select! {
+                    result = runtime.acquire_resources(tool.metadata()) => result,
+                    _ = wait_cancel(cancel.clone()) => return Err(AgentRunFailure {
+                        source: anyhow::anyhow!("task cancelled by user"), transcript,
+                    }.into()),
+                };
+                if let Err(error) = resource_result {
+                    push_tool_result(
+                        &mut results,
+                        self.tool_error_result(
+                            &call.id,
+                            format!("Tool resource unavailable: {error:#}"),
+                        ),
+                        text_sink,
+                    );
+                    continue;
+                }
+                let held = runtime.holds_ui_lease();
                 let args = {
                     let mut tool_context = ToolContext {
                         file_tools: &file_tools,
@@ -311,7 +413,12 @@ impl AgentRunner<'_> {
                         runtime: Some(&mut runtime),
                         audio_cache: Some(&mut audio_analysis_cache),
                     };
-                    let prepared = match tool.prepare(&tool_context, call.arguments).await {
+                    let prepared = match crate::runtime::resources::with_ui_lease(
+                        held,
+                        tool.prepare(&tool_context, call.arguments),
+                    )
+                    .await
+                    {
                         Ok(prepared) => prepared,
                         Err(error) => {
                             push_tool_result(
@@ -358,16 +465,24 @@ impl AgentRunner<'_> {
                 let mut interactive_override = None;
                 let (assessment, approved_command) = loop {
                     let assessment = assess(&command, self.config);
+                    crate::audit::assessment(
+                        &command,
+                        &format!("{:?}", assessment.risk_level),
+                        assessment.requires_root,
+                        assessment.requires_confirmation,
+                    );
                     if !assessment.requires_confirmation {
                         break (assessment, None);
                     }
                     if super::can_remember_approval(&assessment)
                         && task_approvals.contains(&command)
                     {
+                        crate::audit::decision(&ConfirmationDecision::ApproveForTask);
                         break (assessment, Some(command.clone()));
                     }
                     let confirmation_started = Instant::now();
                     let decision = self.confirmer.confirm(&command, &assessment).await?;
+                    crate::audit::decision(&decision);
                     runtime.add_confirmation_time(confirmation_started.elapsed());
                     match decision {
                         ConfirmationDecision::Approve => break (assessment, Some(command.clone())),
@@ -451,12 +566,15 @@ impl AgentRunner<'_> {
                     self.config,
                     approved_command.as_deref(),
                 )?;
-                let execution = ExecutionBroker::execute(
-                    self.executor,
-                    capability,
-                    interactive_override.unwrap_or_else(|| {
-                        crate::shell::is_interactive(&command, args.interactive)
-                    }),
+                let execution = crate::runtime::resources::with_ui_lease(
+                    held,
+                    ExecutionBroker::execute(
+                        self.executor,
+                        capability,
+                        interactive_override.unwrap_or_else(|| {
+                            crate::shell::is_interactive(&command, args.interactive)
+                        }),
+                    ),
                 )
                 .await;
                 if let Ok(execution_result) = &execution {
@@ -625,6 +743,93 @@ impl AgentRunner<'_> {
         })
     }
 
+    async fn run_parallel_batch(
+        &self,
+        calls: &[crate::llm::ToolCall],
+        registry: &ToolRegistry,
+        file_tools: &FileToolExecutor,
+        audio_tools: &AudioToolExecutor,
+        ima: Option<&ImaClient>,
+        held: bool,
+    ) -> Vec<ToolResult> {
+        futures_util::future::join_all(
+            calls.iter().map(|call| {
+                self.run_parallel_read(call, registry, file_tools, audio_tools, ima, held)
+            }),
+        )
+        .await
+    }
+
+    async fn run_parallel_read(
+        &self,
+        call: &crate::llm::ToolCall,
+        registry: &ToolRegistry,
+        file_tools: &FileToolExecutor,
+        audio_tools: &AudioToolExecutor,
+        ima: Option<&ImaClient>,
+        held: bool,
+    ) -> ToolResult {
+        let context = crate::audit::AuditContext::fork_current();
+        let future = async {
+            let audit = crate::audit::AuditGuard::begin(&call.name, "ReadOnly");
+            let outcome = async {
+                let tool = registry
+                    .get(&call.name)
+                    .context("parallel tool disappeared")?;
+                let mut runtime = TaskRuntime::new();
+                let mut ctx = ToolContext {
+                    file_tools,
+                    ima,
+                    config: Some(self.config),
+                    executor: Some(self.executor),
+                    llm: Some(self.llm),
+                    confirmer: Some(self.confirmer),
+                    audio_tools: Some(audio_tools),
+                    runtime: Some(&mut runtime),
+                    audio_cache: None,
+                };
+                let prepared = tool.prepare(&ctx, call.arguments.clone()).await?;
+                if prepared.risk.unwrap_or(tool.metadata().risk) != ToolRisk::ReadOnly {
+                    bail!("parallel tool preparation changed risk; operation was not executed")
+                }
+                let PreparedAction::Operation(operation) = prepared.action else {
+                    bail!("parallel tools cannot execute shell commands")
+                };
+                crate::tools::runtime::execute_prepared_operation(
+                    tool.metadata(),
+                    prepared.risk,
+                    &prepared.preview,
+                    operation,
+                    &mut ctx,
+                    self.confirmer,
+                )
+                .await
+            }
+            .await;
+            match outcome {
+                Ok(output) => {
+                    audit.finish(if output.success { "success" } else { "error" });
+                    ToolResult {
+                        call_id: call.id.clone(),
+                        success: output.success,
+                        output: truncate_text(&output.content, self.config.tool_output_max_bytes),
+                        attachments: output.attachments,
+                    }
+                }
+                Err(error) => {
+                    audit.finish("error");
+                    self.tool_error_result(&call.id, format!("Tool failed: {error:#}"))
+                }
+            }
+        };
+        let future = crate::runtime::resources::with_ui_lease(held, future);
+        if let Some(context) = context {
+            context.scope(future).await
+        } else {
+            future.await
+        }
+    }
+
     async fn run_prepared_operation(
         &self,
         metadata: &ToolMetadata,
@@ -713,6 +918,7 @@ fn push_tool_result(
     result: ToolResult,
     sink: Option<&dyn TextDeltaSink>,
 ) {
+    crate::audit::result(result.success);
     if let Some(sink) = sink {
         sink.tool_finished(&result.call_id, &result.output, result.success);
     }
@@ -973,5 +1179,141 @@ mod tests {
             assert!(prompt.contains(required), "missing constraint: {required}");
         }
         assert!(!prompt.contains("not a desktop Linux distribution or Termux"));
+    }
+}
+
+// Only contiguous declared read-only operations may overlap. Every other call is a barrier.
+fn parallel_batch_end(
+    calls: &[crate::llm::ToolCall],
+    start: usize,
+    registry: &ToolRegistry,
+    capacity: usize,
+) -> usize {
+    calls
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(capacity)
+        .take_while(|(_, call)| {
+            call.argument_error().is_none()
+                && registry.get(&call.name).is_some_and(|tool| {
+                    tool.metadata().concurrency == crate::tools::ToolConcurrency::Parallel
+                        && tool.metadata().risk == ToolRisk::ReadOnly
+                })
+        })
+        .last()
+        .map_or(start, |(index, _)| index + 1)
+}
+
+#[cfg(test)]
+mod parallel_tests {
+    use super::*;
+    use async_trait::async_trait;
+    use std::sync::Arc;
+
+    struct BarrierTool(Arc<tokio::sync::Barrier>);
+    struct BarrierOperation(Arc<tokio::sync::Barrier>);
+    #[async_trait]
+    impl crate::tools::Tool for BarrierTool {
+        fn metadata(&self) -> &'static ToolMetadata {
+            crate::tools::builtin_descriptors()
+                .iter()
+                .find(|tool| tool.name == "read_file")
+                .expect("read_file descriptor")
+        }
+        async fn prepare(
+            &self,
+            _: &ToolContext<'_>,
+            _: serde_json::Value,
+        ) -> Result<crate::tools::PreparedToolCall> {
+            Ok(crate::tools::PreparedToolCall::operation(
+                String::new(),
+                Box::new(BarrierOperation(self.0.clone())),
+            ))
+        }
+    }
+    #[async_trait]
+    impl PreparedExecution for BarrierOperation {
+        async fn execute(
+            self: Box<Self>,
+            _: &mut ToolContext<'_>,
+        ) -> Result<crate::tools::ToolOutput> {
+            self.0.wait().await;
+            Ok(crate::tools::ToolOutput::success("overlapped".into()))
+        }
+    }
+    struct Boundaries;
+    #[async_trait]
+    impl LlmClient for Boundaries {
+        async fn complete(&self, _: LlmRequest) -> Result<crate::llm::LlmResponse> {
+            bail!("no model request expected")
+        }
+    }
+    #[async_trait]
+    impl CommandExecutor for Boundaries {
+        async fn execute(
+            &self,
+            _: &str,
+            _: bool,
+            _: bool,
+        ) -> Result<crate::shell::ExecutionResult> {
+            bail!("no shell execution expected")
+        }
+    }
+    #[async_trait]
+    impl Confirmer for Boundaries {
+        async fn confirm(
+            &self,
+            _: &str,
+            _: &crate::security::SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
+            bail!("no approval expected")
+        }
+    }
+
+    #[tokio::test]
+    async fn read_batch_reaches_both_operations_and_policy_stops_at_mutation() -> Result<()> {
+        let registry = ToolRegistry::from_test_adapters(vec![Box::new(BarrierTool(Arc::new(
+            tokio::sync::Barrier::new(2),
+        )))]);
+        let calls: Vec<_> = ["one", "two"]
+            .into_iter()
+            .map(|id| crate::llm::ToolCall {
+                id: id.into(),
+                name: "read_file".into(),
+                arguments: serde_json::json!({}),
+            })
+            .collect();
+        let directory = tempfile::tempdir()?;
+        let files = FileToolExecutor::new(directory.path())?;
+        let audio = AudioToolExecutor::new(directory.path())?;
+        let config = Config::default();
+        let boundaries = Boundaries;
+        let runner = AgentRunner {
+            config: &config,
+            llm: &boundaries,
+            executor: &boundaries,
+            confirmer: &boundaries,
+        };
+        let results = timeout(
+            Duration::from_secs(1),
+            runner.run_parallel_batch(&calls, &registry, &files, &audio, None, false),
+        )
+        .await?;
+        assert!(results.iter().all(|result| result.success));
+        assert_eq!(results[0].call_id, "one");
+        assert_eq!(results[1].call_id, "two");
+        let catalog = ToolRegistry::builtin(&[]);
+        let mut calls = calls;
+        calls.push(crate::llm::ToolCall {
+            id: "write".into(),
+            name: "apply_patch".into(),
+            arguments: serde_json::json!({}),
+        });
+        calls.push(calls[0].clone());
+        assert_eq!(parallel_batch_end(&calls, 0, &catalog, 4), 2);
+        assert_eq!(parallel_batch_end(&calls, 0, &catalog, 1), 1);
+        assert_eq!(parallel_batch_end(&calls, 2, &catalog, 4), 2);
+        Ok(())
     }
 }

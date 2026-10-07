@@ -14,8 +14,19 @@ impl ExecutionBroker {
         approved: ApprovedShellCommand,
         interactive: bool,
     ) -> Result<ExecutionResult> {
-        executor
+        let _lease = if crate::runtime::resources::privileged_android_process()
+            && !crate::runtime::resources::ui_lease_held()
+        {
+            Some(crate::runtime::resources::UiLease::acquire().await?)
+        } else {
+            None
+        };
+        let result = executor
             .execute(approved.command(), approved.requires_root(), interactive)
-            .await
+            .await;
+        crate::audit::shell_result(result.as_ref().is_ok_and(|result| {
+            result.exit_code == Some(0) && !result.interrupted && !result.timed_out
+        }));
+        result
     }
 }

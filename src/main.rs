@@ -486,6 +486,23 @@ async fn run_command(
     dry: bool,
     output: std::sync::Arc<dyn OutputSink>,
 ) -> Result<()> {
+    nl2sh::audit::tool_scope(
+        cfg,
+        "cli_command",
+        None,
+        "execute_shell_command",
+        run_command_scoped(cfg, llm, input, dry, output),
+    )
+    .await
+}
+
+async fn run_command_scoped(
+    cfg: &config::Config,
+    llm: &dyn LlmClient,
+    input: &str,
+    dry: bool,
+    output: std::sync::Arc<dyn OutputSink>,
+) -> Result<()> {
     let system = format!(
         "You are an Android device shell command generator. Generate one executable command for the detected Android shell runtime. Output only the command. No Markdown, explanation, prefix, or alternatives. {} If a non-baseline runtime would be required and cannot be safely probed with an appropriate runtime fallback in the same command, return NL2SH_UNABLE_TO_GENERATE. If unsafe or unreliable return NL2SH_UNABLE_TO_GENERATE.",
         android_shell_constraints()
@@ -509,6 +526,7 @@ async fn run_command(
         anyhow::bail!("model could not safely generate a command")
     }
     let mut a = assess(&command, cfg);
+    nl2sh::audit::record_assessment(&command, &a);
     println!("Command: {command}\nRisk: {:?}", a.risk_level);
     if dry {
         return Ok(());
@@ -517,7 +535,9 @@ async fn run_command(
     let mut interactive_override = None;
     let mut approved_command = None;
     while a.requires_confirmation {
-        match confirmer.confirm(&command, &a).await? {
+        let decision = confirmer.confirm(&command, &a).await?;
+        nl2sh::audit::record_decision(&decision);
+        match decision {
             ConfirmationDecision::Approve => {
                 approved_command = Some(command.clone());
                 break;
@@ -542,6 +562,7 @@ async fn run_command(
             ConfirmationDecision::Edit(edited) => {
                 command = edited;
                 a = assess(&command, cfg);
+                nl2sh::audit::record_assessment(&command, &a);
                 println!("Edited command: {command}\nRisk: {:?}", a.risk_level);
             }
         }

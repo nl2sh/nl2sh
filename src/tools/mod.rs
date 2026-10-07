@@ -540,6 +540,16 @@ pub(crate) struct ToolRegistry {
 }
 
 impl ToolRegistry {
+    #[cfg(test)]
+    pub(crate) fn from_test_adapters(adapters: Vec<Box<dyn Tool>>) -> Self {
+        Self {
+            tools: adapters
+                .into_iter()
+                .map(|tool| (tool.definition(), tool))
+                .collect(),
+        }
+    }
+
     pub fn builtin(capabilities: &[Capability]) -> Self {
         Self::for_config(&Config::default(), capabilities)
     }

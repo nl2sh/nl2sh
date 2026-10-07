@@ -3,6 +3,7 @@
 use std::{env, ffi::OsStr, path::PathBuf};
 
 mod capabilities;
+pub(crate) mod resources;
 pub use capabilities::RuntimeCapabilities;
 
 /// Android userspace hosting the current nl2sh process.

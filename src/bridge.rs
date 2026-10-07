@@ -76,6 +76,9 @@ struct AutoApproveConfirmer;
 
 #[async_trait]
 impl Confirmer for BridgeConfirmer {
+    fn audit_source(&self) -> &'static str {
+        "bridge"
+    }
     async fn confirm(
         &self,
         _command: &str,
@@ -87,6 +90,9 @@ impl Confirmer for BridgeConfirmer {
 
 #[async_trait]
 impl Confirmer for AutoApproveConfirmer {
+    fn audit_source(&self) -> &'static str {
+        "bridge_explicit_auto_approve"
+    }
     async fn confirm(
         &self,
         _command: &str,

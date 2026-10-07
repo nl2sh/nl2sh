@@ -41,6 +41,7 @@ pub struct TaskStats {
 }
 
 pub(crate) struct TaskRuntime {
+    ui_lease: Option<crate::runtime::resources::UiLease>,
     started: Instant,
     confirmation_time: Duration,
     pub(crate) steps_used: usize,
@@ -52,6 +53,7 @@ pub(crate) struct TaskRuntime {
 impl TaskRuntime {
     pub(crate) fn new() -> Self {
         Self {
+            ui_lease: None,
             started: Instant::now(),
             confirmation_time: Duration::ZERO,
             steps_used: 0,
@@ -59,6 +61,24 @@ impl TaskRuntime {
             stalled_steps: 0,
             replans: 0,
         }
+    }
+
+    pub(crate) async fn acquire_resources(
+        &mut self,
+        metadata: &crate::tools::ToolMetadata,
+    ) -> anyhow::Result<()> {
+        use crate::tools::ToolConcurrency;
+        let needs_ui = metadata.concurrency == ToolConcurrency::AndroidUi
+            || (metadata.concurrency == ToolConcurrency::Shell
+                && crate::runtime::resources::privileged_android_process());
+        if needs_ui && self.ui_lease.is_none() {
+            self.ui_lease = Some(crate::runtime::resources::UiLease::acquire().await?);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn holds_ui_lease(&self) -> bool {
+        self.ui_lease.is_some()
     }
 
     pub(crate) fn active_time(&self) -> Duration {

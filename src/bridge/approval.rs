@@ -102,6 +102,9 @@ impl Drop for ApprovalLock {
 
 #[async_trait]
 impl Confirmer for BridgeApprovalConfirmer {
+    fn audit_source(&self) -> &'static str {
+        "bridge_terminal"
+    }
     async fn confirm(
         &self,
         preview: &str,

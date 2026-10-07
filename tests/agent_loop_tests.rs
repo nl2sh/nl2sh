@@ -1296,3 +1296,108 @@ async fn audio_judgment_uses_cached_complete_analysis_instead_of_model_copy() ->
     assert_eq!(llm.calls.load(Ordering::SeqCst), 4);
     Ok(())
 }
+
+struct ReadMutationBarrierLlm {
+    requests: AtomicUsize,
+    path: String,
+}
+
+#[async_trait]
+impl LlmClient for ReadMutationBarrierLlm {
+    async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
+        if self.requests.fetch_add(1, Ordering::SeqCst) == 0 {
+            let call = |id: &str, name: &str, arguments| ToolCall {
+                id: id.into(),
+                name: name.into(),
+                arguments,
+            };
+            Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![
+                    call("before-1", "read_file", json!({"path":self.path})),
+                    call("before-2", "read_file", json!({"path":self.path})),
+                    call(
+                        "write",
+                        "apply_patch",
+                        json!({"path":self.path,"old_text":"before","new_text":"after"}),
+                    ),
+                    call("after-1", "read_file", json!({"path":self.path})),
+                    call("after-2", "read_file", json!({"path":self.path})),
+                ],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            })
+        } else {
+            let round = request
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    ConversationItem::Tools(round) => Some(round),
+                    _ => None,
+                })
+                .expect("completed tool round");
+            assert_eq!(round.calls.len(), 5);
+            assert_eq!(round.results.len(), 5);
+            for (call, result) in round.calls.iter().zip(&round.results) {
+                assert_eq!(call.id, result.call_id);
+                assert!(result.success, "{}", result.output);
+            }
+            assert!(round.results[0].output.contains("before"));
+            assert!(round.results[1].output.contains("before"));
+            assert!(round.results[3].output.contains("after"));
+            assert!(round.results[4].output.contains("after"));
+            Ok(LlmResponse {
+                text: Some("done".into()),
+                tool_calls: vec![],
+                usage: Usage::default(),
+                finish_reason: FinishReason::Stop,
+            })
+        }
+    }
+}
+
+#[tokio::test]
+async fn parallel_reads_preserve_mutation_barriers_order_and_audit_correlation() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("data.txt");
+    std::fs::write(&path, "before")?;
+    let cfg = Config {
+        source: Some(directory.path().join("config.toml")),
+        ..Config::default()
+    };
+    let llm = ReadMutationBarrierLlm {
+        requests: AtomicUsize::new(0),
+        path: path.to_string_lossy().into(),
+    };
+    let executor = Exec {
+        calls: Arc::new(AtomicUsize::new(0)),
+    };
+    let outcome = AgentRunner {
+        config: &cfg,
+        llm: &llm,
+        executor: &executor,
+        confirmer: &Confirm(true),
+    }
+    .run("read then change then read")
+    .await?;
+    assert_eq!(outcome.tool_calls, 5);
+    let records = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
+    let records: Vec<serde_json::Value> = records
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()?;
+    assert_eq!(records.len(), 5);
+    let task = &records[0]["task_id"];
+    let mut requests = std::collections::HashSet::new();
+    for record in &records {
+        assert_eq!(&record["task_id"], task);
+        assert_eq!(record["result"], "success");
+        assert!(requests.insert(record["request_id"].as_str().expect("request identifier")));
+    }
+    assert_eq!(records[2]["tool"], "apply_patch");
+    assert_eq!(records[2]["approval"], "approved_once");
+    assert!(!records
+        .iter()
+        .any(|event| event.to_string().contains(&llm.path)));
+    Ok(())
+}

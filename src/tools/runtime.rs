@@ -43,6 +43,12 @@ pub(crate) async fn execute_prepared_operation(
     let assessment = metadata
         .assessment_for(prepared_risk.unwrap_or(metadata.risk))
         .context("prepared operation has no structured security assessment")?;
+    crate::audit::assessment(
+        preview,
+        &format!("{:?}", assessment.risk_level),
+        assessment.requires_root,
+        assessment.requires_confirmation,
+    );
     if assessment.requires_confirmation {
         if preview.trim().is_empty() {
             bail!("mutating tool has no approval preview")
@@ -53,7 +59,9 @@ pub(crate) async fn execute_prepared_operation(
             .as_deref_mut()
             .context("tool runtime unavailable")?
             .add_confirmation_time(started.elapsed());
-        match decision? {
+        let decision = decision?;
+        crate::audit::decision(&decision);
+        match decision {
             ConfirmationDecision::Approve | ConfirmationDecision::ApproveForTask
             | ConfirmationDecision::ApproveCaptured | ConfirmationDecision::ApproveInteractive => {}
             ConfirmationDecision::ApproveForRun if crate::agent::can_remember_approval(&assessment) => {}
@@ -65,11 +73,36 @@ pub(crate) async fn execute_prepared_operation(
             )),
         }
     }
-    operation.execute(ctx).await
+    let held = ctx
+        .runtime
+        .as_deref()
+        .is_some_and(TaskRuntime::holds_ui_lease);
+    crate::runtime::resources::with_ui_lease(held, operation.execute(ctx)).await
 }
 
 /// Prepare, assess, confirm, and execute one registered tool without consulting an Agent.
 pub async fn invoke(
+    config: &Config,
+    executor: &dyn CommandExecutor,
+    confirmer: &dyn Confirmer,
+    name: &str,
+    arguments: Value,
+) -> Result<DirectToolResult> {
+    crate::audit::AuditContext::new(config, confirmer.audit_source(), confirmer.audit_session())
+        .scope(async {
+            let audit = crate::audit::AuditGuard::begin(name, "unassessed");
+            let result = invoke_scoped(config, executor, confirmer, name, arguments).await;
+            audit.finish(match &result {
+                Ok(result) if result.success => "success",
+                Ok(_) => "error",
+                Err(_) => "error",
+            });
+            result
+        })
+        .await
+}
+
+async fn invoke_scoped(
     config: &Config,
     executor: &dyn CommandExecutor,
     confirmer: &dyn Confirmer,
@@ -86,6 +119,8 @@ pub async fn invoke(
         .get(name)
         .with_context(|| format!("unsupported tool {name}"))?;
     let mut runtime = TaskRuntime::new();
+    runtime.acquire_resources(tool.metadata()).await?;
+    let held = runtime.holds_ui_lease();
     let mut audio_cache = HashMap::new();
     let mut ctx = ToolContext {
         file_tools: &file_tools,
@@ -98,7 +133,8 @@ pub async fn invoke(
         runtime: Some(&mut runtime),
         audio_cache: Some(&mut audio_cache),
     };
-    let prepared = tool.prepare(&ctx, arguments).await?;
+    let prepared =
+        crate::runtime::resources::with_ui_lease(held, tool.prepare(&ctx, arguments)).await?;
     let result = match prepared.action {
         PreparedAction::Operation(operation) => {
             let output = execute_prepared_operation(
@@ -124,10 +160,18 @@ pub async fn invoke(
             let mut command = args.command;
             let (assessment, approved) = loop {
                 let assessment = assess(&command, config);
+                crate::audit::assessment(
+                    &command,
+                    &format!("{:?}", assessment.risk_level),
+                    assessment.requires_root,
+                    assessment.requires_confirmation,
+                );
                 if !assessment.requires_confirmation {
                     break (assessment, None);
                 }
-                match confirmer.confirm(&command, &assessment).await? {
+                let decision = confirmer.confirm(&command, &assessment).await?;
+                crate::audit::decision(&decision);
+                match decision {
                     ConfirmationDecision::Approve
                     | ConfirmationDecision::ApproveForTask
                     | ConfirmationDecision::ApproveCaptured
@@ -145,7 +189,11 @@ pub async fn invoke(
             };
             let capability =
                 PrivilegeBroker::authorize(&command, &assessment, config, approved.as_deref())?;
-            let result = ExecutionBroker::execute(executor, capability, false).await?;
+            let result = crate::runtime::resources::with_ui_lease(
+                held,
+                ExecutionBroker::execute(executor, capability, false),
+            )
+            .await?;
             DirectToolResult {
                 tool: name.into(),
                 success: result.exit_code == Some(0) && !result.timed_out && !result.interrupted,

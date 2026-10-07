@@ -10,8 +10,34 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use std::os::fd::AsRawFd;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+
+struct HistoryFileLock(i32);
+
+impl HistoryFileLock {
+    fn acquire(file: &File) -> Result<Self> {
+        let fd = file.as_raw_fd();
+        loop {
+            if unsafe { libc::flock(fd, libc::LOCK_EX) } == 0 {
+                return Ok(Self(fd));
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() != std::io::ErrorKind::Interrupted {
+                return Err(error).context("cannot lock shared history file");
+            }
+        }
+    }
+}
+
+impl Drop for HistoryFileLock {
+    fn drop(&mut self) {
+        unsafe {
+            libc::flock(self.0, libc::LOCK_UN);
+        }
+    }
+}
 
 #[derive(Clone)]
 /// Append-only JSON Lines history used for diagnostics across process restarts.
@@ -111,10 +137,37 @@ impl HistoryLog {
             message: &message,
         };
         let encoded = serde_json::to_string(&record).context("cannot encode history record")?;
+        self.append_encoded(timestamp_ms, &encoded)
+    }
+
+    /// Appends bounded structured metadata without serializing command arguments or output.
+    pub(crate) fn record_structured(&self, metadata: &impl Serialize) -> Result<()> {
+        let timestamp_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let mut value = serde_json::to_value(metadata)?;
+        let object = value
+            .as_object_mut()
+            .context("audit metadata must be an object")?;
+        object.insert(
+            "timestamp_ms".into(),
+            (timestamp_ms.min(u64::MAX as u128) as u64).into(),
+        );
+        object.insert("event".into(), "tool_audit".into());
+        object.insert("message".into(), "Tool execution audit".into());
+        let encoded = serde_json::to_string(&value)?;
+        anyhow::ensure!(encoded.len() <= 4096, "audit metadata exceeds record limit");
+        self.append_encoded(timestamp_ms, &encoded)
+    }
+
+    fn append_encoded(&self, timestamp_ms: u128, encoded: &str) -> Result<()> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| anyhow::anyhow!("history log lock is poisoned"))?;
+        let _file_lock = HistoryFileLock::acquire(&state.file)?;
+        state.bytes = state.file.metadata()?.len();
         if state.full {
             return Ok(());
         }
@@ -139,7 +192,11 @@ impl HistoryLog {
             state.full = true;
             return Ok(());
         }
-        writeln!(state.file, "{encoded}")
+        let mut line = encoded.as_bytes().to_vec();
+        line.push(b'\n');
+        state
+            .file
+            .write_all(&line)
             .with_context(|| format!("cannot write history log {}", self.path.display()))?;
         state.bytes += encoded_bytes;
         state
@@ -154,6 +211,7 @@ impl HistoryLog {
             .state
             .lock()
             .map_err(|_| anyhow::anyhow!("history log lock is poisoned"))?;
+        let _file_lock = HistoryFileLock::acquire(&state.file)?;
         state
             .file
             .flush()

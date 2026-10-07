@@ -1617,13 +1617,32 @@ async fn execute_direct_command(
     config: &Config,
     executor: &dyn CommandExecutor,
     confirmer: &dyn Confirmer,
+    command: String,
+) -> Result<DirectCommandOutcome> {
+    crate::audit::tool_scope(
+        config,
+        "tui_terminal",
+        confirmer.audit_session(),
+        "execute_shell_command",
+        execute_direct_command_scoped(config, executor, confirmer, command),
+    )
+    .await
+}
+
+async fn execute_direct_command_scoped(
+    config: &Config,
+    executor: &dyn CommandExecutor,
+    confirmer: &dyn Confirmer,
     mut command: String,
 ) -> Result<DirectCommandOutcome> {
     let mut assessment = assess(&command, config);
+    crate::audit::record_assessment(&command, &assessment);
     let mut interactive_override = None;
     let mut approved_command = None;
     while assessment.requires_confirmation {
-        match confirmer.confirm(&command, &assessment).await? {
+        let decision = confirmer.confirm(&command, &assessment).await?;
+        crate::audit::record_decision(&decision);
+        match decision {
             ConfirmationDecision::Approve
             | ConfirmationDecision::ApproveForTask
             | ConfirmationDecision::ApproveForRun => {
@@ -1646,6 +1665,7 @@ async fn execute_direct_command(
             ConfirmationDecision::Edit(edited) => {
                 command = edited;
                 assessment = assess(&command, config);
+                crate::audit::record_assessment(&command, &assessment);
             }
         }
     }
@@ -2895,6 +2915,9 @@ struct SessionConfirmer {
 
 #[async_trait]
 impl Confirmer for SessionConfirmer {
+    fn audit_source(&self) -> &'static str {
+        "tui"
+    }
     async fn confirm(
         &self,
         command: &str,
