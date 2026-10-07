@@ -37,3 +37,22 @@ Export ZIPs contain `conversation.json`, shared `nl2sh.log`, and scope notes. Lo
 ![Web storage analysis](../../assets/web.png)
 
 More: [safety approvals](security-confirmation.md), [sessions](sessions.md), and [network troubleshooting](../troubleshooting/network.md).
+
+## Health and runtime information
+
+`GET /healthz` returns `{"status":"ok"}` and checks HTTP responsiveness without depending on
+sessions, a model provider or companions. `GET /api/info` returns protocol `1`, native version,
+PID, actual listening port, Web server uptime in seconds, process ABI and `capabilities`.
+The snapshot distinguishes Android userspace, the current UID's shell/UI authority, existing root,
+Bridge protocol and independent Accessibility/IME readiness, an installed supported JADX helper,
+JADX acquisition possible after approval, and a reported Tailcat version. These read-only endpoints
+contain no configuration credentials. Use healthz instead of a session listing for health checks;
+a root flag never means an action has been approved. Discovery does not download assets, change
+system settings or prompt for su. Internal probes use ordinary-user pipe capture and a five-second timeout.
+
+In `/api/tools`, `enabled` is the configured switch and `available` means runtime prerequisites
+are present; unavailable tools remain visible in settings. Agent requests, `bridge tools` and direct
+invocation filter by current capability. Development hosts do not advertise Android control or ART
+decompilation; ordinary Termux UIDs do not advertise UI tools requiring shell/root. Static APK
+reads and Tailcat checks remain available. The next task or info request rediscovers state after
+service/installation changes; a running task's registry does not change midway through execution.

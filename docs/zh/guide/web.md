@@ -37,3 +37,17 @@ adb forward tcp:9999 tcp:9999
 ![Web 存储分析](../../assets/web.png)
 
 更多：[安全确认](security-confirmation.md)、[会话](sessions.md)、[网络排查](../troubleshooting/network.md)。
+
+## 服务健康与运行信息
+
+`GET /healthz` 返回 `{"status":"ok"}`，只检查 HTTP 服务是否响应，不依赖会话、模型或伴侣。
+`GET /api/info` 返回协议 `1`、程序版本、PID、实际监听端口、Web 服务运行秒数、进程 ABI 和
+`capabilities`。能力快照区分 Android 环境、当前 UID 的 shell/UI 权限、已是 root、Bridge 协议
+与无障碍/IME 独立状态、已验证协议的 JADX helper、JADX 可在批准后获取，以及 Tailcat 版本。
+这些接口只读，不含配置凭据；不要用 `/api/sessions` 代替健康检查，也不要从 root 标记推断动作已获批准。
+能力查询不下载资产、不改变系统设置、不请求 su；主程序的内部探测使用普通用户、管道捕获和五秒超时。
+
+`/api/tools` 的 `enabled` 是配置开关，`available` 表示运行时前置条件；未就绪工具仍可在设置目录中
+显示。Agent、`bridge tools` 与直接工具调用按当前能力过滤。开发主机不暴露 Android 控制和 ART
+反编译；普通 Termux UID 不暴露需要 shell/root 的 UI 工具。APK 静态读取和 Tailcat 检查仍保留。
+服务/安装状态变化后，下一任务或信息请求重新发现；当前任务的注册表不在执行中自动改变。

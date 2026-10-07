@@ -112,6 +112,8 @@ impl WebServer {
 
 struct Shared {
     path: PathBuf,
+    started: Instant,
+    port: u16,
     sessions: Mutex<BTreeMap<String, Arc<WebSession>>>,
 }
 
@@ -588,6 +590,8 @@ async fn start_with_listener(path: PathBuf, listener: TcpListener) -> Result<Web
     let mut sessions = BTreeMap::new();
     sessions.insert(first_id, first);
     let shared = Arc::new(Shared {
+        started: Instant::now(),
+        port,
         path,
         sessions: Mutex::new(sessions),
     });
@@ -683,8 +687,25 @@ impl IntoResponse for ApiError {
 
 type ApiResult<T> = std::result::Result<T, ApiError>;
 
+async fn get_info(State(state): State<Arc<Shared>>) -> ApiResult<Json<serde_json::Value>> {
+    let cfg = load_config(state.path.clone()).await?;
+    let executor = ShellExecutor::new(cfg.clone());
+    let capabilities = crate::runtime::RuntimeCapabilities::discover(&cfg, &executor).await;
+    Ok(Json(serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"), "protocol": 1,
+        "pid": std::process::id(), "uptime": state.started.elapsed().as_secs(),
+        "port": state.port,
+        "abi": match std::env::consts::ARCH {
+            "aarch64" => "arm64-v8a", "arm" => "armeabi-v7a", other => other,
+        },
+        "capabilities": capabilities,
+    })))
+}
+
 fn router(state: Arc<Shared>) -> Router {
     Router::new()
+        .route("/healthz", get(|| async { Json(serde_json::json!({"status":"ok"})) }))
+        .route("/api/info", get(get_info))
         .route("/api/version", get(|| async { env!("CARGO_PKG_VERSION") }))
         .route("/api/state", get(get_state))
         .route("/api/config", get(get_config).post(save_config))
@@ -1202,6 +1223,7 @@ struct ToolSummary {
     risk: String,
     group: Option<&'static str>,
     enabled: bool,
+    available: bool,
 }
 
 async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolSummary>>> {
@@ -1211,6 +1233,8 @@ async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolS
     } else {
         Vec::new()
     };
+    let executor = ShellExecutor::new(cfg.clone());
+    let runtime = crate::runtime::RuntimeCapabilities::discover(&cfg, &executor).await;
     let registry = ToolRegistry::catalog(&capabilities);
     Ok(Json(
         registry
@@ -1225,6 +1249,7 @@ async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolS
                     risk: format!("{:?}", metadata.risk),
                     group: crate::tools::optional_group(&tool.name),
                     enabled: crate::tools::tool_enabled(&cfg, &tool.name),
+                    available: runtime.supports(metadata),
                 })
             })
             .collect(),
@@ -3345,6 +3370,8 @@ mod tests {
         inner.id = "web-test".into();
         let current = web_session(inner);
         Arc::new(Shared {
+            started: Instant::now(),
+            port: 0,
             path,
             sessions: Mutex::new(BTreeMap::from([("web-test".into(), current)])),
         })
@@ -3997,6 +4024,41 @@ mod http_tests {
     }
 
     #[tokio::test]
+    async fn health_and_info_identify_actual_listener_without_provider_or_sessions() -> Result<()> {
+        let dir = tempdir()?;
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
+        let port = listener.local_addr()?.port();
+        let server = start_with_listener(dir.path().join("missing.toml"), listener).await?;
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let base = format!("http://127.0.0.1:{port}");
+        let health: serde_json::Value = client
+            .get(format!("{base}/healthz"))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        assert_eq!(health, serde_json::json!({"status":"ok"}));
+        let info: serde_json::Value = client
+            .get(format!("{base}/api/info"))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        assert_eq!(info["port"], port);
+        assert_eq!(info["pid"], std::process::id());
+        assert_eq!(info["version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(info["protocol"], 1);
+        assert!(info["uptime"].is_u64());
+        assert!(info["capabilities"]["android_shell"].is_boolean());
+        assert!(info["capabilities"]["jadx_provisionable"].is_boolean());
+        assert!(!info.to_string().contains("api_key"));
+        server.task.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn config_editor_validates_renders_and_applies_saved_settings() -> Result<()> {
         let dir = tempdir()?;
         let path = dir.path().join("config.toml");
@@ -4149,6 +4211,8 @@ mod http_tests {
     async fn refuses_to_delete_running_sessions() -> Result<()> {
         let dir = tempdir()?;
         let state = Arc::new(Shared {
+            started: Instant::now(),
+            port: 0,
             path: dir.path().join("config.toml"),
             sessions: Mutex::new(BTreeMap::from([(
                 "web-test".into(),
@@ -4409,6 +4473,8 @@ mod http_tests {
         let mut initial = SessionState::empty();
         initial.id = "web-test".into();
         let original = Arc::new(Shared {
+            started: Instant::now(),
+            port: 0,
             path: path.clone(),
             sessions: Mutex::new(BTreeMap::from([("web-test".into(), web_session(initial))])),
         });
@@ -4442,6 +4508,8 @@ mod http_tests {
         }
         persist_web_session(&original, &current).await?;
         let restarted = Arc::new(Shared {
+            started: Instant::now(),
+            port: 0,
             path: path.clone(),
             sessions: Mutex::new(BTreeMap::new()),
         });

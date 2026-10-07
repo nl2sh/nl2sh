@@ -21,3 +21,7 @@ Without a companion, `android.input_text` accepts printable ASCII only. See [And
 Pathless `android.screenshot` / `android.read_screen` returns an attachment from a private temporary directory; persistent paths need confirmation. `capture_android_screen` confirms before writing PNG. `view_screenshot` accepts PNG/JPEG/WebP, downscaling to JPEG when needed. Attachments are not stored in sessions. A vision-capable model is needed; MediaStore timestamps/dimensions do not prove image content.
 
 Try “Inspect recent ANRs and cite log evidence without restarting apps” or “Read the UI and explain where the search field is; wait for approval before typing.” See [the catalog](../reference/tool-catalog.md) for parameters.
+
+Bridge protocol v2 uses a single base64url JSON payload with a protocol version and request ID.
+Legacy companions retain per-method calls. A failed v2 action or mismatched reply ID is never
+replayed through the legacy transport. Approval, target revalidation and shell/root checks still apply.

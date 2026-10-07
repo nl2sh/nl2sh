@@ -1,8 +1,10 @@
 # Project Status
 
-Last Updated: 2026-10-06
+Last Updated: 2026-10-07
 
 ## Recent Changes
+
+- Agent Runtime 平台化重构进入主程序能力阶段；完整分阶段范围见 PROJECT_PLAN。Android Bridge 独立仓库已提供 capabilities、v2 JSON RPC 与诊断页面；JADX 独立仓库提供 --info 协议 1。主程序新增只读运行时快照、环境/扩展工具过滤、Bridge v2 请求关联与旧伴侣兼容、/healthz 与 /api/info；固定发现探测不提权、无 PTY、有界输出和五秒超时。JADX 已安装协议状态与批准后获取能力分别表达；service、Helper 生命周期、Manifest/签名、Descriptor/资源锁/Audit、静态分析及 Web 拆分仍待实现。 验证：格式与工作区检查、267 项库测试及非 TUI 集成测试、三种 Android ABI 检查、双语文档与严格站点构建通过；完整套件中的既有 TUI 取消日志时序用例失败，单独重跑通过。Android API 26 上验证无模型配置时的健康/信息接口、Bridge v2 原生 UI 树、截图及已安装 JADX 协议探测。
 
 - Web 模型回答的围栏代码块新增右上角图标复制按钮；复制成功后短暂显示对勾，并保留可访问名称。优先使用 Clipboard API，局域网 HTTP 等不可用场景回退到浏览器复制命令。前端测试与生产构建、Rust 格式和检查、双语文档及严格站点构建通过；全量 Rust 测试仅既有的 Ctrl+C TUI 异步日志时序用例失败，单独重跑通过。该改动仅涉及浏览器展示，不改变模型内容、安全确认、Android 执行或 PTY 路径。
 

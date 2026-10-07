@@ -122,6 +122,15 @@ pub fn configured_tools(config: &Config) -> Vec<ToolDefinition> {
     ToolRegistry::for_config(config, capabilities).definitions()
 }
 
+/// Discover the actual environment before advertising configured tools to an external client.
+pub async fn available_tools(
+    config: &Config,
+    executor: &dyn CommandExecutor,
+) -> Vec<ToolDefinition> {
+    let runtime = crate::runtime::RuntimeCapabilities::discover(config, executor).await;
+    ToolRegistry::for_runtime(config, &runtime).definitions()
+}
+
 /// Remove managed listeners from one-shot bridge processes, which cannot keep them alive.
 pub fn disable_managed_tailcat_for_bridge(config: &mut Config) {
     for name in [
@@ -424,6 +433,15 @@ impl ToolRegistry {
                 .map(|tool| (tool.definition(), tool))
                 .collect(),
         }
+    }
+
+    /// Register only configured tools whose runtime prerequisites were discovered.
+    pub fn for_runtime(config: &Config, runtime: &crate::runtime::RuntimeCapabilities) -> Self {
+        let mut registry = Self::for_config(config, &runtime.configured());
+        registry
+            .tools
+            .retain(|(_, tool)| runtime.supports(tool.metadata()));
+        registry
     }
 
     pub fn definitions(&self) -> Vec<ToolDefinition> {

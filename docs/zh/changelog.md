@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 增加只读运行时能力发现和 `/healthz`、`/api/info`；Agent 与直接调用按环境和已就绪扩展过滤工具。Bridge 协商 v2 JSON RPC，校验回复请求 ID，写入失败不回退重放；保留旧伴侣兼容。
+
 - Web 模型回答的围栏代码块新增无文字的复制图标按钮；一键复制完整代码，成功后图标短暂变为对勾，并为辅助技术保留状态名称。Clipboard API 不可用时使用浏览器兼容回退。
 
 - Agent 记忆重构为内嵌 SQLite 事务存储；Android 原生部署保存在可执行文件旁的 `memory/`，Termux 使用状态目录，不依赖系统 `sqlite3`，也不迁移旧 JSON。Web 左侧新增记忆面板，可搜索并增删改查。

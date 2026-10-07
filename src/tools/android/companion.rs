@@ -5,11 +5,80 @@ use crate::tools::android::automation::GestureSpec;
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const URI: &str = "content://com.nl2sh.bridge.ops";
 const MAX_REPLY: usize = 64 * 1024;
+
+/// Negotiated Bridge protocol and independent service readiness.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BridgeCapabilities {
+    /// Supported Binder envelope version.
+    pub protocol_version: u32,
+    /// Installed APK version, independent of the native program.
+    pub app_version: String,
+    /// Independently connected companion services.
+    pub services: BridgeServices,
+    /// Currently advertised versioned feature identifiers.
+    pub capabilities: Vec<String>,
+    /// Companion-side request and response limits.
+    pub limits: BridgeLimits,
+}
+
+/// Readiness does not imply a focused editor or a complete UI tree.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BridgeServices {
+    /// Accessibility service connected.
+    pub accessibility: bool,
+    /// Input method service loaded.
+    pub ime: bool,
+}
+
+/// Actual companion limits, checked before native requests are sent.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BridgeLimits {
+    /// Maximum tree nodes.
+    pub tree_nodes: usize,
+    /// Maximum decoded response bytes.
+    pub reply_bytes: usize,
+    /// Maximum UTF-8 input text bytes.
+    pub input_text_bytes: usize,
+    /// Maximum encoded JSON envelope bytes.
+    pub payload_b64_bytes: usize,
+}
+
+/// Read-only negotiation. Legacy providers do not implement this method.
+pub async fn capabilities(executor: &dyn CommandExecutor) -> Result<Option<BridgeCapabilities>> {
+    let response = match legacy_request(executor, "capabilities", &[]).await {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+    if response.get("protocol_version").is_none() {
+        return Ok(None);
+    }
+    let caps: BridgeCapabilities =
+        serde_json::from_value(response).context("invalid Android Bridge capabilities")?;
+    if caps.protocol_version != 2
+        || caps.app_version.len() > 128
+        || caps.capabilities.len() > 64
+        || caps.capabilities.iter().any(|name| name.len() > 128)
+        || caps.limits.reply_bytes == 0
+        || caps.limits.reply_bytes > MAX_REPLY
+        || caps.limits.payload_b64_bytes == 0
+        || caps.limits.payload_b64_bytes > 32 * 1024
+        || caps.limits.tree_nodes == 0
+        || caps.limits.tree_nodes > 10000
+        || caps.limits.input_text_bytes == 0
+        || caps.limits.input_text_bytes > 4096
+    {
+        bail!("unsupported Android Bridge protocol or limits")
+    }
+    Ok(Some(caps))
+}
+
+static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 /// How one Unicode write treats the text already in the focused control.
 ///
@@ -260,6 +329,41 @@ async fn request(
     method: &str,
     extras: &[(&str, &str)],
 ) -> Result<Value> {
+    let Some(caps) = capabilities(executor).await? else {
+        return legacy_request(executor, method, extras).await;
+    };
+    let id = format!(
+        "{}-{}",
+        std::process::id(),
+        REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    );
+    let args: serde_json::Map<String, Value> = extras
+        .iter()
+        .map(|(key, value)| ((*key).into(), Value::String((*value).into())))
+        .collect();
+    let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&serde_json::json!({
+        "protocol":2, "request_id":id, "method":method, "args":args,
+    }))?);
+    if payload.len() > caps.limits.payload_b64_bytes {
+        bail!("Android Bridge request exceeds negotiated payload limit")
+    }
+    let response = legacy_request(executor, "invoke", &[("payload_b64", &payload)]).await?;
+    // Never replay an invoke through the legacy transport after an action might have executed.
+    if response["protocol"].as_u64() != Some(2) || response["request_id"].as_str() != Some(&id) {
+        bail!("Android Bridge response protocol or request ID mismatch")
+    }
+    let result = response
+        .get("result")
+        .filter(|value| value.is_object())
+        .context("Android Bridge response has no result object")?;
+    Ok(result.clone())
+}
+
+async fn legacy_request(
+    executor: &dyn CommandExecutor,
+    method: &str,
+    extras: &[(&str, &str)],
+) -> Result<Value> {
     let mut command = format!("content call --uri {URI} --method {method}");
     for (name, value) in extras {
         command.push_str(" --extra ");
@@ -268,10 +372,12 @@ async fn request(
             encode_extra_value(value)
         )));
     }
-    let result = executor
-        .execute_machine(&command, false)
-        .await
-        .context("Android Accessibility provider call failed")?;
+    let result = if method == "capabilities" {
+        executor.execute_probe(&command).await
+    } else {
+        executor.execute_machine(&command, false).await
+    }
+    .context("Android Accessibility provider call failed")?;
     if result.exit_code != Some(0) || result.timed_out || result.interrupted {
         bail!(
             "Android Accessibility provider is unavailable: {}",
@@ -335,10 +441,90 @@ mod tests {
         TextWriteMode,
     };
     use crate::shell::{CommandExecutor, ExecutionResult};
-    use anyhow::{bail, Result};
+    use anyhow::{bail, Context, Result};
     use async_trait::async_trait;
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     use serde_json::json;
+
+    struct V2Executor {
+        commands: std::sync::Mutex<Vec<String>>,
+        mismatch: bool,
+    }
+
+    #[async_trait]
+    impl CommandExecutor for V2Executor {
+        async fn execute(&self, _: &str, _: bool, _: bool) -> Result<ExecutionResult> {
+            bail!("must use the machine protocol")
+        }
+
+        async fn execute_machine(&self, command: &str, _: bool) -> Result<ExecutionResult> {
+            self.commands
+                .lock()
+                .map_err(|_| anyhow::anyhow!("poisoned"))?
+                .push(command.into());
+            let value = if command.contains("--method capabilities") {
+                json!({"ok":true,"protocol_version":2,"app_version":"0.1.0",
+                    "services":{"accessibility":true,"ime":false},
+                    "capabilities":["ui.tree.v2","clipboard.paste.v1"],
+                    "limits":{"tree_nodes":250,"reply_bytes":65536,
+                        "input_text_bytes":4096,"payload_b64_bytes":32768}})
+            } else {
+                let argv = shell_words::split(command)?;
+                let encoded = argv
+                    .last()
+                    .context("missing payload")?
+                    .strip_prefix("payload_b64:s:")
+                    .context("wrong extra")?;
+                let request: serde_json::Value =
+                    serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded)?)?;
+                assert_eq!(request["method"], "paste_text");
+                assert_eq!(request["args"]["text"], "中文:%3A%25'\n");
+                assert_eq!(request["args"]["resource_id"], "com.example:id/query");
+                json!({"ok":true,"protocol":2,
+                    "request_id":if self.mismatch { json!("wrong-id") } else {request["request_id"].clone()},
+                    "result":{"ok":true,"status":"complete"}})
+            };
+            Ok(ExecutionResult {
+                stdout: format!(
+                    "Result: Bundle[{{data={}}}]",
+                    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&value)?)
+                ),
+                stderr: String::new(),
+                exit_code: Some(0),
+                timed_out: false,
+                interrupted: false,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn v2_preserves_json_values_and_never_replays_a_mismatched_write() -> Result<()> {
+        for mismatch in [false, true] {
+            let executor = V2Executor {
+                commands: std::sync::Mutex::new(Vec::new()),
+                mismatch,
+            };
+            let result = paste_text(
+                &executor,
+                "中文:%3A%25'\n",
+                &json!({
+                    "package":"com.example","bounds":"[0,0][10,10]",
+                    "resource_id":"com.example:id/query"
+                }),
+            )
+            .await;
+            assert_eq!(result.is_err(), mismatch);
+            let commands = executor
+                .commands
+                .lock()
+                .map_err(|_| anyhow::anyhow!("poisoned"))?;
+            assert_eq!(commands.len(), 2);
+            assert!(!commands
+                .iter()
+                .any(|command| command.contains("--method paste_text")));
+        }
+        Ok(())
+    }
 
     #[test]
     fn extra_values_survive_the_colon_delimited_binding_format() -> Result<()> {
@@ -380,9 +566,12 @@ mod tests {
                 .lock()
                 .map_err(|_| anyhow::anyhow!("recording lock poisoned"))?
                 .push(command.to_owned());
-            let reply = URL_SAFE_NO_PAD.encode(serde_json::to_vec(
-                &json!({"ok": true, "status": "complete"}),
-            )?);
+            let value = if command.contains("--method capabilities") {
+                json!({"ok":false,"error":"unsupported action"})
+            } else {
+                json!({"ok":true,"status":"complete"})
+            };
+            let reply = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&value)?);
             Ok(ExecutionResult {
                 stdout: format!("Result: Bundle[{{data={reply}}}]"),
                 stderr: String::new(),

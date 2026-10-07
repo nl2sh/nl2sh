@@ -1,7 +1,7 @@
 //! Direct tool dispatch shared with non-Agent callers.
 
 use super::{
-    audio::domain::AudioToolExecutor, file::domain::FileToolExecutor, Capability, PreparedAction,
+    audio::domain::AudioToolExecutor, file::domain::FileToolExecutor, PreparedAction,
     PreparedExecution, ToolContext, ToolMetadata, ToolOutput, ToolRegistry, ToolRisk,
 };
 use crate::{
@@ -80,12 +80,8 @@ pub async fn invoke(
     let file_tools = FileToolExecutor::new(&base)?;
     let audio_tools = AudioToolExecutor::new(&base)?;
     let ima = ImaClient::from_config(config)?;
-    let capabilities = if ima.is_some() {
-        vec![Capability::Ima]
-    } else {
-        Vec::new()
-    };
-    let registry = ToolRegistry::for_config(config, &capabilities);
+    let capabilities = crate::runtime::RuntimeCapabilities::discover(config, executor).await;
+    let registry = ToolRegistry::for_runtime(config, &capabilities);
     let tool = registry
         .get(name)
         .with_context(|| format!("unsupported tool {name}"))?;
@@ -209,7 +205,20 @@ mod tests {
 
     #[tokio::test]
     async fn rejected_tailcat_listener_never_starts() -> Result<()> {
-        let mut config = Config::default();
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir()?;
+        let binary = dir.path().join("tailcat");
+        let shell = if cfg!(target_os = "android") {
+            "/system/bin/sh"
+        } else {
+            "/bin/sh"
+        };
+        std::fs::write(&binary, format!("#!{shell}\necho 'tailcat v0.7.0'\n"))?;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))?;
+        let mut config = Config {
+            tailcat_binary_path: binary,
+            ..Config::default()
+        };
         config.tool_overrides.insert("tailcat_serve".into(), true);
         config.tool_overrides.insert("tailcat_status".into(), true);
         let executor = ShellExecutor::new(config.clone());

@@ -242,3 +242,15 @@ Agent TUI 在输入分发边界保留 `/` 前缀命名空间：所有去除前�
 正式用户手册以 `docs/zh/` / `docs/en/` 为唯一事实源，MkDocs Material 与静态 i18n 生成中文根路径和英文 `/en/`，导航按照用户成长路径组织。根目录与模块 README 只保留简介和入口；架构/计划/状态/视觉规范保留贡献者内部上下文。CLI/config/tool 参考从编译后的公开接口导出，中文说明与 Schema 分离，CI 比较生成区域并检查双语页面、链接、路由和编辑地址。
 
 Release 先构建签名 Termux APT 快照并作为正式资产发布，不再直接覆盖 Pages。文档 workflow 在 PR 验证、master 或成功 tag Release 完成后构建并合并最新正式快照；旧 Release 没有快照资产时验证已有线上仓库。公钥指纹、Release/InRelease 签名、索引和包 SHA-256 全部通过后才合并 `dists/`、`pool/`、`nl2sh-repo.gpg`，失败停止部署。唯一 Pages 发布任务使用共享并发组，保留 APT 根地址，不把 HTML 写回 master。此流程只处理文档/分发资产，不进入 Android 安全、执行或 PTY 边界。
+
+## 运行时能力与服务信息
+
+`runtime::RuntimeCapabilities` 为每个任务及只读 Web 信息请求建立独立快照；Agent、bridge tools 和
+直接调用使用 `ToolRegistry::for_runtime`。配置目录保留全部工具以供设置，并分别呈现 enabled 与
+available。能力不是安全许可，仍需原有 Security → Confirmation → Execution。
+Bridge 原生端先只读发现 protocol 2 与服务/限额，使用 invoke/base64url JSON、唯一请求 ID 和有界
+回复；只在尚未发送动作且旧伴侣不提供 capabilities 时选择旧调用方式，v2 写入后绝不重放。
+JADX installed_info 只验证并探测已有 DEX JAR 的协议，不下载；provisionable 单独表示批准后可获取。
+`/healthz` 不依赖配置/会话/模型；`/api/info` 的协议 1 提供真实端口、PID、单调运行秒数、ABI 和扩展
+快照，不暴露凭据。ShellExecutor 的固定 discovery probe 独立使用 normal、无 PTY、有界输出与五秒
+超时，沿用 pipeline 的进程组终止和 wait。描述元数据统一和 service 生命周期随后实施。

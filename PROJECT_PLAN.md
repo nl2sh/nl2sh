@@ -2,6 +2,30 @@
 
 状态以 2026-10-01 的代码、验证记录和公开发布状态为准；当前发布版本为 1.0.6。未完成项不会机械勾选。
 
+## Agent Runtime 平台化重构 — 分阶段实施
+
+实施范围覆盖能力、生命周期、工具描述、扩展管理、兼容性、签名、回滚、更新归属、并发、静态分析、Web 模块与审计。示例版本号不构成发布版本或最低兼容版本；兼容性以实际协议、构建和经过验证的发行资产为准。
+
+1. **扩展协议基础**：Android Bridge capabilities 与 v2 JSON envelope，保留旧调用兼容；JADX `--info` 协议 1；Bridge 诊断 Dashboard。
+2. **主程序能力发现与健康接口**：只读 RuntimeCapabilities；Agent/直接调用/工具发现按真实环境过滤；`/healthz`、`/api/info` 提供版本、PID、实际端口、运行时长、ABI 与独立扩展状态。
+3. **原生 service 生命周期**：start/stop/restart/status JSON；私有状态目录、进程身份、锁、日志、实际端口与启动时间，优雅退出、并发启动及失效状态恢复；启动器统一采用生命周期接口。
+4. **Helper Device Manager**：连接、更新、重启、停止独立；连接健康服务不下载或重启；读取实际端口；升级原子替换、失败自动回滚；helper-managed 更新归属进入 nl2sh 更新入口与 Web 状态。
+5. **兼容性与供应链**：Release `nl2sh-runtime.json`；Bridge 最低/建议版本和协议、JADX 版本/来源/摘要、Helper 最低版本；移除历史 JADX 固定资产特例，执行前校验 helper 协议；运行时资产签名与验签、APK 发布签名；保留已发布密钥和 APT 分发。
+6. **扩展管理**：Helper 安装/检查/更新 Bridge，验证摘要和签名、打开 Activity/系统设置、呈现版本漂移及无障碍/IME/JADX/Tailcat 状态；不自动授予无障碍或切换键盘。
+7. **工具描述、资源调度与审计**：单一 Descriptor 派生组、平台、能力、风险、默认开关、并发策略、Schema、工具目录、文档与设置；跨会话/进程 Android UI 互斥与连续任务 UI Lease；各执行入口生成关联请求、会话、预览摘要、审批来源/决定、UID/root、结果与时长的结构化事件。
+8. **静态分析与 Web 拆分**：Rust 实现 DEX methods/strings/class references/method references、manifest、permissions、exported components、native libraries 八项有界只读工具；Web 拆分 server/routes/state/websocket/auth 等职责，前端保留 web/src，构建嵌入 dist。
+9. **整体验收**：三 Android ABI 构建；API 26 与当前 Android 模拟器覆盖协议、服务、端口冲突、并发、Helper 重连和更新失败回滚；Rust/Gradle/前端/双语文档及派生参考门禁；各职责独立提交，真实发布与签名产物另核实。
+
+- [x] 扩展端协议基础与 Bridge 诊断页面，API 26 验证。
+- [ ] 主程序运行时能力与健康接口。
+- [ ] 原生 service 与启动器迁移。
+- [ ] Helper 生命周期、回滚和更新归属。
+- [ ] Compatibility Manifest、JADX 协议执行校验与资产签名。
+- [ ] Helper Bridge 管理和扩展状态。
+- [ ] Descriptor、跨进程资源锁、UI Lease 和全入口 Audit Event。
+- [ ] 八项 APK 静态分析与 Web 职责拆分。
+- [ ] 整体验收及逐阶段完成审计。
+
 ## nl2sh 自身配置工具 — 已实现
 
 - [x] 提供 list/get/set/reset、受限点分键、默认/磁盘/解析/任务快照与枚举合法值查询。

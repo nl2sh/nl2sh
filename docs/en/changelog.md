@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added read-only runtime capability discovery and `/healthz` / `/api/info`; Agent and direct calls filter tools by environment and ready adapters. Bridge negotiates v2 JSON RPC, validates reply request IDs and never replays failed writes; legacy companions remain supported.
+
 - Add a text-free copy icon to fenced code blocks in Web model replies. It copies the complete code, briefly changes to a check mark on success, retains an accessible state name, and uses a browser-compatible fallback when the Clipboard API is unavailable.
 
 - Replace Agent memory persistence with transactional embedded SQLite. Native Android stores it in `memory/` beside the executable and Termux uses its state directory, without a system `sqlite3` dependency or old-JSON migration. Add a Web sidebar memory panel with search and CRUD controls.

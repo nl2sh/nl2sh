@@ -1034,7 +1034,20 @@ mod tests {
         }
         let service = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let port = service.local_addr()?.port();
-        let mut config = Config::default();
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir()?;
+        let binary = dir.path().join("tailcat");
+        let shell = if cfg!(target_os = "android") {
+            "/system/bin/sh"
+        } else {
+            "/bin/sh"
+        };
+        std::fs::write(&binary, format!("#!{shell}\necho 'tailcat v0.7.0'\n"))?;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))?;
+        let mut config = Config {
+            tailcat_binary_path: binary,
+            ..Config::default()
+        };
         config.tool_groups.insert("tailcat".into(), true);
         let executor = ShellExecutor::new(config.clone());
         let result = invoke(

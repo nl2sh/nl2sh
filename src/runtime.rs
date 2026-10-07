@@ -2,6 +2,9 @@
 
 use std::{env, ffi::OsStr, path::PathBuf};
 
+mod capabilities;
+pub use capabilities::RuntimeCapabilities;
+
 /// Android userspace hosting the current nl2sh process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AndroidRuntime {

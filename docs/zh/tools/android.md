@@ -21,3 +21,6 @@
 `android.screenshot` / `android.read_screen` 无路径时用私有临时目录返回图片附件；指定持久路径需确认。`capture_android_screen` 确认后写指定 PNG。`view_screenshot` 支持 PNG/JPEG/WebP，必要时缩放并转 JPEG，附件不保存进会话。需要支持视觉的模型；MediaStore 的时间/尺寸不是画面证据。
 
 例子：“查看最近的 ANR 并列出日志证据，不重启应用”；“读当前界面，解释搜索框位置，等待我确认后再输入”。所有参数见 [目录](../reference/tool-catalog.md)。
+
+Bridge 协议 v2 使用单一 base64url JSON payload，带协议版本与请求 ID；支持旧伴侣的逐方法调用。
+v2 动作失败或回复 ID 不匹配时不会回退重放。原有审批、目标身份复核与 shell/root 边界继续生效。

@@ -49,10 +49,20 @@ pub struct ExecutionResult {
 #[async_trait]
 /// Security-agnostic command execution boundary used by the Agent.
 pub trait CommandExecutor: Send + Sync {
+    /// Whether this adapter executes in Android userspace. Does not grant UI or root permission.
+    fn is_android(&self) -> bool {
+        cfg!(target_os = "android")
+    }
+
     /// Returns a low-sensitivity runtime summary for model compatibility hints.
     /// The summary is advisory and must never affect security or confirmation.
     async fn runtime_context(&self) -> Result<Option<String>> {
         Ok(None)
+    }
+
+    /// Captures a fixed read-only discovery probe. Production never elevates or uses a PTY.
+    async fn execute_probe(&self, command: &str) -> Result<ExecutionResult> {
+        self.execute_machine(command, false).await
     }
 
     /// Executes an already assessed and approved command.
@@ -214,6 +224,16 @@ impl ShellExecutor {
 }
 #[async_trait]
 impl CommandExecutor for ShellExecutor {
+    async fn execute_probe(&self, command: &str) -> Result<ExecutionResult> {
+        let mut config = self.config.clone();
+        config.execute_user_mode = crate::config::ExecuteUserMode::Normal;
+        config.execute_timeout_secs = 5;
+        config.tool_output_max_bytes = 128 * 1024;
+        ShellExecutor::new(config)
+            .execute_machine(command, false)
+            .await
+    }
+
     async fn runtime_context(&self) -> Result<Option<String>> {
         #[cfg(target_os = "android")]
         {

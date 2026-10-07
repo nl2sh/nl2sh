@@ -43,6 +43,97 @@ fn parse_sha(sha: String) -> Result<String> {
     Ok(sha.to_ascii_lowercase())
 }
 
+/// Runtime contract returned by the installed DEX helper without opening an APK.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct JadxInfo {
+    /// Supported helper invocation protocol.
+    pub protocol: u32,
+    /// Helper build version.
+    pub helper_version: String,
+    /// Pinned upstream JADX core version.
+    pub jadx_core: String,
+    /// Supported bounded analysis features.
+    pub features: Vec<String>,
+}
+
+/// Probe only an already installed, validated helper; never download during discovery.
+pub async fn installed_info(
+    executor: &dyn crate::shell::CommandExecutor,
+) -> Result<Option<JadxInfo>> {
+    if !cfg!(target_os = "android") {
+        return Ok(None);
+    }
+    let explicit =
+        std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH").filter(|value| !value.is_empty());
+    let (path, sha) = if let Some(path) = explicit {
+        (
+            PathBuf::from(path),
+            std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")
+                .ok()
+                .map(parse_sha)
+                .transpose()?,
+        )
+    } else {
+        let (_, sha) = download_source()?;
+        (cache_dir()?.join("jadx-helper.jar"), Some(sha))
+    };
+    let verified = tokio::task::spawn_blocking(move || -> Result<Option<PathBuf>> {
+        if !path.is_file() {
+            return Ok(None);
+        }
+        validate_dex_jar(&path)?;
+        if let Some(sha) = sha {
+            if digest_file(&path)? != sha {
+                bail!("Android JADX helper SHA-256 mismatch");
+            }
+        }
+        Ok(Some(fs::canonicalize(path)?))
+    })
+    .await
+    .context("helper discovery worker failed")??;
+    let Some(path) = verified else {
+        return Ok(None);
+    };
+    let quoted = format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"));
+    let command = format!("CLASSPATH={quoted} /system/bin/app_process / {ENTRYPOINT} --info");
+    let result = executor.execute_probe(&command).await?;
+    if result.exit_code != Some(0)
+        || result.timed_out
+        || result.interrupted
+        || result.stdout.len() > 4096
+    {
+        bail!("Android JADX helper information unavailable");
+    }
+    let info: JadxInfo =
+        serde_json::from_str(&result.stdout).context("invalid Android JADX helper information")?;
+    if info.protocol != 1
+        || info.helper_version.is_empty()
+        || info.helper_version.len() > 128
+        || info.jadx_core.is_empty()
+        || info.jadx_core.len() > 128
+        || info.features.len() > 32
+        || info.features.iter().any(|feature| feature.len() > 128)
+        || !info
+            .features
+            .iter()
+            .any(|feature| feature == "single_class")
+    {
+        bail!("unsupported Android JADX helper protocol or features");
+    }
+    Ok(Some(info))
+}
+
+/// Whether an explicit offline helper or validated download source can be used after approval.
+/// This does not download or execute the helper during discovery.
+pub fn provisionable() -> bool {
+    if let Some(path) =
+        std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH").filter(|value| !value.is_empty())
+    {
+        return Path::new(&path).is_file();
+    }
+    download_source().is_ok()
+}
+
 fn download_source() -> Result<(String, String)> {
     let configured_url = std::env::var("NL2SH_JADX_ANDROID_HELPER_URL").ok();
     let (url, sha) = if let Some(url) = configured_url {

@@ -16,8 +16,7 @@ use crate::{
     tools::{
         audio::domain::{AnalyzeAudioArgs, AudioToolExecutor, RawSampleFormat},
         file::domain::FileToolExecutor,
-        Capability, PreparedAction, PreparedExecution, ToolContext, ToolMetadata, ToolRegistry,
-        ToolRisk,
+        PreparedAction, PreparedExecution, ToolContext, ToolMetadata, ToolRegistry, ToolRisk,
     },
 };
 use anyhow::{bail, Context, Result};
@@ -141,12 +140,9 @@ impl AgentRunner<'_> {
         let audio_tools = AudioToolExecutor::new(&tool_base)?;
         let mut audio_analysis_cache: HashMap<String, serde_json::Value> = HashMap::new();
         let ima = ImaClient::from_config(self.config)?;
-        let capabilities = if ima.is_some() {
-            vec![Capability::Ima]
-        } else {
-            Vec::new()
-        };
-        let registry = ToolRegistry::for_config(self.config, &capabilities);
+        let capabilities =
+            crate::runtime::RuntimeCapabilities::discover(self.config, self.executor).await;
+        let registry = ToolRegistry::for_runtime(self.config, &capabilities);
         let effective_steps = self
             .config
             .max_agent_steps

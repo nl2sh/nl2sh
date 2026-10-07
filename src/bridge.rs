@@ -10,7 +10,7 @@ use crate::{
     sessions::SessionStore,
     shell::ShellExecutor,
     tools::{
-        android::environment::inspect_environment, configured_tools,
+        android::environment::inspect_environment, available_tools,
         disable_managed_tailcat_for_bridge, runtime::invoke,
     },
 };
@@ -102,7 +102,11 @@ pub async fn run(operation: BridgeOperation, path: &Path) -> Result<()> {
         BridgeOperation::Tools => {
             let mut cfg = config::load_or_default_unvalidated(path)?;
             disable_managed_tailcat_for_bridge(&mut cfg);
-            println!("{}", serde_json::to_string(&configured_tools(&cfg))?);
+            let executor = ShellExecutor::new(cfg.clone());
+            println!(
+                "{}",
+                serde_json::to_string(&available_tools(&cfg, &executor).await)?
+            );
         }
         BridgeOperation::Inspect => {
             let cfg = config::load_or_default_unvalidated(path)?;

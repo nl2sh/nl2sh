@@ -780,6 +780,9 @@ mod tests {
     }
     #[async_trait]
     impl CommandExecutor for Fixture {
+        fn is_android(&self) -> bool {
+            true
+        }
         async fn execute(&self, source: &str, _: bool, _: bool) -> Result<ExecutionResult> {
             self.calls
                 .lock()

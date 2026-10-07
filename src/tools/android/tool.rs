@@ -882,6 +882,9 @@ mod tests {
 
     #[async_trait]
     impl CommandExecutor for FakeScreen {
+        fn is_android(&self) -> bool {
+            true
+        }
         async fn execute(&self, command: &str, _: bool, _: bool) -> Result<ExecutionResult> {
             let words = shell_words::split(command)?;
             if words.len() != 3 || words[0] != "screencap" || words[1] != "-p" {
@@ -986,6 +989,9 @@ mod tests {
 
     #[async_trait]
     impl CommandExecutor for FakeCompanion {
+        fn is_android(&self) -> bool {
+            true
+        }
         async fn execute(
             &self,
             _command: &str,
