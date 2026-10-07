@@ -9,7 +9,10 @@ const SHELL_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::Shell,
     risk: ToolRisk::DynamicShell,
     requires: &[],
-    parallel_safe: false,
+    group: None, default_enabled: true,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Shell, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<ShellToolArgs>,
 };
 
 async fn prepare_shell(_: &ToolContext<'_>, args: ShellToolArgs) -> Result<PreparedToolCall> {

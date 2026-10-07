@@ -10,6 +10,8 @@ use syn::{
 ///
 /// Syntax: `#[tool(adapter = "AdapterName", name = "tool_name", description = "...",
 /// category = "knowledge", risk = "read_only", requires = ["ima"], parallel_safe = true)]`.
+/// Optional policies: group, default_enabled, platform, runtime, lifetime and concurrency.
+/// Specify either concurrency or the legacy parallel_safe attribute.
 /// The function must accept a context followed by one owned argument type and return a
 /// `Result<PreparedToolCall>`. The macro does not register tools or grant permissions.
 #[proc_macro_attribute]
@@ -39,6 +41,12 @@ fn expand_tool(
     let mut risk = None;
     let mut requires = None;
     let mut parallel_safe = None;
+    let mut group = None;
+    let mut default_enabled = None;
+    let mut platform = None;
+    let mut runtime = None;
+    let mut concurrency = None;
+    let mut lifetime = None;
     for attribute in attributes {
         if attribute.path.is_ident("adapter") {
             set_once(
@@ -72,6 +80,72 @@ fn expand_tool(
             )?;
         } else if attribute.path.is_ident("requires") {
             set_once(&mut requires, parse_requires(&attribute.value)?, &attribute)?;
+        } else if attribute.path.is_ident("group") {
+            set_once(
+                &mut group,
+                policy_value(
+                    string_value(&attribute.value)?,
+                    "ToolGroup",
+                    &[("jadx", "Jadx"), ("tailcat", "Tailcat")],
+                )?,
+                &attribute,
+            )?;
+        } else if attribute.path.is_ident("default_enabled") {
+            set_once(
+                &mut default_enabled,
+                bool_value(&attribute.value)?,
+                &attribute,
+            )?;
+        } else if attribute.path.is_ident("platform") {
+            set_once(
+                &mut platform,
+                policy_value(
+                    string_value(&attribute.value)?,
+                    "ToolPlatform",
+                    &[
+                        ("any", "Any"),
+                        ("android", "Android"),
+                        ("android_shell", "AndroidShell"),
+                        ("android_or_linux", "AndroidOrLinux"),
+                    ],
+                )?,
+                &attribute,
+            )?;
+        } else if attribute.path.is_ident("runtime") {
+            set_once(
+                &mut runtime,
+                policy_value(
+                    string_value(&attribute.value)?,
+                    "RuntimeRequirement",
+                    &[("none", "None"), ("tailcat", "Tailcat"), ("jadx", "Jadx")],
+                )?,
+                &attribute,
+            )?;
+        } else if attribute.path.is_ident("concurrency") {
+            set_once(
+                &mut concurrency,
+                policy_value(
+                    string_value(&attribute.value)?,
+                    "ToolConcurrency",
+                    &[
+                        ("parallel", "Parallel"),
+                        ("sequential", "Sequential"),
+                        ("android_ui", "AndroidUi"),
+                        ("shell", "Shell"),
+                    ],
+                )?,
+                &attribute,
+            )?;
+        } else if attribute.path.is_ident("lifetime") {
+            set_once(
+                &mut lifetime,
+                policy_value(
+                    string_value(&attribute.value)?,
+                    "ToolLifetime",
+                    &[("call", "Call"), ("process", "Process")],
+                )?,
+                &attribute,
+            )?;
         } else if attribute.path.is_ident("parallel_safe") {
             set_once(
                 &mut parallel_safe,
@@ -96,8 +170,25 @@ fn expand_tool(
     let risk = risk.ok_or_else(|| syn::Error::new_spanned(&function.sig.ident, "missing risk"))?;
     let requires =
         requires.ok_or_else(|| syn::Error::new_spanned(&function.sig.ident, "missing requires"))?;
-    let parallel_safe = parallel_safe
-        .ok_or_else(|| syn::Error::new_spanned(&function.sig.ident, "missing parallel_safe"))?;
+    let concurrency = match (concurrency, parallel_safe) {
+        (Some(policy), None) => policy,
+        (None, Some(safe)) => {
+            quote! { if #safe { crate::tools::ToolConcurrency::Parallel } else { crate::tools::ToolConcurrency::Sequential } }
+        }
+        _ => {
+            return Err(syn::Error::new_spanned(
+                &function.sig.ident,
+                "provide exactly one of concurrency or parallel_safe",
+            ))
+        }
+    };
+    let default_enabled = default_enabled.unwrap_or(group.is_none());
+    let group = group
+        .map(|value| quote! { Some(#value) })
+        .unwrap_or_else(|| quote! { None });
+    let platform = platform.unwrap_or_else(|| quote! { crate::tools::ToolPlatform::Any });
+    let runtime = runtime.unwrap_or_else(|| quote! { crate::tools::RuntimeRequirement::None });
+    let lifetime = lifetime.unwrap_or_else(|| quote! { crate::tools::ToolLifetime::Call });
     let metadata = format_ident!("{}_METADATA", adapter.to_string().to_uppercase());
     if function.sig.inputs.len() != 2 {
         return Err(syn::Error::new_spanned(
@@ -124,7 +215,9 @@ fn expand_tool(
             category: #category,
             risk: #risk,
             requires: &[#(#requires),*],
-            parallel_safe: #parallel_safe,
+            group: #group, default_enabled: #default_enabled,
+            platform: #platform, runtime: #runtime, lifetime: #lifetime, concurrency: #concurrency,
+            schema: crate::tools::descriptor_schema::<#args>,
         };
 
         pub(super) struct #adapter;
@@ -133,10 +226,6 @@ fn expand_tool(
         impl crate::tools::Tool for #adapter {
             fn metadata(&self) -> &'static crate::tools::ToolMetadata {
                 &#metadata
-            }
-
-            fn definition(&self) -> crate::llm::ToolDefinition {
-                crate::tools::definition::<#args>(#metadata.name, #metadata.description)
             }
 
             async fn prepare(
@@ -149,6 +238,20 @@ fn expand_tool(
             }
         }
     })
+}
+
+fn policy_value(
+    value: &LitStr,
+    kind: &str,
+    allowed: &[(&str, &str)],
+) -> syn::Result<proc_macro2::TokenStream> {
+    let selected = allowed
+        .iter()
+        .find(|(name, _)| *name == value.value())
+        .ok_or_else(|| syn::Error::new_spanned(value, format!("unsupported {kind} policy")))?;
+    let enumeration = format_ident!("{kind}");
+    let variant = format_ident!("{}", selected.1);
+    Ok(quote! { crate::tools::#enumeration::#variant })
 }
 
 fn set_once<T>(slot: &mut Option<T>, value: T, attribute: &MetaNameValue) -> syn::Result<()> {

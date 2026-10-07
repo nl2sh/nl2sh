@@ -33,6 +33,7 @@ fn main() -> Result<()> {
             "defaults": defaults,
             "cli": help,
             "tools": configured_tools(&catalog_config),
+            "tool_descriptors": nl2sh::tools::builtin_descriptors().iter().map(|tool| serde_json::json!({"policy": tool, "parameters": (tool.schema)(tool)})).collect::<Vec<_>>(),
         }))?
     );
     Ok(())

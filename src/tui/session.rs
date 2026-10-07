@@ -1991,7 +1991,7 @@ impl SettingsEditor {
             7,
             6,
             7,
-            2 + crate::tools::optional_tool_names().len(),
+            crate::tools::optional_groups().len() + crate::tools::optional_tool_names().len(),
         ][self.tab]
     }
 
@@ -2290,26 +2290,20 @@ impl SettingsEditor {
                 ),
             ],
             6 => {
-                let mut fields = vec![
-                    (
-                        "APK/JADX",
-                        self.config
-                            .tool_groups
-                            .get("jadx")
-                            .copied()
-                            .unwrap_or(false)
-                            .to_string(),
-                    ),
-                    (
-                        "Tailcat",
-                        self.config
-                            .tool_groups
-                            .get("tailcat")
-                            .copied()
-                            .unwrap_or(false)
-                            .to_string(),
-                    ),
-                ];
+                let mut fields: Vec<(&str, String)> = crate::tools::optional_groups()
+                    .iter()
+                    .map(|group| {
+                        (
+                            group.label(),
+                            self.config
+                                .tool_groups
+                                .get(group.id())
+                                .copied()
+                                .unwrap_or_else(|| group.default_enabled())
+                                .to_string(),
+                        )
+                    })
+                    .collect();
                 fields.extend(crate::tools::optional_tool_names().iter().map(|&name| {
                     let source = if self.config.tool_overrides.contains_key(name) {
                         if zh {
@@ -2694,20 +2688,22 @@ impl SettingsEditor {
                 )
             }
             (5, 0) => self.config.ima_enabled = !self.config.ima_enabled,
-            (6, 0 | 1) => {
-                let group = if self.selected == 0 {
-                    "jadx"
-                } else {
-                    "tailcat"
-                };
-                let enabled = !self.config.tool_groups.get(group).copied().unwrap_or(false);
-                self.config
-                    .tool_overrides
-                    .retain(|name, _| !crate::tools::tool_in_group(name, group));
-                self.config.tool_groups.insert(group.into(), enabled);
-            }
             (6, index) => {
-                if let Some(&name) = crate::tools::optional_tool_names().get(index - 2) {
+                if let Some(group) = crate::tools::optional_groups().get(index) {
+                    let id = group.id();
+                    let enabled = !self
+                        .config
+                        .tool_groups
+                        .get(id)
+                        .copied()
+                        .unwrap_or_else(|| group.default_enabled());
+                    self.config
+                        .tool_overrides
+                        .retain(|name, _| !crate::tools::tool_in_group(name, id));
+                    self.config.tool_groups.insert(id.into(), enabled);
+                } else if let Some(&name) = crate::tools::optional_tool_names()
+                    .get(index - crate::tools::optional_groups().len())
+                {
                     let enabled = !crate::tools::tool_enabled(&self.config, name);
                     self.config.tool_overrides.insert(name.into(), enabled);
                 }

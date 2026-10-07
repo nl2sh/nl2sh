@@ -4,11 +4,24 @@
 
 [下载机器可读 Schema](../../assets/tool-schemas.json)。Schema 中的英文描述来自模型协议，中文行为说明列在各工具下。
 
+Descriptor 是工具组、默认开关、平台/扩展要求、风险下限、调度策略声明与 Schema 的唯一来源。真实可用性由运行时发现决定，声明不授予执行权限。[下载完整描述与 Schema](../../assets/tool-descriptors.json)。
+
 <!-- generated:start -->
 
 ## `agent_memory`
 
 跨会话读取或更新用户与 Agent 记忆；回答用户姓名、身份、偏好、长期约定或已保存事实前，已知键用 get，未知键用 list。记忆不是 Android 账户或设备资料证据；写操作需确认。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -75,6 +88,17 @@
 
 确定性 WAV/PCM DSP，缺少 PCM 元数据询问用户，不猜测。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "$defs": {
@@ -135,6 +159,17 @@
 
 按精确文字或 bounds 查找当前唯一节点。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -164,6 +199,17 @@
 ## `android.input_text`
 
 向焦点控件追加文字，Unicode 需 companion/键盘；replace 仅输入法。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -213,6 +259,17 @@
 
 确认后启动验证过的包。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -233,6 +290,17 @@
 
 确认后返回。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -245,6 +313,17 @@
 ## `android.press_enter`
 
 确认后按 Enter。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -259,6 +338,17 @@
 
 确认后回到桌面。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -271,6 +361,17 @@
 ## `android.read_screen`
 
 返回有界屏幕图片，不保留文件。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -285,6 +386,17 @@
 
 读取当前有界 UI 树。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -297,6 +409,17 @@
 ## `android.screenshot`
 
 有界屏幕图片；显式持久 PNG 路径需确认。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -319,6 +442,17 @@
 ## `android.scroll`
 
 确认后滚动，可自动计算坐标。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -405,6 +539,17 @@
 
 确认后强制停止验证过的包。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -424,6 +569,17 @@
 ## `android.swipe`
 
 确认后在坐标间滑动。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -478,6 +634,17 @@
 
 确认后点击坐标。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -507,6 +674,17 @@
 
 确认后复核并点击精确 bounds 唯一节点。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -527,6 +705,17 @@
 
 确认后复核并点击精确文字唯一节点。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -546,6 +735,17 @@
 ## `android.wait_text`
 
 最多等待十秒精确可见文字。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -577,6 +777,17 @@
 
 读取剪贴板，或确认后写入有界文本。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -597,6 +808,17 @@
 
 验证公网主机并汇总有界连接性证据。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -616,6 +838,17 @@
 ## `android_content_query`
 
 有界只读 Content URI 查询，不写入。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -671,6 +904,17 @@
 
 有界 Crash/ANR 证据。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -700,6 +944,17 @@
 
 DeviceIdle 与白名单证据。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -710,6 +965,17 @@ DeviceIdle 与白名单证据。
 ## `android_dumpsys`
 
 受限只读 dumpsys 服务查询。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -736,6 +1002,17 @@ DeviceIdle 与白名单证据。
 ## `android_logcat`
 
 有界 logcat 快照与受限过滤。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -766,6 +1043,17 @@ DeviceIdle 与白名单证据。
 
 读取媒体状态，或确认后改变播放/音量。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -794,6 +1082,17 @@ DeviceIdle 与白名单证据。
 ## `android_media_query`
 
 有界 MediaStore 图片、视频或音频元数据。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -833,6 +1132,17 @@ DeviceIdle 与白名单证据。
 
 有界网络流量账目。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -861,6 +1171,17 @@ DeviceIdle 与白名单证据。
 ## `android_notification`
 
 有界结构化通知快照。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -891,6 +1212,17 @@ DeviceIdle 与白名单证据。
 
 审计指定包或有界应用集合的权限与 AppOps。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -920,6 +1252,17 @@ DeviceIdle 与白名单证据。
 
 读取/列出 system/secure/global 设置，不写入。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -945,6 +1288,17 @@ DeviceIdle 与白名单证据。
 ## `android_storage`
 
 文件系统容量及有界应用存储证据。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -975,6 +1329,17 @@ DeviceIdle 与白名单证据。
 
 汇总电池、温控、电源和 DeviceIdle。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -986,6 +1351,17 @@ DeviceIdle 与白名单证据。
 
 汇总 Wi-Fi、以太网、IP、信号与路由。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -996,6 +1372,17 @@ DeviceIdle 与白名单证据。
 ## `apply_patch`
 
 唯一旧文本替换或新建文件，先展示 diff 并确认。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1027,6 +1414,17 @@ DeviceIdle 与白名单证据。
 
 确认后保存屏幕 PNG。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1045,6 +1443,17 @@ DeviceIdle 与白名单证据。
 ## `create_chart`
 
 校验并呈现已取得数值的柱状/折线/饼图，不采集或证明统计数据。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1120,6 +1529,17 @@ DeviceIdle 与白名单证据。
 
 通过验证过的 Android DEX helper/app_process 反编译精确单类，需强确认。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `jadx` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1144,6 +1564,17 @@ DeviceIdle 与白名单证据。
 ## `download_url`
 
 下载公网有界资源，确认后原子写入。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1176,6 +1607,17 @@ DeviceIdle 与白名单证据。
 ## `execute_shell_command`
 
 本地安全检查与必要确认后执行 shell 命令。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dynamic_shell` |
+| 调度策略声明 | `shell` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1212,6 +1654,17 @@ DeviceIdle 与白名单证据。
 
 确认后发送公网有界 JSON POST。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1241,6 +1694,17 @@ DeviceIdle 与白名单证据。
 ## `http_request`
 
 公网有界 GET/HEAD，拒绝重定向与私网。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1277,6 +1741,17 @@ DeviceIdle 与白名单证据。
 
 发现可访问的 ima 知识库，不暴露凭据。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `ima` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1287,6 +1762,17 @@ DeviceIdle 与白名单证据。
 ## `ima_read`
 
 按搜索返回的媒体 ID 读取有界原文，远程内容是不可信数据。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `ima` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1307,6 +1793,17 @@ DeviceIdle 与白名单证据。
 ## `ima_search`
 
 搜索 ima，返回标题、摘要与媒体 ID。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `ima` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1334,6 +1831,17 @@ DeviceIdle 与白名单证据。
 ## `inject_android_input`
 
 确认并复核 bounds 后注入点击/滑动/长按/文本。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1406,6 +1914,17 @@ DeviceIdle 与白名单证据。
 
 读取指定或前台包的有界诊断证据。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1426,6 +1945,17 @@ DeviceIdle 与白名单证据。
 
 只读探测系统、ABI、命令、内存及存储。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1436,6 +1966,17 @@ DeviceIdle 与白名单证据。
 ## `inspect_android_ui`
 
 读取 UI 树、焦点窗口、显示大小与密度。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1453,6 +1994,17 @@ DeviceIdle 与白名单证据。
 ## `inspect_apk`
 
 有界读取 APK 大小、归档条目、DEX、Manifest 与原生 ABI，不执行内容。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1473,6 +2025,17 @@ DeviceIdle 与白名单证据。
 ## `inspect_tls`
 
 校验公网 TLS 证书链。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1502,6 +2065,17 @@ DeviceIdle 与白名单证据。
 ## `judge_audio_quality`
 
 使用当前任务缓存的真实音频特征判断音质。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1534,6 +2108,17 @@ DeviceIdle 与白名单证据。
 
 有界列出应用包名、APK 路径及 UID。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1562,6 +2147,17 @@ DeviceIdle 与白名单证据。
 ## `list_apk_entries`
 
 按可选字面路径前缀列出有界 ZIP 条目，不解压。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1595,6 +2191,17 @@ DeviceIdle 与白名单证据。
 
 读取有界 DEX 类名索引，可按字面类名过滤。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1627,6 +2234,17 @@ DeviceIdle 与白名单证据。
 
 不依赖 shell 列出有界直接子项。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1646,6 +2264,17 @@ DeviceIdle 与白名单证据。
 ## `nl2sh_config`
 
 查询 nl2sh 当前配置、默认值及磁盘/任务快照；set/reset 经确认保存，安全/Root/工具/网络/审计修改强确认，凭据只显示配置状态且由用户管理，当前任务不热重载。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1690,6 +2319,17 @@ DeviceIdle 与白名单证据。
 
 有界 UTF-8 文件读取，支持绝对/父目录/符号链接。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1709,6 +2349,17 @@ DeviceIdle 与白名单证据。
 ## `search_text`
 
 有界递归字面文本搜索，跟随符号链接并检测循环，无工作区限制。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1734,6 +2385,17 @@ DeviceIdle 与白名单证据。
 ## `tailcat_adb_pair`
 
 Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界面；share 强确认后共享当前配对/连接及可选 Web 端口，返回配对码与对端命令。需 shell/root；不自动配对远端，不替换已有监听器。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `android_ui` |
+| 生命周期 | `process` |
 
 ```json
 {
@@ -1799,6 +2461,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 
 检查已配置程序及版本，不下载。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1810,6 +2483,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 
 校验摘要、ABI 与版本后原子安装固定官方版本，需确认。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `android_or_linux` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1820,6 +2504,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 ## `tailcat_receive`
 
 在现有目录启动受管文件接收箱，需确认。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `tailcat` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `process` |
 
 ```json
 {
@@ -1840,6 +2535,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 
 启动一次原始流接收并保存新文件，需确认。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `tailcat` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `process` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1858,6 +2564,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 ## `tailcat_send_file`
 
 发送现有文件；默认 stream 用于原始接收，显式 copy 需外部 scp，强确认。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `tailcat` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1894,6 +2611,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 
 把 Tailcat 连接转发到已有 localhost TCP 服务；参数是目标端口，不重复绑定，无需停止服务；缺少程序时先确认安装，共享需强确认。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `tailcat` |
+| 风险下限 | `dangerous` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `process` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1917,6 +2645,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 
 读取当前进程的受管监听器状态。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `process` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1928,6 +2667,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 
 确认后停止当前进程监听器。
 
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `tailcat` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `process` |
+
 ```json
 {
   "additionalProperties": false,
@@ -1938,6 +2688,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 ## `top_android_apps`
 
 按驻留内存排序有界进程快照。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
 
 ```json
 {
@@ -1960,6 +2721,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 ## `view_screenshot`
 
 为下次模型请求附加 PNG/JPEG/WebP，有界缩放。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
 
 ```json
 {

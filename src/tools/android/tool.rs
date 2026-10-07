@@ -25,7 +25,13 @@ macro_rules! meta {
             category: ToolCategory::Android,
             risk: ToolRisk::$risk,
             requires: &[],
-            parallel_safe: false,
+            group: None,
+            default_enabled: true,
+            platform: crate::tools::ToolPlatform::AndroidShell,
+            runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::AndroidUi,
+            lifetime: crate::tools::ToolLifetime::Call,
+            schema: android_schema,
         }
     };
 }
@@ -177,49 +183,6 @@ fn validate_argument_fields(name: &str, arguments: &Value) -> Result<()> {
 impl Tool for AndroidUiTool {
     fn metadata(&self) -> &'static ToolMetadata {
         self.0
-    }
-
-    fn definition(&self) -> crate::llm::ToolDefinition {
-        let mut tool = definition::<UiArgs>(self.0.name, self.0.description);
-        let (allowed, required) = argument_fields(self.0.name);
-        if let Some(properties) = tool.parameters["properties"].as_object_mut() {
-            properties.retain(|field, _| allowed.contains(&field.as_str()));
-            for field in required {
-                if let Some(property) = properties.get_mut(*field).and_then(Value::as_object_mut) {
-                    property.remove("default");
-                    let type_name = property
-                        .get("type")
-                        .and_then(Value::as_array)
-                        .and_then(|types| types.iter().find(|value| *value != "null"))
-                        .cloned();
-                    if let Some(type_name) = type_name {
-                        property.insert("type".into(), type_name);
-                    }
-                }
-            }
-        }
-        tool.parameters["required"] = json!(required);
-        let mut referenced = Vec::new();
-        if let Some(properties) = tool.parameters["properties"].as_object() {
-            properties
-                .values()
-                .for_each(|property| collect_definition_refs(property, &mut referenced));
-        }
-        if let Some(definitions) = tool
-            .parameters
-            .get_mut("$defs")
-            .and_then(Value::as_object_mut)
-        {
-            // Keep only the enum definitions the retained properties still reference, so a
-            // filtered tool never points at a `$defs` entry that was removed with it.
-            definitions.retain(|name, _| referenced.contains(&name.as_str().to_owned()));
-            if definitions.is_empty() {
-                tool.parameters
-                    .as_object_mut()
-                    .map(|object| object.remove("$defs"));
-            }
-        }
-        tool
     }
 
     async fn prepare(&self, ctx: &ToolContext<'_>, arguments: Value) -> Result<PreparedToolCall> {
@@ -1328,4 +1291,47 @@ mod tests {
                 .is_err()
         );
     }
+}
+
+fn android_schema(metadata: &ToolMetadata) -> serde_json::Value {
+    let mut tool = definition::<UiArgs>(metadata.name, metadata.description);
+    let (allowed, required) = argument_fields(metadata.name);
+    if let Some(properties) = tool.parameters["properties"].as_object_mut() {
+        properties.retain(|field, _| allowed.contains(&field.as_str()));
+        for field in required {
+            if let Some(property) = properties.get_mut(*field).and_then(Value::as_object_mut) {
+                property.remove("default");
+                let type_name = property
+                    .get("type")
+                    .and_then(Value::as_array)
+                    .and_then(|types| types.iter().find(|value| *value != "null"))
+                    .cloned();
+                if let Some(type_name) = type_name {
+                    property.insert("type".into(), type_name);
+                }
+            }
+        }
+    }
+    tool.parameters["required"] = json!(required);
+    let mut referenced = Vec::new();
+    if let Some(properties) = tool.parameters["properties"].as_object() {
+        properties
+            .values()
+            .for_each(|property| collect_definition_refs(property, &mut referenced));
+    }
+    if let Some(definitions) = tool
+        .parameters
+        .get_mut("$defs")
+        .and_then(Value::as_object_mut)
+    {
+        // Keep only the enum definitions the retained properties still reference, so a
+        // filtered tool never points at a `$defs` entry that was removed with it.
+        definitions.retain(|name, _| referenced.contains(&name.as_str().to_owned()));
+        if definitions.is_empty() {
+            tool.parameters
+                .as_object_mut()
+                .map(|object| object.remove("$defs"));
+        }
+    }
+    tool.parameters
 }

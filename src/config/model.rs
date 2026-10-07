@@ -398,7 +398,10 @@ impl Config {
             bail!("tailcat_binary_path must not be empty")
         }
         for group in self.tool_groups.keys() {
-            if !matches!(group.as_str(), "jadx" | "tailcat") {
+            if !crate::tools::optional_groups()
+                .iter()
+                .any(|known| known.id() == group)
+            {
                 bail!("unknown tool group {group}")
             }
         }

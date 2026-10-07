@@ -10,10 +10,6 @@ macro_rules! define_tool {
                 &$metadata
             }
 
-            fn definition(&self) -> crate::llm::ToolDefinition {
-                crate::tools::definition::<$args>($metadata.name, $metadata.description)
-            }
-
             async fn prepare(
                 &self,
                 ctx: &crate::tools::ToolContext<'_>,
@@ -60,7 +56,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::Value;
 use shell::ShellTool;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::OnceLock};
 
 /// Validated arguments accepted from the built-in shell function tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -133,54 +129,33 @@ pub async fn available_tools(
 
 /// Remove managed listeners from one-shot bridge processes, which cannot keep them alive.
 pub fn disable_managed_tailcat_for_bridge(config: &mut Config) {
-    for name in [
-        "tailcat_receive",
-        "tailcat_receive_stream",
-        "tailcat_serve",
-        "tailcat_adb_pair",
-        "tailcat_status",
-        "tailcat_stop",
-    ] {
-        config.tool_overrides.insert(name.into(), false);
+    for descriptor in builtin_descriptors()
+        .iter()
+        .filter(|tool| tool.lifetime == ToolLifetime::Process)
+    {
+        config.tool_overrides.insert(descriptor.name.into(), false);
     }
 }
 
 /// Names whose availability can be configured independently of their group.
 pub fn optional_tool_names() -> &'static [&'static str] {
-    &[
-        "inspect_apk",
-        "list_apk_entries",
-        "list_dex_classes",
-        "decompile_apk_class",
-        "tailcat_check",
-        "tailcat_install",
-        "tailcat_receive",
-        "tailcat_receive_stream",
-        "tailcat_send_file",
-        "tailcat_serve",
-        "tailcat_adb_pair",
-        "tailcat_status",
-        "tailcat_stop",
-    ]
+    static NAMES: OnceLock<Vec<&'static str>> = OnceLock::new();
+    NAMES.get_or_init(|| {
+        builtin_descriptors()
+            .iter()
+            .filter(|tool| tool.group.is_some())
+            .map(|tool| tool.name)
+            .collect()
+    })
 }
 
 /// Optional group that owns a registered tool, if any.
 pub fn optional_group(name: &str) -> Option<&'static str> {
-    match name {
-        "inspect_apk" | "list_apk_entries" | "list_dex_classes" | "decompile_apk_class" => {
-            Some("jadx")
-        }
-        "tailcat_check"
-        | "tailcat_install"
-        | "tailcat_receive"
-        | "tailcat_receive_stream"
-        | "tailcat_send_file"
-        | "tailcat_serve"
-        | "tailcat_adb_pair"
-        | "tailcat_status"
-        | "tailcat_stop" => Some("tailcat"),
-        _ => None,
-    }
+    builtin_descriptors()
+        .iter()
+        .find(|tool| tool.name == name)?
+        .group
+        .map(ToolGroup::id)
 }
 
 /// Check the assigned optional group of a tool.
@@ -190,13 +165,19 @@ pub fn tool_in_group(name: &str, group: &str) -> bool {
 
 /// Effective availability of one optional tool.
 pub fn tool_enabled(config: &Config, name: &str) -> bool {
-    optional_group(name).is_none_or(|group| {
-        config
-            .tool_overrides
-            .get(name)
-            .copied()
-            .unwrap_or_else(|| config.tool_groups.get(group).copied().unwrap_or(false))
-    })
+    builtin_descriptors()
+        .iter()
+        .find(|tool| tool.name == name)
+        .is_none_or(|tool| {
+            tool.group.is_none_or(|group| {
+                config
+                    .tool_overrides
+                    .get(name)
+                    .copied()
+                    .or_else(|| config.tool_groups.get(group.id()).copied())
+                    .unwrap_or(tool.default_enabled)
+            })
+        })
 }
 
 pub(crate) struct ToolContext<'a> {
@@ -238,18 +219,22 @@ impl ToolOutput {
 #[async_trait]
 pub(crate) trait Tool: Send + Sync {
     fn metadata(&self) -> &'static ToolMetadata;
-    fn definition(&self) -> ToolDefinition;
+    fn definition(&self) -> ToolDefinition {
+        self.metadata().definition()
+    }
     async fn prepare(&self, ctx: &ToolContext<'_>, arguments: Value) -> Result<PreparedToolCall>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 /// Runtime capability required before exposing a tool to the model.
 pub enum Capability {
     /// Configured Tencent ima read-only connector.
     Ima,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 /// Stable grouping for model-facing tools.
 pub enum ToolCategory {
     /// Device shell command.
@@ -272,7 +257,8 @@ pub enum ToolCategory {
     Chart,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 /// Local minimum security policy for a tool.
 pub enum ToolRisk {
     /// Classify each shell command using the shell security engine.
@@ -287,8 +273,92 @@ pub enum ToolRisk {
     Critical,
 }
 
-/// Local tool identity, availability, and minimum risk.
-pub struct ToolMetadata {
+/// Optional tool group identity; labels and IDs live alongside its descriptors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolGroup {
+    /// Bounded APK analysis and optional JADX.
+    Jadx,
+    /// Explicit network sharing and transfer.
+    Tailcat,
+}
+impl ToolGroup {
+    /// Configuration key.
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Jadx => "jadx",
+            Self::Tailcat => "tailcat",
+        }
+    }
+    /// Default group switch derived from its declared tools.
+    pub fn default_enabled(self) -> bool {
+        builtin_descriptors()
+            .iter()
+            .find(|tool| tool.group == Some(self))
+            .is_some_and(|tool| tool.default_enabled)
+    }
+    /// Human-readable settings label.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Jadx => "APK/JADX",
+            Self::Tailcat => "Tailcat",
+        }
+    }
+}
+
+/// Environment prerequisite, independent of authorization to execute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolPlatform {
+    /// Platform-independent operation.
+    Any,
+    /// Android userspace.
+    Android,
+    /// Current process has Android shell/root authority.
+    AndroidShell,
+    /// The installer supports Android and Linux.
+    AndroidOrLinux,
+}
+
+/// Optional runtime prerequisite discovered without installing or prompting for root.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeRequirement {
+    /// No extra executable.
+    None,
+    /// Tailcat has reported a version.
+    Tailcat,
+    /// JADX has an explicit or authenticated acquisition source.
+    Jadx,
+}
+
+/// Scheduling policy shared by every execution entry point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolConcurrency {
+    /// Independent, bounded read-only operation.
+    Parallel,
+    /// A call must run sequentially within its task.
+    Sequential,
+    /// Android focus/display/clipboard operation requires the task's device UI lease.
+    AndroidUi,
+    /// Arbitrary shell execution uses platform-specific resource coordination.
+    Shell,
+}
+
+/// Whether the operation needs its caller process to stay alive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolLifetime {
+    /// One completed call is sufficient.
+    Call,
+    /// A managed listener lives in this process.
+    Process,
+}
+
+/// One source for identity, schema, settings, risk, availability and scheduling policy.
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub struct ToolDescriptor {
     /// Name presented to the model.
     pub name: &'static str,
     /// Description presented to the model and confirmation interface.
@@ -297,13 +367,51 @@ pub struct ToolMetadata {
     pub category: ToolCategory,
     /// Minimum local risk policy.
     pub risk: ToolRisk,
-    /// Capabilities required to expose this tool.
+    /// Configured connector capabilities required to expose this tool.
     pub requires: &'static [Capability],
-    /// Whether independent calls may eventually run concurrently.
-    pub parallel_safe: bool,
+    /// Optional configuration group.
+    pub group: Option<ToolGroup>,
+    /// Default when neither a group nor per-tool override is present.
+    pub default_enabled: bool,
+    /// Device/platform prerequisite.
+    pub platform: ToolPlatform,
+    /// Optional executable prerequisite.
+    pub runtime: RuntimeRequirement,
+    /// Resource and parallel execution policy.
+    pub concurrency: ToolConcurrency,
+    /// Managed process requirement.
+    pub lifetime: ToolLifetime,
+    /// Schema derived from typed arguments, with operation-specific narrowing where needed.
+    #[serde(skip)]
+    pub schema: fn(&ToolDescriptor) -> Value,
+}
+
+/// Source-compatible name for existing adapters; both names refer to the same descriptor.
+pub type ToolMetadata = ToolDescriptor;
+
+pub(super) fn descriptor_schema<A: JsonSchema>(_: &ToolDescriptor) -> Value {
+    definition::<A>("", "").parameters
+}
+
+impl ToolCategory {
+    const fn platform(self) -> ToolPlatform {
+        match self {
+            Self::Android => ToolPlatform::Android,
+            _ => ToolPlatform::Any,
+        }
+    }
 }
 
 impl ToolMetadata {
+    /// Generate the model definition from this descriptor's typed schema.
+    pub fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: self.name.into(),
+            description: self.description.into(),
+            parameters: (self.schema)(self),
+        }
+    }
+
     /// Returns whether every declared capability is currently available.
     pub fn available(&self, capabilities: &[Capability]) -> bool {
         self.requires.iter().all(|need| capabilities.contains(need))
@@ -383,6 +491,49 @@ impl PreparedToolCall {
     }
 }
 
+fn all_adapters() -> Vec<Box<dyn Tool>> {
+    let mut tools: Vec<Box<dyn Tool>> = vec![
+        Box::new(ShellTool),
+        Box::new(apk::InspectApkTool),
+        Box::new(apk::ListApkEntriesTool),
+        Box::new(apk::ListDexClassesTool),
+        Box::new(apk::DecompileApkClassTool),
+        Box::new(ReadFileTool),
+        Box::new(ListDirTool),
+        Box::new(SearchTextTool),
+        Box::new(ApplyPatchTool),
+        Box::new(ChartTool),
+        Box::new(configuration::ConfigTool),
+        Box::new(ImaListTool),
+        Box::new(ImaSearchTool),
+        Box::new(ImaReadTool),
+    ];
+    tools.extend(tailcat::builtin_tools());
+    tools.extend(extended::builtin_tools());
+    tools.extend(android::tool::builtin_tools());
+    tools
+}
+
+/// Complete descriptor inventory, including disabled groups and unconfigured connectors.
+pub fn builtin_descriptors() -> &'static [ToolDescriptor] {
+    static DESCRIPTORS: OnceLock<Vec<ToolDescriptor>> = OnceLock::new();
+    DESCRIPTORS.get_or_init(|| all_adapters().iter().map(|tool| *tool.metadata()).collect())
+}
+
+/// Optional groups derived from the descriptor inventory in catalog order.
+pub fn optional_groups() -> &'static [ToolGroup] {
+    static GROUPS: OnceLock<Vec<ToolGroup>> = OnceLock::new();
+    GROUPS.get_or_init(|| {
+        let mut groups = Vec::new();
+        for group in builtin_descriptors().iter().filter_map(|tool| tool.group) {
+            if !groups.contains(&group) {
+                groups.push(group);
+            }
+        }
+        groups
+    })
+}
+
 /// An explicit, ordered list of adapters available to this task.
 pub(crate) struct ToolRegistry {
     tools: Vec<(ToolDefinition, Box<dyn Tool>)>,
@@ -404,25 +555,7 @@ impl ToolRegistry {
     }
 
     fn build(config: Option<&Config>, capabilities: &[Capability]) -> Self {
-        let mut tools: Vec<Box<dyn Tool>> = vec![
-            Box::new(ShellTool),
-            Box::new(apk::InspectApkTool),
-            Box::new(apk::ListApkEntriesTool),
-            Box::new(apk::ListDexClassesTool),
-            Box::new(apk::DecompileApkClassTool),
-            Box::new(ReadFileTool),
-            Box::new(ListDirTool),
-            Box::new(SearchTextTool),
-            Box::new(ApplyPatchTool),
-            Box::new(ChartTool),
-            Box::new(configuration::ConfigTool),
-            Box::new(ImaListTool),
-            Box::new(ImaSearchTool),
-            Box::new(ImaReadTool),
-        ];
-        tools.extend(tailcat::builtin_tools());
-        tools.extend(extended::builtin_tools());
-        tools.extend(android::tool::builtin_tools());
+        let tools = all_adapters();
         Self {
             tools: tools
                 .into_iter()
@@ -468,6 +601,41 @@ mod tests {
     use anyhow::{Context, Result};
     use serde_json::json;
     use std::fs;
+
+    #[test]
+    fn descriptors_drive_catalog_settings_and_runtime_policy() -> Result<()> {
+        let catalog = ToolRegistry::catalog(&[Capability::Ima]);
+        let descriptors = super::builtin_descriptors();
+        let mut names = std::collections::HashSet::new();
+        for descriptor in descriptors {
+            assert!(names.insert(descriptor.name), "duplicate descriptor");
+            assert_eq!(
+                descriptor.definition(),
+                catalog
+                    .get(descriptor.name)
+                    .context("missing descriptor dispatch")?
+                    .definition()
+            );
+            assert_eq!(
+                super::optional_group(descriptor.name),
+                descriptor.group.map(super::ToolGroup::id)
+            );
+            assert_eq!(
+                super::tool_enabled(&crate::config::Config::default(), descriptor.name),
+                descriptor.default_enabled
+            );
+            if descriptor.concurrency == super::ToolConcurrency::Parallel {
+                assert_eq!(descriptor.risk, ToolRisk::ReadOnly);
+            }
+        }
+        assert_eq!(catalog.definitions().len(), descriptors.len());
+        assert!(descriptors
+            .iter()
+            .filter(|tool| tool.name.starts_with("android."))
+            .all(|tool| tool.platform == super::ToolPlatform::AndroidShell
+                && tool.concurrency == super::ToolConcurrency::AndroidUi));
+        Ok(())
+    }
 
     #[test]
     fn registry_definitions_match_available_dispatch() {
@@ -642,7 +810,13 @@ mod tests {
             category: ToolCategory::File,
             risk: ToolRisk::Dangerous,
             requires: &[],
-            parallel_safe: false,
+            group: None,
+            default_enabled: true,
+            platform: crate::tools::ToolPlatform::Any,
+            runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Sequential,
+            lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<crate::tools::ShellToolArgs>,
         };
         let assessment = metadata.assessment().context("assessment missing")?;
         assert_eq!(assessment.risk_level, RiskLevel::Dangerous);

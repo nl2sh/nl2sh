@@ -15,7 +15,10 @@ const META: ToolMetadata = ToolMetadata {
     category: ToolCategory::Chart,
     risk: ToolRisk::ReadOnly,
     requires: &[],
-    parallel_safe: true,
+    group: None, default_enabled: true,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<ChartSpec>,
 };
 
 /// Data accepted and returned by the presentation-only chart tool.

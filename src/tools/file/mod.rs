@@ -18,7 +18,10 @@ const READ_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::File,
     risk: ToolRisk::ReadOnly,
     requires: &[],
-    parallel_safe: true,
+    group: None, default_enabled: true,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<ReadFileArgs>,
 };
 
 const LIST_META: ToolMetadata = ToolMetadata {
@@ -27,7 +30,10 @@ const LIST_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::File,
     risk: ToolRisk::ReadOnly,
     requires: &[],
-    parallel_safe: true,
+    group: None, default_enabled: true,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<ListDirArgs>,
 };
 
 const SEARCH_META: ToolMetadata = ToolMetadata {
@@ -36,7 +42,10 @@ const SEARCH_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::File,
     risk: ToolRisk::ReadOnly,
     requires: &[],
-    parallel_safe: true,
+    group: None, default_enabled: true,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<SearchTextArgs>,
 };
 
 const PATCH_META: ToolMetadata = ToolMetadata {
@@ -45,7 +54,10 @@ const PATCH_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::File,
     risk: ToolRisk::Mutating,
     requires: &[],
-    parallel_safe: false,
+    group: None, default_enabled: true,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<ApplyPatchArgs>,
 };
 
 struct FileReadOperation<A> {

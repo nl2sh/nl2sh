@@ -1309,6 +1309,8 @@ struct ToolSummary {
     group: Option<&'static str>,
     enabled: bool,
     available: bool,
+    descriptor: &'static crate::tools::ToolDescriptor,
+    parameters: serde_json::Value,
 }
 
 async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolSummary>>> {
@@ -1320,7 +1322,7 @@ async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolS
     };
     let executor = ShellExecutor::new(cfg.clone());
     let runtime = crate::runtime::RuntimeCapabilities::discover(&cfg, &executor).await;
-    let registry = ToolRegistry::catalog(&capabilities);
+    let registry = ToolRegistry::catalog(&[Capability::Ima]);
     Ok(Json(
         registry
             .definitions()
@@ -1332,9 +1334,12 @@ async fn get_tools(State(state): State<Arc<Shared>>) -> ApiResult<Json<Vec<ToolS
                     description: tool.description,
                     category: format!("{:?}", metadata.category),
                     risk: format!("{:?}", metadata.risk),
-                    group: crate::tools::optional_group(&tool.name),
-                    enabled: crate::tools::tool_enabled(&cfg, &tool.name),
+                    group: metadata.group.map(crate::tools::ToolGroup::id),
+                    enabled: metadata.available(&capabilities)
+                        && crate::tools::tool_enabled(&cfg, &tool.name),
                     available: runtime.supports(metadata),
+                    descriptor: metadata,
+                    parameters: tool.parameters,
                 })
             })
             .collect(),
@@ -1357,7 +1362,11 @@ async fn toggle_tool(
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         let mut cfg = config::load_or_default_unvalidated(&path)?;
         match (change.group, change.tool) {
-            (Some(group), None) if matches!(group.as_str(), "jadx" | "tailcat") => {
+            (Some(group), None)
+                if crate::tools::optional_groups()
+                    .iter()
+                    .any(|known| known.id() == group) =>
+            {
                 cfg.tool_overrides
                     .retain(|name, _| !crate::tools::tool_in_group(name, &group));
                 cfg.tool_groups.insert(group, change.enabled);

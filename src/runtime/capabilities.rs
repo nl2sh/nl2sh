@@ -5,7 +5,7 @@ use crate::{
     shell::{CommandExecutor, RootProbe, SystemRootProbe},
     tools::{
         android::companion::{self, BridgeCapabilities},
-        Capability, ToolCategory, ToolMetadata,
+        Capability, ToolMetadata,
     },
 };
 use serde::Serialize;
@@ -85,34 +85,19 @@ impl RuntimeCapabilities {
 
     /// Model/direct-call availability, separate from the unchanged local security policy.
     pub(crate) fn supports(&self, metadata: &ToolMetadata) -> bool {
-        let name = metadata.name;
-        if name == "decompile_apk_class" {
-            return self.jadx_provisionable;
-        }
-        if name == "tailcat_install" {
-            return cfg!(any(target_os = "android", target_os = "linux"));
-        }
-        if name == "tailcat_adb_pair" {
-            return self.android_shell;
-        }
-        if matches!(
-            name,
-            "tailcat_receive" | "tailcat_receive_stream" | "tailcat_send_file" | "tailcat_serve"
-        ) {
-            return self.tailcat.is_some();
-        }
-        if metadata.category == ToolCategory::Android && name != "view_screenshot" {
-            if name.starts_with("android.")
-                || matches!(
-                    name,
-                    "inject_android_input" | "capture_android_screen" | "inspect_android_ui"
-                )
-            {
-                return self.android_shell;
-            }
-            return self.android;
-        }
-        true
+        use crate::tools::{RuntimeRequirement, ToolPlatform};
+        let platform = match metadata.platform {
+            ToolPlatform::Any => true,
+            ToolPlatform::Android => self.android,
+            ToolPlatform::AndroidShell => self.android_shell,
+            ToolPlatform::AndroidOrLinux => cfg!(any(target_os = "android", target_os = "linux")),
+        };
+        let runtime = match metadata.runtime {
+            RuntimeRequirement::None => true,
+            RuntimeRequirement::Tailcat => self.tailcat.is_some(),
+            RuntimeRequirement::Jadx => self.jadx_provisionable,
+        };
+        metadata.available(&self.configured()) && platform && runtime
     }
 
     pub(crate) fn configured(&self) -> Vec<Capability> {

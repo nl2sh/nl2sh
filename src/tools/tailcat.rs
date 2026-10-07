@@ -30,15 +30,15 @@ use tokio::{
 };
 
 static META: &[ToolMetadata] = &[
-    ToolMetadata { name: "tailcat_check", description: "Check the configured Tailcat executable and version.", category: ToolCategory::Network, risk: ToolRisk::ReadOnly, requires: &[], parallel_safe: true },
-    ToolMetadata { name: "tailcat_install", description: "Install the pinned official Tailcat release for this device ABI after checksum verification. Replaces the configured executable.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
-    ToolMetadata { name: "tailcat_receive", description: "Start a managed Tailcat file drop box in an existing directory and return its address. Incoming peers can write files there.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
-    ToolMetadata { name: "tailcat_receive_stream", description: "Start a managed raw Tailcat receiver, saving one incoming byte stream to a new file. Return its address.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
-    ToolMetadata { name: "tailcat_send_file", description: "Send an existing file to a Tailcat raw receiver. mode defaults to stream. Explicit mode=copy targets a file drop box and requires an external scp executable, which stock Android does not provide.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
-    ToolMetadata { name: "tailcat_serve", description: "Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
-    ToolMetadata { name: "tailcat_adb_pair", description: "Guide Android 11+ wireless debugging with action=setup, then action=share to expose the current pairing and TLS connection ports plus an optional Web port through one managed Tailcat listener. Strong confirmation is required. Returns the current pairing code to the model/conversation after approval. Requires shell/root and an installed Tailcat. Does not pair the remote computer automatically or stop an existing listener.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], parallel_safe: false },
-    ToolMetadata { name: "tailcat_status", description: "Inspect this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::ReadOnly, requires: &[], parallel_safe: true },
-    ToolMetadata { name: "tailcat_stop", description: "Stop this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], parallel_safe: false },
+    ToolMetadata { name: "tailcat_check", description: "Check the configured Tailcat executable and version.", category: ToolCategory::Network, risk: ToolRisk::ReadOnly, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None, concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Call, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_install", description: "Install the pinned official Tailcat release for this device ABI after checksum verification. Replaces the configured executable.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::AndroidOrLinux, runtime: crate::tools::RuntimeRequirement::None, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Call, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_receive", description: "Start a managed Tailcat file drop box in an existing directory and return its address. Incoming peers can write files there.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_receive_stream", description: "Start a managed raw Tailcat receiver, saving one incoming byte stream to a new file. Return its address.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_send_file", description: "Send an existing file to a Tailcat raw receiver. mode defaults to stream. Explicit mode=copy targets a file drop box and requires an external scp executable, which stock Android does not provide.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Call, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_serve", description: "Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_adb_pair", description: "Guide Android 11+ wireless debugging with action=setup, then action=share to expose the current pairing and TLS connection ports plus an optional Web port through one managed Tailcat listener. Strong confirmation is required. Returns the current pairing code to the model/conversation after approval. Requires shell/root and an installed Tailcat. Does not pair the remote computer automatically or stop an existing listener.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::AndroidShell, runtime: crate::tools::RuntimeRequirement::None, concurrency: crate::tools::ToolConcurrency::AndroidUi, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_status", description: "Inspect this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::ReadOnly, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None, concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_stop", description: "Stop this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
 ];
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -92,19 +92,6 @@ pub(super) fn builtin_tools() -> Vec<Box<dyn Tool>> {
 impl Tool for TailcatTool {
     fn metadata(&self) -> &'static ToolMetadata {
         self.0
-    }
-
-    fn definition(&self) -> crate::llm::ToolDefinition {
-        let name = self.0.name;
-        let description = self.0.description;
-        match name {
-            "tailcat_receive" => definition::<Receive>(name, description),
-            "tailcat_receive_stream" => definition::<ReceiveStream>(name, description),
-            "tailcat_send_file" => definition::<SendFile>(name, description),
-            "tailcat_serve" => definition::<Serve>(name, description),
-            "tailcat_adb_pair" => definition::<adb_pair::Args>(name, description),
-            _ => definition::<Empty>(name, description),
-        }
     }
 
     async fn prepare(&self, ctx: &ToolContext<'_>, arguments: Value) -> Result<PreparedToolCall> {
@@ -1084,4 +1071,18 @@ mod tests {
         assert!(String::from_utf8_lossy(&output.stdout).contains(TAILCAT_VERSION));
         Ok(())
     }
+}
+
+fn tailcat_schema(metadata: &ToolMetadata) -> serde_json::Value {
+    let name = metadata.name;
+    let description = metadata.description;
+    (match name {
+        "tailcat_receive" => definition::<Receive>(name, description),
+        "tailcat_receive_stream" => definition::<ReceiveStream>(name, description),
+        "tailcat_send_file" => definition::<SendFile>(name, description),
+        "tailcat_serve" => definition::<Serve>(name, description),
+        "tailcat_adb_pair" => definition::<adb_pair::Args>(name, description),
+        _ => definition::<Empty>(name, description),
+    })
+    .parameters
 }

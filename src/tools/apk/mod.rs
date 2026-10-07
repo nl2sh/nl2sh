@@ -23,7 +23,10 @@ const INSPECT_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::File,
     risk: ToolRisk::ReadOnly,
     requires: &[],
-    parallel_safe: true,
+    group: Some(crate::tools::ToolGroup::Jadx), default_enabled: false,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<ApkPathArgs>,
 };
 const ENTRIES_META: ToolMetadata = ToolMetadata {
     name: "list_apk_entries",
@@ -32,7 +35,13 @@ const ENTRIES_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::File,
     risk: ToolRisk::ReadOnly,
     requires: &[],
-    parallel_safe: true,
+    group: Some(crate::tools::ToolGroup::Jadx),
+    default_enabled: false,
+    platform: crate::tools::ToolPlatform::Any,
+    runtime: crate::tools::RuntimeRequirement::None,
+    concurrency: crate::tools::ToolConcurrency::Parallel,
+    lifetime: crate::tools::ToolLifetime::Call,
+    schema: crate::tools::descriptor_schema::<ApkEntriesArgs>,
 };
 const CLASSES_META: ToolMetadata = ToolMetadata {
     name: "list_dex_classes",
@@ -40,7 +49,10 @@ const CLASSES_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::File,
     risk: ToolRisk::ReadOnly,
     requires: &[],
-    parallel_safe: true,
+    group: Some(crate::tools::ToolGroup::Jadx), default_enabled: false,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<DexClassesArgs>,
 };
 const DECOMPILE_META: ToolMetadata = ToolMetadata {
     name: "decompile_apk_class",
@@ -48,7 +60,10 @@ const DECOMPILE_META: ToolMetadata = ToolMetadata {
     category: ToolCategory::File,
     risk: ToolRisk::Dangerous,
     requires: &[],
-    parallel_safe: false,
+    group: Some(crate::tools::ToolGroup::Jadx), default_enabled: false,
+            platform: crate::tools::ToolPlatform::Android, runtime: crate::tools::RuntimeRequirement::Jadx,
+            concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<DecompileClassArgs>,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]

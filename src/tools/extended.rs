@@ -45,15 +45,23 @@ struct EmptyArgs {}
 
 macro_rules! meta {
     ($name:literal, $description:literal, $category:ident, $risk:ident) => {
+        meta!($name, $description, $category, $risk, platform = category, concurrency = Sequential)
+    };
+    ($name:literal, $description:literal, $category:ident, $risk:ident, platform = $platform:ident, concurrency = $concurrency:ident) => {
         ToolMetadata {
             name: $name,
             description: $description,
             category: ToolCategory::$category,
             risk: ToolRisk::$risk,
             requires: &[],
-            parallel_safe: false,
+            group: None, default_enabled: true,
+            platform: meta!(@platform $platform, $category), runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::$concurrency, lifetime: crate::tools::ToolLifetime::Call,
+            schema: extended_schema,
         }
     };
+    (@platform category, $category:ident) => { ToolCategory::$category.platform() };
+    (@platform $platform:ident, $category:ident) => { crate::tools::ToolPlatform::$platform };
 }
 
 static METADATA: &[ToolMetadata] = &[
@@ -69,10 +77,10 @@ static METADATA: &[ToolMetadata] = &[
     meta!("android_content_query", "Run a bounded read-only query against a content URI; writes are unavailable.", Android, ReadOnly),
     meta!("http_request", "Perform a bounded GET or HEAD request to a public HTTP(S) URL without redirects or private targets.", Network, ReadOnly),
     meta!("download_url", "Download a bounded public HTTP(S) resource and atomically write it after confirmation.", Network, Mutating),
-    meta!("inspect_android_ui", "Read the current Android UI hierarchy, focused window, display size, and density.", Android, ReadOnly),
-    meta!("capture_android_screen", "Capture the current Android display as a PNG after local confirmation.", Android, Mutating),
-    meta!("view_screenshot", "Attach an existing PNG, JPEG, or WebP image to the next model request with bounded in-process scaling.", Android, ReadOnly),
-    meta!("inject_android_input", "Inject validated Android tap, swipe, long-press, or text after confirmation and bounds revalidation.", Android, Mutating),
+    meta!("inspect_android_ui", "Read the current Android UI hierarchy, focused window, display size, and density.", Android, ReadOnly, platform = AndroidShell, concurrency = AndroidUi),
+    meta!("capture_android_screen", "Capture the current Android display as a PNG after local confirmation.", Android, Mutating, platform = AndroidShell, concurrency = AndroidUi),
+    meta!("view_screenshot", "Attach an existing PNG, JPEG, or WebP image to the next model request with bounded in-process scaling.", Android, ReadOnly, platform = Any, concurrency = Parallel),
+    meta!("inject_android_input", "Inject validated Android tap, swipe, long-press, or text after confirmation and bounds revalidation.", Android, Mutating, platform = AndroidShell, concurrency = AndroidUi),
     meta!("http_post", "Send a bounded JSON POST to a public HTTP(S) URL after confirmation.", Network, Mutating),
     meta!("android_notification", "Return a bounded structured Android notification snapshot.", Android, ReadOnly),
     meta!("android_crash_report", "Return bounded Android crash and ANR evidence.", Android, ReadOnly),
@@ -82,8 +90,8 @@ static METADATA: &[ToolMetadata] = &[
     meta!("android_wifi_eth", "Aggregate Wi-Fi, Ethernet, interface, IP, signal, and route evidence.", Android, ReadOnly),
     meta!("android_doze", "Return DeviceIdle state and whitelist evidence.", Android, ReadOnly),
     meta!("android_permission_audit", "Audit Android permissions and AppOps for a package or bounded app set.", Android, ReadOnly),
-    meta!("android_clipboard", "Read clipboard text or, after confirmation, set bounded text.", Android, ReadOnly),
-    meta!("android_media_control", "Read media status or, after confirmation, change playback or volume.", Android, ReadOnly),
+    meta!("android_clipboard", "Read clipboard text or, after confirmation, set bounded text.", Android, ReadOnly, platform = Android, concurrency = AndroidUi),
+    meta!("android_media_control", "Read media status or, after confirmation, change playback or volume.", Android, ReadOnly, platform = Android, concurrency = AndroidUi),
     meta!("android_media_query", "Query bounded MediaStore image, video, or audio metadata.", Android, ReadOnly),
     meta!("agent_memory", "Read or update persistent user and Agent memory across sessions. Before answering about the user's name, identity, preferences, standing instructions, or previously saved facts, use get when the key is known or list when relevant keys are unknown. Memory is not Android account or device-profile evidence. Writes require confirmation.", Memory, ReadOnly),
     meta!("android_connectivity", "Aggregate bounded Android connectivity evidence for a validated public host.", Android, ReadOnly),
@@ -103,45 +111,6 @@ struct ExtendedTool(&'static ToolMetadata);
 impl Tool for ExtendedTool {
     fn metadata(&self) -> &'static ToolMetadata {
         self.0
-    }
-
-    fn definition(&self) -> crate::llm::ToolDefinition {
-        let name = self.0.name;
-        let description = self.0.description;
-        match name {
-            "analyze_audio" => definition::<AnalyzeAudioArgs>(name, description),
-            "judge_audio_quality" => definition::<JudgeAudioQualityArgs>(name, description),
-            "inspect_android_app" => definition::<InspectAndroidAppArgs>(name, description),
-            "list_android_apps" => definition::<ListAndroidAppsArgs>(name, description),
-            "top_android_apps" => definition::<TopAndroidAppsArgs>(name, description),
-            "android_dumpsys" => definition::<AndroidDumpsysArgs>(name, description),
-            "android_logcat" => definition::<AndroidLogcatArgs>(name, description),
-            "android_settings" => definition::<AndroidSettingsArgs>(name, description),
-            "android_content_query" => definition::<AndroidContentQueryArgs>(name, description),
-            "http_request" => definition::<HttpRequestArgs>(name, description),
-            "download_url" => definition::<DownloadUrlArgs>(name, description),
-            "inspect_android_ui" => definition::<InspectAndroidUiArgs>(name, description),
-            "capture_android_screen" => definition::<CaptureAndroidScreenArgs>(name, description),
-            "view_screenshot" => definition::<ViewScreenshotArgs>(name, description),
-            "inject_android_input" => definition::<AndroidInputArgs>(name, description),
-            "http_post" => definition::<HttpPostArgs>(name, description),
-            "android_notification"
-            | "android_crash_report"
-            | "android_netstats"
-            | "android_storage"
-            | "android_permission_audit" => definition::<PackageLimitArgs>(name, description),
-            "inspect_android_environment"
-            | "android_thermal_power"
-            | "android_wifi_eth"
-            | "android_doze" => definition::<EmptyArgs>(name, description),
-            "android_clipboard" => definition::<ClipboardArgs>(name, description),
-            "android_media_control" => definition::<MediaControlArgs>(name, description),
-            "android_media_query" => definition::<MediaQueryArgs>(name, description),
-            "agent_memory" => definition::<AgentMemoryArgs>(name, description),
-            "android_connectivity" => definition::<ConnectivityArgs>(name, description),
-            "inspect_tls" => definition::<TlsInspectArgs>(name, description),
-            _ => definition::<EmptyArgs>(name, description),
-        }
     }
 
     async fn prepare(&self, ctx: &ToolContext<'_>, arguments: Value) -> Result<PreparedToolCall> {
@@ -510,4 +479,44 @@ async fn checked_command(ctx: &ToolContext<'_>, command: &str) -> Result<()> {
         )
     }
     Ok(())
+}
+
+fn extended_schema(metadata: &ToolMetadata) -> serde_json::Value {
+    let name = metadata.name;
+    let description = metadata.description;
+    (match name {
+        "analyze_audio" => definition::<AnalyzeAudioArgs>(name, description),
+        "judge_audio_quality" => definition::<JudgeAudioQualityArgs>(name, description),
+        "inspect_android_app" => definition::<InspectAndroidAppArgs>(name, description),
+        "list_android_apps" => definition::<ListAndroidAppsArgs>(name, description),
+        "top_android_apps" => definition::<TopAndroidAppsArgs>(name, description),
+        "android_dumpsys" => definition::<AndroidDumpsysArgs>(name, description),
+        "android_logcat" => definition::<AndroidLogcatArgs>(name, description),
+        "android_settings" => definition::<AndroidSettingsArgs>(name, description),
+        "android_content_query" => definition::<AndroidContentQueryArgs>(name, description),
+        "http_request" => definition::<HttpRequestArgs>(name, description),
+        "download_url" => definition::<DownloadUrlArgs>(name, description),
+        "inspect_android_ui" => definition::<InspectAndroidUiArgs>(name, description),
+        "capture_android_screen" => definition::<CaptureAndroidScreenArgs>(name, description),
+        "view_screenshot" => definition::<ViewScreenshotArgs>(name, description),
+        "inject_android_input" => definition::<AndroidInputArgs>(name, description),
+        "http_post" => definition::<HttpPostArgs>(name, description),
+        "android_notification"
+        | "android_crash_report"
+        | "android_netstats"
+        | "android_storage"
+        | "android_permission_audit" => definition::<PackageLimitArgs>(name, description),
+        "inspect_android_environment"
+        | "android_thermal_power"
+        | "android_wifi_eth"
+        | "android_doze" => definition::<EmptyArgs>(name, description),
+        "android_clipboard" => definition::<ClipboardArgs>(name, description),
+        "android_media_control" => definition::<MediaControlArgs>(name, description),
+        "android_media_query" => definition::<MediaQueryArgs>(name, description),
+        "agent_memory" => definition::<AgentMemoryArgs>(name, description),
+        "android_connectivity" => definition::<ConnectivityArgs>(name, description),
+        "inspect_tls" => definition::<TlsInspectArgs>(name, description),
+        _ => definition::<EmptyArgs>(name, description),
+    })
+    .parameters
 }

@@ -24,7 +24,10 @@ const META: ToolMetadata = ToolMetadata {
     category: ToolCategory::Configuration,
     risk: ToolRisk::ReadOnly,
     requires: &[],
-    parallel_safe: false,
+    group: None, default_enabled: true,
+            platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<ConfigArgs>,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -109,7 +112,13 @@ fn config_json(config: &Config) -> Result<Value> {
 fn check_key(key: &str, defaults: &Value) -> Result<()> {
     if let Some((group, leaf)) = key.split_once('.') {
         match group {
-            "tool_groups" if matches!(leaf, "jadx" | "tailcat") => return Ok(()),
+            "tool_groups"
+                if super::optional_groups()
+                    .iter()
+                    .any(|known| known.id() == leaf) =>
+            {
+                return Ok(())
+            }
             "tool_overrides" if super::optional_tool_names().contains(&leaf) => return Ok(()),
             _ => bail!("unknown configuration key; use nl2sh_config list"),
         }

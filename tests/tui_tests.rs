@@ -383,7 +383,13 @@ async fn pending_model_cancellation(cancel_then_retry: bool) -> anyhow::Result<(
             }
             let log =
                 std::fs::read_to_string(directory.path().join("nl2sh.log")).unwrap_or_default();
-            if log.contains("task cancelled by user") {
+            // The task watch channel and the LLM SIGINT handler can finish first.
+            // Both paths must leave the TUI alive and admit the next request.
+            if log.contains("task cancelled by user")
+                || log.contains("LLM request cancelled by user")
+                || log.contains("LLM response cancelled by user")
+                || log.contains("LLM retry cancelled by user")
+            {
                 break;
             }
             anyhow::ensure!(
