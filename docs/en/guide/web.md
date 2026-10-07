@@ -24,7 +24,7 @@ Every new Web task loads saved configuration; restart the TUI to load browser ch
 
 The read-only file panel lists types, sizes, and timestamps. Bounded image/video/audio/text/code previews are available; arrows insert `@paths`. Text supports highlighting and wrapping, and video supports HTTP Range. WAV headers fill playback parameters; raw PCM requires actual sample rate, channels, and format. Parameter decoding is limited to 32 MiB. Other audio playback depends on browser codecs.
 
-Tool calls have separate collapsible cards; F2 expands/collapses all results in the current session. Charts derive from tool results; compare data and sources with original evidence. The safety terminal uses the same classification and approval chain and separates stdout/stderr/exit status.
+Fenced code blocks in model replies have an icon button in the upper-right corner that copies the complete code; the icon briefly changes to a check mark on success. Tool calls have separate collapsible cards; F2 expands/collapses all results in the current session. Charts derive from tool results; compare data and sources with original evidence. The safety terminal uses the same classification and approval chain and separates stdout/stderr/exit status.
 
 ## Stop, restore, and export
 

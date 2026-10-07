@@ -7,7 +7,9 @@ test('renders common model answer Markdown', () => {
   assert.match(html, /<h1>标题<\/h1>/);
   assert.match(html, /<ol>[\s\S]*<strong>第一项<\/strong>[\s\S]*<\/ol>/);
   assert.match(html, /<table>[\s\S]*<td><code>ok<\/code><\/td>[\s\S]*<\/table>/);
-  assert.match(html, /<pre><code class="language-sh"><span class="hljs-built_in">echo<\/span> hello\n<\/code><\/pre>/);
+  assert.match(html, /<div class="code-block"><button class="code-copy"[^>]*aria-label="复制代码"[^>]*>[\s\S]*<pre><code class="language-sh"><span class="hljs-built_in">echo<\/span> hello\n<\/code><\/pre>\s*<\/div>/);
+  assert.equal((html.match(/class="code-copy"/g)||[]).length,1);
+  assert.doesNotMatch(html, />复制代码<\/button>/);
 });
 
 test('highlights known fences and escapes unknown or malicious code', () => {

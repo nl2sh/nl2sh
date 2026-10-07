@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add a text-free copy icon to fenced code blocks in Web model replies. It copies the complete code, briefly changes to a check mark on success, retains an accessible state name, and uses a browser-compatible fallback when the Clipboard API is unavailable.
+
 - Make `tailcat_send_file` default to the raw stream when `mode` is omitted, avoiding an scp dependency. Keep `copy` as an explicit drop-box compatibility mode and document that stock Android shells normally lack its external scp executable.
 
 - Add strongly confirmed `tailcat_adb_pair`: guide Android 11+ Wireless debugging, revalidate current pairing information, share pairing/connection and optional Web ports, and return the pairing code and peer commands; reject stale approvals and replacement of existing listeners.

@@ -3,6 +3,7 @@ import {formatDuration,liveTaskMetrics} from './taskMetrics';
 import {ActivityBar,AppPanel,ConfigPanel,FilePanel,PanelHeading,TerminalPanel,panelWidths} from './workspacePanels';
 import type {Panel} from './workspacePanels';
 import {ACTIVITY_WIDTH,MIN_CHAT_WIDTH,MIN_PANEL_WIDTH,RESIZER_WIDTH,clampPanelWidth} from './panelLayout';
+import {codeCopyButton,copyCode} from './codeCopy';
 const providers=[['OpenRouter','https://openrouter.ai/api/v1'],['OpenAI','https://api.openai.com/v1'],['DeepSeek','https://api.deepseek.com'],['Moonshot / Kimi','https://api.moonshot.cn/v1'],['SiliconFlow','https://api.siliconflow.cn/v1'],['Ollama','http://127.0.0.1:11434/v1']];
 function Conversation({entries,onConfigure}:{entries:Entry[];onConfigure:()=>void}){
   const container=useRef<HTMLDivElement>(null);
@@ -14,6 +15,26 @@ function Conversation({entries,onConfigure}:{entries:Entry[];onConfigure:()=>voi
     };
     document.addEventListener('keydown',onKeyDown);
     return()=>document.removeEventListener('keydown',onKeyDown);
+  },[]);
+  useEffect(()=>{
+    const onClick=async(event:MouseEvent)=>{
+      const button=codeCopyButton(event.target);
+      const code=button?.closest('.code-block')?.querySelector('code');
+      if(!button||!code)return;
+      try{
+        await copyCode(code.textContent||'');
+        button.classList.add('copied');
+        button.setAttribute('aria-label','代码已复制');
+        button.title='代码已复制';
+        window.setTimeout(()=>{button.classList.remove('copied');button.setAttribute('aria-label','复制代码');button.title='复制代码'},1600);
+      }catch{
+        button.setAttribute('aria-label','复制失败');
+        button.title='复制失败';
+      }
+    };
+    const current=container.current;
+    current?.addEventListener('click',onClick);
+    return()=>current?.removeEventListener('click',onClick);
   },[]);
   const rows=conversationRows(entries);
   return <div ref={container}>{rows.map((row,index)=>{if(row.kind==='tool'){

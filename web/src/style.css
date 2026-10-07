@@ -211,6 +211,15 @@ button:disabled { opacity: .45; }
 .message blockquote { margin: .7rem 0; padding: .1rem .9rem; border-left: 3px solid var(--border); color: var(--text-secondary); }
 .message pre { white-space: pre; max-width: 100%; }
 .message pre code { background: transparent; padding: 0; border-radius: 0; }
+.message .code-block { position: relative; max-width: 100%; }
+.message .code-copy { position: absolute; top: .45rem; right: .45rem; z-index: 1; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; color: var(--text-secondary); background: var(--background); border-color: var(--border); }
+.message .code-copy:hover { color: var(--text-primary); }
+.message .code-copy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.message .code-copy .copy-done-icon { display: none; }
+.message .code-copy.copied { color: var(--success); border-color: var(--success); }
+.message .code-copy.copied .copy-icon { display: none; }
+.message .code-copy.copied .copy-done-icon { display: block; }
+.message .code-block pre { padding-right: 3rem; }
 .message pre .hljs-keyword, .message pre .hljs-selector-tag, .message pre .hljs-literal { color: var(--special); }
 .message pre .hljs-string, .message pre .hljs-addition { color: var(--success); }
 .message pre .hljs-number, .message pre .hljs-attr, .message pre .hljs-attribute { color: var(--warning); }
