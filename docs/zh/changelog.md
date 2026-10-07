@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 识别 Helper 安装归属与摘要，阻止 CLI/TUI 自更新绕过部署器；运行信息报告正确的更新入口。
+
 - 原生 `service start/stop/restart/status --json` 统一后台服务生命周期、实际端口、健康检查、私有关闭令牌及进程身份核验；启动器 Web 模式改用该接口。
 
 - 增加只读运行时能力发现和 `/healthz`、`/api/info`；Agent 与直接调用按环境和已就绪扩展过滤工具。Bridge 协商 v2 JSON RPC，校验回复请求 ID，写入失败不回退重放；保留旧伴侣兼容。

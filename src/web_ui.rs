@@ -771,6 +771,7 @@ async fn get_info(State(state): State<Arc<Shared>>) -> ApiResult<Json<serde_json
     let capabilities = crate::runtime::RuntimeCapabilities::discover(&cfg, &executor).await;
     Ok(Json(serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"), "protocol": 1,
+        "update_ownership": crate::update::ownership().await,
         "pid": std::process::id(), "uptime": state.started.elapsed().as_secs(),
         "port": state.port,
         "abi": match std::env::consts::ARCH {

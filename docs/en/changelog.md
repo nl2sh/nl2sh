@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Verify Helper installation ownership and checksum before native self-update; runtime information reports the correct update entry point.
+
 - Add native `service start/stop/restart/status --json` with actual ports, health checks, private shutdown tokens, and verified process identity; launcher Web mode uses this interface.
 
 - Added read-only runtime capability discovery and `/healthz` / `/api/info`; Agent and direct calls filter tools by environment and ready adapters. Bridge negotiates v2 JSON RPC, validates reply request IDs and never replays failed writes; legacy companions remain supported.

@@ -59,3 +59,5 @@ invocation filter by current capability. Development hosts do not advertise Andr
 decompilation; ordinary Termux UIDs do not advertise UI tools requiring shell/root. Static APK
 reads and Tailcat checks remain available. The next task or info request rediscovers state after
 service/installation changes; a running task's registry does not change midway through execution.
+
+`/api/info` also returns `update_ownership`: standalone installations can self-update, Termux APT uses `pkg upgrade nl2sh`, and Helper installations update through Helper. The native program reads its adjacent Helper ownership marker with a size limit and verifies the installed binary checksum. Corrupt or mismatched markers block self-update with recovery guidance, preventing competing update sources.

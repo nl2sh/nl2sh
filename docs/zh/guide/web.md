@@ -54,3 +54,5 @@ adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service st
 显示。Agent、`bridge tools` 与直接工具调用按当前能力过滤。开发主机不暴露 Android 控制和 ART
 反编译；普通 Termux UID 不暴露需要 shell/root 的 UI 工具。APK 静态读取和 Tailcat 检查仍保留。
 服务/安装状态变化后，下一任务或信息请求重新发现；当前任务的注册表不在执行中自动改变。
+
+`/api/info` 还返回 `update_ownership`：独立安装可自行更新，Termux APT 使用 `pkg upgrade nl2sh`，Helper 安装使用助手的检查更新动作。主程序对相邻 Helper 归属记录进行有界读取及程序摘要复核；损坏或不匹配时阻止自更新并给出检查提示，避免同时使用两个更新来源。
