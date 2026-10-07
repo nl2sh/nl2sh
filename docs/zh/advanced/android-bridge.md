@@ -41,3 +41,7 @@ adb shell am broadcast -a com.nl2sh.bridge.IME_TEXT --es mode replace --es msg '
 ```
 
 接收器由输入法运行时注册，发送方需 DUMP，仅 shell/root 可调用。这是显式本地调试，权限等同 adb shell，**不经过 nl2sh 确认链**。Base64 支持标准和 URL-safe 字母表。关闭键盘只影响 IME，关闭无障碍只影响 Accessibility；批准后服务消失则动作失败。
+
+## 通过助手管理
+
+连接目标后，nl2sh助手的增强控制卡片可检查 Bridge、安装/升级并打开应用或无障碍/键盘设置。它验证签名兼容性 Manifest、资产签名、摘要、大小与 APK 证书，签名冲突时保留已有应用；不会自动启用无障碍或选择键盘。诊断区还显示 JADX、Tailcat 与更新归属，无法认证的建议版本显示未知。详见[助手指南](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/zh/guide.md)。
