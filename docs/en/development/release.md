@@ -25,3 +25,19 @@ Generated HTML remains a build artifact; do not commit site/ to master. See [off
 Signing reuses `TERMUX_APT_GPG_PRIVATE_KEY` in the github-pages environment, pinned to fingerprint `5230D3A7CCBEED4616D39C51FC6AD1BC63F7D4D8`. Bridge uses its existing APK keystore secrets. If companion repositories are private, `NL2SH_COMPONENTS_TOKEN` must permit reading their releases; otherwise the job uses the repository token. Missing assets, keys, protocol mismatches or invalid APK signatures fail publication. Local production signing may be deferred; unsigned local native builds require explicit offline/custom JADX configuration.
 
 Native and Helper downloads verify the signed manifest before following its asset URLs and verify size, SHA-256 and asset signature before installation. Modern unsigned releases cannot be used for new installation or upgrade. Connecting to a healthy already installed runtime still works without checking releases.
+
+## Runtime refactor acceptance (2026-10-07)
+
+All planned protocol, service, Helper, manifest/signature, descriptor, UI lease/audit, static analysis and Web separation changes are implemented. Local verification:
+
+| Gate | Result |
+| --- | --- |
+| Rust | Complete workspace tests, all targets, formatter and package-manager feature check passed; existing ignored tests remain ignored |
+| Android native | NDK r28c/API 26 release builds for ARM64, ARMv7 and x86_64 passed |
+| Android projects | All three Gradle test/lint/debug/release gates passed; production APK signing deferred locally |
+| Frontend/docs | 33 frontend tests and production build; 49 bilingual pages per language, strict build and generated references passed |
+| Release tooling | 15 packaging/launcher/Pages tests, workflow parsing, and actual three-ELF/APK/JAR manifest generation passed |
+| API 26 and 35 emulators | UID 2000 protocol correlation/malformed requests/app UID denial; all eight static tools; cross-process UI exclusion/read independence/recovery; service idempotence/restart/stop/strict collision/fallback port and embedded HTTP passed |
+| Helper on both emulators | Healthy reconnect preserves PID; failed update restores binary and owner; matching explicit update records ownership without restart; companion certificate refusal/in-place install/settings preservation; GPG fixture/tamper/policy drift passed (three device tests each) |
+
+The emulator checks use local unsigned native builds, debug APKs and public test-signature fixtures. ARM builds were validated as ELF artifacts, not executed on ARM hardware in this acceptance run. Production GPG/APK signatures and published release bytes must be verified after GitHub Actions runs; no tags or remote releases were created by this implementation.

@@ -4,6 +4,8 @@ Last Updated: 2026-10-07
 
 ## Recent Changes
 
+- Runtime 重构全部建议已实现并逐阶段提交，完成本地整体验收：三 ABI release、完整 Rust/包管理器特性、三个 Gradle 项目、33 项前端、15 项发布脚本和双语严格文档通过；API 26/35 覆盖协议、service/端口、静态工具、UI 排他/恢复、Helper 健康重连/失败回滚/同摘要更新归属/Bridge 管理/签名夹具，各三项 Helper 设备测试通过。源码本地未附生产签名；实际签名和公开发行仍由既有 GitHub Actions 环境执行，未推送或创建标签/Release。详细验收边界见双语发布文档。
+
 - Web 后端完成职责拆分：server/auth/state/agent/interaction/事件流及七组 routes，保留公开 web_ui API 和全部 HTTP/会话/安全回归。设备概览补齐安装归属、升级入口、实际/签名推荐扩展版本及服务运行状态，未签名策略显示未知。全量 Rust、33 项前端测试与生产构建通过；三 ABI 和双模拟器整体验收继续执行。
 
 - 八项静态 APK 工具完成：DEX methods/strings/class references/method references、二进制 Manifest、permissions、exported components 和 native libraries 均使用有界 Rust 解析，不下载或启动 JADX、不安装 APK、不加载代码。旧 DEX 类索引复用同一解析器；ZIP 清单分配前检查目录/数量，解压、元数据与引用扫描均有上限。重载原型、修改版 UTF-8、switch/array payload、SDK 导出默认值及未知暴露使用真实 D8/aapt2 夹具验证，畸形数据和截断安全拒绝。API 26 真实原生入口覆盖八项工具及审计，完整 Rust 测试、工作区检查和 31 项前端测试/生产构建通过；工具页区分 enabled/available，分组随目录生成。双语说明、Schema、Descriptor 与中文说明同步，严格文档检查通过。Web 职责拆分和三 ABI/双模拟器整体验收继续实施。

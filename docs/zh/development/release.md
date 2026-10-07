@@ -25,3 +25,19 @@ HTML 只存在构建产物，site/ 不提交到 master。参考 [GitHub Pages �
 签名复用 github-pages 环境中的 `TERMUX_APT_GPG_PRIVATE_KEY`，固定公钥指纹为 `5230D3A7CCBEED4616D39C51FC6AD1BC63F7D4D8`。Bridge 使用其已有 APK keystore secrets。伴侣仓库私有时，`NL2SH_COMPONENTS_TOKEN` 需允许读取对应 Release；否则使用仓库 token。缺失资产、密钥、协议不匹配或 APK 签名无效都会使发布失败。本地可暂缓生产签名；未签名原生源码构建需显式配置离线或自定义 JADX。
 
 原生程序和助手先验证签名 Manifest，再使用其中资产 URL，安装前验证大小、SHA-256 和资产签名。新安装或升级不接受现代未签名发布；连接已安装的健康运行时仍无需检查发布。
+
+## Runtime 重构验收（2026-10-07）
+
+协议、service、Helper、兼容清单/签名、Descriptor、UI Lease/审计、静态分析和 Web 拆分全部实现。本地验证记录：
+
+| 门禁 | 结果 |
+| --- | --- |
+| Rust | 完整工作区测试、全部目标、格式及包管理器特性检查通过；既有忽略测试仍保留忽略 |
+| Android 原生 | NDK r28c/API 26 的 ARM64、ARMv7、x86_64 release 构建通过 |
+| Android 项目 | 三个项目 Gradle test/lint/debug/release 门禁通过；本地暂缓生产 APK 签名 |
+| 前端/文档 | 33 项前端测试、生产构建；每种语言 49 页、严格构建及派生参考检查通过 |
+| 发布工具 | 15 项打包/启动器/Pages 测试、工作流解析、实际三个 ELF/APK/JAR 清单生成通过 |
+| API 26/35 模拟器 | UID 2000 协议关联/畸形请求/App UID 拒绝、八项静态工具、跨进程 UI 排他/独立读取/释放恢复、service 幂等/重启/停止/严格端口冲突/实际回退端口及嵌入 HTTP 通过 |
+| 两个模拟器的 Helper | 健康重连保留 PID、失败更新恢复二进制和归属、同摘要显式更新登记归属且不重启、扩展证书拒绝/原位安装/设置保留、GPG 夹具/篡改/清单漂移通过（各三项设备测试） |
+
+模拟器使用本地未签名原生构建、debug APK 和公开测试签名夹具。此轮验收对 ARM 做 ELF 构建验证，未在 ARM 硬件执行。生产 GPG/APK 签名和公开资产须在 GitHub Actions 实际运行后核验；本次实现未创建标签或远端 Release。
