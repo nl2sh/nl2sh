@@ -1650,6 +1650,145 @@ Execute a shell command in the Android shell environment after security evaluati
 }
 ```
 
+## `find_class_references`
+
+Find bounded class references in DEX declarations and direct instructions; does not resolve reflection or dynamic/native calls.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "class_name": {
+      "description": "Exact dotted class name to find in declarations and direct bytecode references.",
+      "type": "string"
+    },
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned references, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path",
+    "class_name"
+  ],
+  "type": "object"
+}
+```
+
+## `find_method_references`
+
+Find direct DEX invoke instructions for an exact owner/method, optionally narrowed by prototype; no decompilation.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "class_name": {
+      "description": "Exact dotted owner class.",
+      "type": "string"
+    },
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned direct invoke references, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "method_name": {
+      "description": "Exact method name, including <init> or <clinit> when applicable.",
+      "type": "string"
+    },
+    "path": {
+      "description": "Existing local APK path.",
+      "type": "string"
+    },
+    "prototype": {
+      "default": "",
+      "description": "Optional exact DEX prototype, such as (Ljava/lang/String;)V; empty matches overloads.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path",
+    "class_name",
+    "method_name"
+  ],
+  "type": "object"
+}
+```
+
+## `find_native_libs`
+
+Find bounded lib/<abi>/*.so entries and inspect ELF prefixes without extracting or loading code.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path. Archive contents are never executed.",
+      "type": "string"
+    },
+    "query": {
+      "default": "",
+      "description": "Literal substring of a method signature, DEX string or native-library path.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
 ## `http_post`
 
 Send a bounded JSON POST to a public HTTP(S) URL after confirmation.
@@ -2022,6 +2161,44 @@ Inspect a local APK archive: size, file counts, DEX files, manifest presence, an
 }
 ```
 
+## `inspect_manifest`
+
+Inspect bounded Android binary manifest package/version/SDK/application metadata; resource values remain explicit IDs.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
 ## `inspect_tls`
 
 Inspect and validate the TLS certificate chain of a public host.
@@ -2230,6 +2407,49 @@ List class names from bounded DEX tables inside a local APK; optional literal cl
 }
 ```
 
+## `list_dex_methods`
+
+Index bounded DEX method IDs and prototypes, including external references; filter by a literal signature substring. No JADX or execution.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path. Archive contents are never executed.",
+      "type": "string"
+    },
+    "query": {
+      "default": "",
+      "description": "Literal substring of a method signature, DEX string or native-library path.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
 ## `list_dir`
 
 List a bounded number of direct children without using shell commands. Absolute paths are supported.
@@ -2251,6 +2471,82 @@ List a bounded number of direct children without using shell commands. Absolute 
   "properties": {
     "path": {
       "description": "Absolute or process-base-relative directory path, or `.`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
+## `list_exported_components`
+
+List explicitly/default exported components and unresolved exposure needing review; include target-SDK defaults and intent filters.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
+## `list_permissions`
+
+List requested and declared manifest permissions; does not infer installed grants or AppOps.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
       "type": "string"
     }
   },
@@ -2336,6 +2632,49 @@ Read a size-limited UTF-8 text file. Absolute paths, parent components, and syml
   "properties": {
     "path": {
       "description": "Absolute or process-base-relative file path.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
+## `search_dex_strings`
+
+Search bounded DEX strings by a nonempty literal substring, decoding modified UTF-8 without execution.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path. Archive contents are never executed.",
+      "type": "string"
+    },
+    "query": {
+      "default": "",
+      "description": "Literal substring of a method signature, DEX string or native-library path.",
       "type": "string"
     }
   },

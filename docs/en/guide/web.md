@@ -61,3 +61,5 @@ reads and Tailcat checks remain available. The next task or info request redisco
 service/installation changes; a running task's registry does not change midway through execution.
 
 `/api/info` also returns `update_ownership`: standalone installations can self-update, Termux APT uses `pkg upgrade nl2sh`, and Helper installations update through Helper. The native program reads its adjacent Helper ownership marker with a size limit and verifies the installed binary checksum. Corrupt or mismatched markers block self-update with recovery guidance, preventing competing update sources.
+
+The tools panel derives optional groups from the runtime catalog and separates the saved enable switch from discovered availability. Unavailable tools remain visible for configuration, and their example-prompt button is disabled; enabling does not acquire a capability or approve execution.

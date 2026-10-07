@@ -2,8 +2,9 @@ import {useEffect,useState} from 'preact/hooks';
 import {api} from './api';
 import {toolCategory,toolName,toolPrompt,toolPurpose,toolRisk} from './toolGuide';
 import type {ToolInfo} from './types';
+import {optionalGroups,canUseToolPrompt,availabilityLabel} from './toolAvailability';
 
-const groupNames={jadx:'APK / JADX',tailcat:'Tailcat'} as const;
+const groupNames:Record<string,string>={jadx:'APK / JADX',tailcat:'Tailcat'};
 
 type Toggle = {group?:string;tool?:string;enabled:boolean};
 
@@ -36,8 +37,8 @@ export function ToolCatalog({usePrompt}:{usePrompt:(value:string)=>void}){
     </div>
     <section class="tool-groups">
       <h3>可选工具组</h3>
-      {(Object.entries(groupNames) as [keyof typeof groupNames,string][]).map(([id,label])=>{
-        const members=tools.filter(tool=>tool.group===id);
+      {optionalGroups(tools).map(({id,members})=>{
+        const label=groupNames[id]||id;
         const enabled=members.filter(tool=>tool.enabled).length;
         return <div class="tool-group" key={id}>
           <span><strong>{label}</strong><small>{enabled}/{members.length} 个工具已开启</small></span>
@@ -56,8 +57,9 @@ export function ToolCatalog({usePrompt}:{usePrompt:(value:string)=>void}){
         <strong>{toolName(tool)}</strong>
         <small>{tool.group?`${groupNames[tool.group]||tool.group} · `:''}{toolCategory(tool)} · {toolRisk(tool)} · {tool.name}</small>
         <p>{toolPurpose(tool)}</p>
-        {tool.group&&<label class="tool-enable"><input type="checkbox" checked={tool.enabled} disabled={busy} onChange={e=>toggle({tool:tool.name,enabled:e.currentTarget.checked})}/>模型可用</label>}
-        <button disabled={!tool.enabled} onClick={()=>usePrompt(toolPrompt(tool))}>填入示例提问</button>
+        <small>{availabilityLabel(tool)}</small>
+        {tool.group&&<label class="tool-enable"><input type="checkbox" checked={tool.enabled} disabled={busy} onChange={e=>toggle({tool:tool.name,enabled:e.currentTarget.checked})}/>启用此工具</label>}
+        <button disabled={!canUseToolPrompt(tool)} onClick={()=>usePrompt(toolPrompt(tool))}>填入示例提问</button>
       </article>)}
       {tools.length>0&&filtered.length===0&&<p>没有匹配的工具</p>}
     </div>

@@ -4,6 +4,8 @@ Last Updated: 2026-10-07
 
 ## Recent Changes
 
+- 八项静态 APK 工具完成：DEX methods/strings/class references/method references、二进制 Manifest、permissions、exported components 和 native libraries 均使用有界 Rust 解析，不下载或启动 JADX、不安装 APK、不加载代码。旧 DEX 类索引复用同一解析器；ZIP 清单分配前检查目录/数量，解压、元数据与引用扫描均有上限。重载原型、修改版 UTF-8、switch/array payload、SDK 导出默认值及未知暴露使用真实 D8/aapt2 夹具验证，畸形数据和截断安全拒绝。API 26 真实原生入口覆盖八项工具及审计，完整 Rust 测试、工作区检查和 31 项前端测试/生产构建通过；工具页区分 enabled/available，分组随目录生成。双语说明、Schema、Descriptor 与中文说明同步，严格文档检查通过。Web 职责拆分和三 ABI/双模拟器整体验收继续实施。
+
 - 工具资源调度与结构化审计完成：任务在 UI 准备前获取跨进程内核锁，连续持有至结束/取消；Android shell/root 的 Shell 命令共用租约，直接入口按调用持有，不删除锁 inode。等待有界，外部触摸/ADB/用户直控 shell 仍须状态复核。连续只读调用每批最多四项，修改/UI/Shell 为串行边界，预备风险复验且结果保持顺序。Agent、直接工具、CLI/TUI/Web 命令及 Bridge 审计关联任务/请求/会话、入口、风险、预览摘要、审批、进程 UID/root 请求、结果/耗时，不保存参数/输出/错误原文；有界 JSONL 跨进程追加串行化。完整 Rust 套件、同批双操作 Barrier、读写边界/顺序/审计、锁等待取消/进程退出恢复和脱敏回归通过；x86_64 Android API 26 release 构建及真实设备验证 UI 排他、独立读取、释放恢复和四条审计记录通过；双语严格站点检查通过。八项 APK/DEX 静态分析、Web 模块拆分与整体验收继续实施。
 
 - 工具描述统一进入实现：ToolDescriptor 同时持有 Schema 生成函数、组/默认开关、连接器/平台/扩展要求、风险下限、调度策略声明与进程生命周期；原 ToolMetadata 保留同类型别名。配置键验证、Web/TUI 开关、一次性监听器过滤、运行时可用性与双语派生参考从注册表生成，移除重复工具名清单。既有 #[tool] 复用生成描述，注册仍显式决定；ima 的真实配置能力另行参与可用性，不把配置旗标当成功连接。描述表唯一性、Schema/分派一致性、默认开关及 Android UI 平台/策略回归通过；工作区检查、库与集成测试及双语严格站点检查通过。完整 Rust 套件通过；TUI 取消回归同时覆盖任务 watch 与 LLM SIGINT 两个有效完成路径，仍验证继续接收下一任务。资源锁、UI Lease、并行调度与审计继续接入。

@@ -56,3 +56,5 @@ adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service st
 服务/安装状态变化后，下一任务或信息请求重新发现；当前任务的注册表不在执行中自动改变。
 
 `/api/info` 还返回 `update_ownership`：独立安装可自行更新，Termux APT 使用 `pkg upgrade nl2sh`，Helper 安装使用助手的检查更新动作。主程序对相邻 Helper 归属记录进行有界读取及程序摘要复核；损坏或不匹配时阻止自更新并给出检查提示，避免同时使用两个更新来源。
+
+工具面板从运行时目录派生可选组，将保存的启用开关与已发现的可用性分开展示。当前环境不可用的工具仍可配置，但禁用示例提问按钮；开启不获取能力，也不批准执行。

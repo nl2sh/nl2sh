@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="example.fixture" android:versionCode="7" android:versionName="0.7">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+  <permission android:name="example.fixture.PRIVATE" android:protectionLevel="signature" />
+  <uses-feature android:name="android.hardware.camera" android:required="false" />
+  <application android:label="Static fixture" android:enabled="true">
+    <activity android:name=".Main" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+    </activity>
+    <service android:name=".PrivateService" android:exported="false" />
+    <provider android:name=".Provider" android:authorities="example.fixture.provider" />
+    <receiver android:name=".NeedsReview"><intent-filter><action android:name="example.fixture.EVENT" /></intent-filter></receiver>
+  </application>
+</manifest>

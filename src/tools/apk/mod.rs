@@ -1,5 +1,10 @@
 //! Bounded, read-only APK inspection and optional JADX class decompilation.
 
+mod analysis;
+mod dex;
+mod manifest;
+pub(crate) use analysis::*;
+
 use super::{
     PreparedExecution, PreparedToolCall, ToolCategory, ToolContext, ToolMetadata, ToolOutput,
     ToolRisk,
@@ -9,13 +14,15 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
-use std::{fs::File, io::Read};
+use std::{
+    fs::File,
+    io::{Read, Seek, SeekFrom},
+};
 use zip::ZipArchive;
 
 const MAX_ENTRIES: usize = 50_000;
 const MAX_APK_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_DEX_BYTES: u64 = 32 * 1024 * 1024;
-const MAX_CLASSES: usize = 2_000;
 
 const INSPECT_META: ToolMetadata = ToolMetadata {
     name: "inspect_apk",
@@ -128,12 +135,96 @@ fn validate_path(path: &str) -> Result<()> {
 
 fn archive(path: &str) -> Result<ZipArchive<File>> {
     validate_path(path)?;
-    let file = File::open(path).with_context(|| format!("cannot open APK {path}"))?;
+    let mut file = File::open(path).with_context(|| format!("cannot open APK {path}"))?;
+    validate_zip_directory(&mut file)?;
     let zip = ZipArchive::new(file).context("APK is not a valid ZIP archive")?;
     if zip.len() > MAX_ENTRIES {
         bail!("APK contains too many entries")
     }
     Ok(zip)
+}
+
+// Check directory bounds before the ZIP crate allocates its entry inventory.
+fn validate_zip_directory(file: &mut File) -> Result<()> {
+    let metadata = file.metadata().context("cannot inspect opened APK")?;
+    if !metadata.is_file() || metadata.len() > MAX_APK_BYTES {
+        bail!("opened APK exceeds inspection limit")
+    }
+    let length = metadata.len();
+    let tail_length = length.min(65_557) as usize;
+    file.seek(SeekFrom::End(-(tail_length as i64)))?;
+    let mut tail = vec![0; tail_length];
+    file.read_exact(&mut tail)?;
+    let position = (0..tail.len().saturating_sub(21))
+        .rev()
+        .find(|position| {
+            tail.get(*position..*position + 4) == Some(b"PK\x05\x06")
+                && crate::tools::apk::dex::u16_at(&tail, *position + 20)
+                    .is_ok_and(|comment| *position + 22 + comment == tail.len())
+        })
+        .context("APK ZIP end directory is missing or truncated")?;
+    let eocd = &tail[position..];
+    if dex::u16_at(eocd, 4)? != 0 || dex::u16_at(eocd, 6)? != 0 {
+        bail!("multipart APK ZIP is unsupported")
+    }
+    let mut count = dex::u16_at(eocd, 10)? as u64;
+    let mut directory_size = u32_at(eocd, 12)? as u64;
+    let mut directory_offset = u32_at(eocd, 16)? as u64;
+    if count == u16::MAX as u64
+        || directory_size == u32::MAX as u64
+        || directory_offset == u32::MAX as u64
+    {
+        let absolute = length - tail_length as u64 + position as u64;
+        file.seek(SeekFrom::Start(
+            absolute.checked_sub(20).context("missing ZIP64 locator")?,
+        ))?;
+        let mut locator = [0; 20];
+        file.read_exact(&mut locator)?;
+        if !locator.starts_with(b"PK\x06\x07")
+            || u32_at(&locator, 4)? != 0
+            || u32_at(&locator, 16)? != 1
+        {
+            bail!("invalid APK ZIP64 locator")
+        }
+        let word = |bytes: &[u8], offset: usize| -> Result<u64> {
+            let data: [u8; 8] = bytes
+                .get(offset..offset + 8)
+                .context("truncated ZIP64 word")?
+                .try_into()
+                .context("invalid ZIP64 word")?;
+            Ok(u64::from_le_bytes(data))
+        };
+        let offset = word(&locator, 8)?;
+        if offset.checked_add(56).is_none_or(|end| end > absolute - 20) {
+            bail!("invalid APK ZIP64 directory offset")
+        }
+        file.seek(SeekFrom::Start(offset))?;
+        let mut directory = [0; 56];
+        file.read_exact(&mut directory)?;
+        if !directory.starts_with(b"PK\x06\x06")
+            || word(&directory, 4)? < 44
+            || u32_at(&directory, 16)? != 0
+            || u32_at(&directory, 20)? != 0
+            || word(&directory, 24)? != word(&directory, 32)?
+        {
+            bail!("invalid APK ZIP64 end directory")
+        }
+        count = word(&directory, 32)?;
+        directory_size = word(&directory, 40)?;
+        directory_offset = word(&directory, 48)?;
+    } else if dex::u16_at(eocd, 8)? as u64 != count {
+        bail!("APK ZIP directory entry count mismatch")
+    }
+    if count > MAX_ENTRIES as u64
+        || directory_size > 32 * 1024 * 1024
+        || directory_offset
+            .checked_add(directory_size)
+            .is_none_or(|end| end > length)
+    {
+        bail!("APK ZIP directory exceeds inspection limit")
+    }
+    file.seek(SeekFrom::Start(0))?;
+    Ok(())
 }
 
 fn limit(value: usize) -> Result<usize> {
@@ -205,52 +296,23 @@ fn entries(args: &ApkEntriesArgs) -> Result<String> {
 }
 
 fn dex_classes(args: &DexClassesArgs) -> Result<String> {
-    let mut zip = archive(&args.path)?;
     let max = limit(args.limit)?;
     if args.query.len() > 256 {
         bail!("class query too long")
     }
     let mut classes = Vec::new();
     let mut matches = 0usize;
-    let mut dex_files = 0usize;
-    let mut total_dex_bytes = 0u64;
-    for index in 0..zip.len() {
-        let mut entry = zip.by_index(index).context("cannot inspect APK entry")?;
-        if !is_dex(entry.name()) {
-            continue;
-        }
-        dex_files += 1;
-        if dex_files > 32 {
-            bail!("APK contains too many DEX files")
-        }
-        if entry.size() > MAX_DEX_BYTES {
-            bail!("DEX file exceeds 32 MiB inspection limit")
-        }
-        total_dex_bytes = total_dex_bytes
-            .checked_add(entry.size())
-            .context("DEX total size overflow")?;
-        if total_dex_bytes > 64 * 1024 * 1024 {
-            bail!("APK DEX data exceeds 64 MiB inspection limit")
-        }
-        let dex_name = entry.name().to_string();
-        let mut bytes = Vec::with_capacity(entry.size() as usize);
-        entry
-            .by_ref()
-            .take(MAX_DEX_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .context("cannot read DEX entry")?;
-        if bytes.len() as u64 > MAX_DEX_BYTES {
-            bail!("DEX file exceeds 32 MiB inspection limit")
-        }
-        for name in parse_classes(&bytes)? {
-            if name.contains(&args.query) {
+    let dex_files = analysis::scan_dex(&args.path, |name, dex| {
+        for class in dex.class_names()? {
+            if class.contains(&args.query) {
                 matches += 1;
                 if classes.len() < max {
-                    classes.push(json!({"class":name,"dex":dex_name}));
+                    classes.push(json!({"class":class,"dex":name}));
                 }
             }
         }
-    }
+        Ok(())
+    })?;
     Ok(json!({"status":"ok","path":args.path,"dex_file_count":dex_files,"matches":matches,"classes":classes,"truncated":matches>classes.len()}).to_string())
 }
 
@@ -282,58 +344,9 @@ fn table(
     Ok((size, offset))
 }
 
-fn dex_string(bytes: &[u8], offset: usize) -> Result<String> {
-    let mut pos = offset;
-    for _ in 0..5 {
-        let byte = *bytes.get(pos).context("truncated DEX string length")?;
-        pos += 1;
-        if byte & 0x80 == 0 {
-            break;
-        }
-    }
-    let rest = bytes.get(pos..).context("invalid DEX string offset")?;
-    let end = rest
-        .iter()
-        .take(1024)
-        .position(|b| *b == 0)
-        .context("DEX string too long or unterminated")?;
-    Ok(std::str::from_utf8(&rest[..end])
-        .context("non UTF-8 DEX class name")?
-        .to_string())
-}
-
+#[cfg(test)]
 fn parse_classes(bytes: &[u8]) -> Result<Vec<String>> {
-    if bytes.len() < 112 || !bytes.starts_with(b"dex\n") || bytes.get(7) != Some(&0) {
-        bail!("invalid DEX header")
-    }
-    let (strings, string_off) = table(bytes, 56, 60, 4)?;
-    let (types, type_off) = table(bytes, 64, 68, 4)?;
-    let (count, class_off) = table(bytes, 96, 100, 32)?;
-    if count > MAX_CLASSES * 20 {
-        bail!("DEX class table exceeds inspection limit")
-    }
-    let mut result = Vec::with_capacity(count.min(MAX_CLASSES));
-    for index in 0..count {
-        let type_id = u32_at(bytes, class_off + index * 32)?;
-        if type_id >= types {
-            bail!("invalid DEX class type index")
-        }
-        let string_id = u32_at(bytes, type_off + type_id * 4)?;
-        if string_id >= strings {
-            bail!("invalid DEX class string index")
-        }
-        let offset = u32_at(bytes, string_off + string_id * 4)?;
-        let descriptor = dex_string(bytes, offset)?;
-        if let Some(name) = descriptor
-            .strip_prefix('L')
-            .and_then(|s| s.strip_suffix(';'))
-        {
-            if !name.is_empty() && name.len() <= 512 {
-                result.push(name.replace('/', "."));
-            }
-        }
-    }
-    Ok(result)
+    dex::Dex::parse(bytes)?.class_names()
 }
 
 fn validate_class_name(name: &str) -> Result<()> {
@@ -464,6 +477,10 @@ mod tests {
         bytes[112..116].copy_from_slice(&152u32.to_le_bytes());
         bytes[152] = 18;
         bytes[153..153 + descriptor.len()].copy_from_slice(descriptor);
+        let length = bytes.len() as u32;
+        bytes[32..36].copy_from_slice(&length.to_le_bytes());
+        bytes[36..40].copy_from_slice(&112u32.to_le_bytes());
+        bytes[40..44].copy_from_slice(&0x12345678u32.to_le_bytes());
         bytes
     }
 

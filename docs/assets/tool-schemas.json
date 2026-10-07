@@ -129,6 +129,233 @@
     }
   },
   {
+    "description": "Index bounded DEX method IDs and prototypes, including external references; filter by a literal signature substring. No JADX or execution.",
+    "name": "list_dex_methods",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 50,
+          "description": "Maximum returned records, from 1 to 200.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Existing local APK path. Archive contents are never executed.",
+          "type": "string"
+        },
+        "query": {
+          "default": "",
+          "description": "Literal substring of a method signature, DEX string or native-library path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Search bounded DEX strings by a nonempty literal substring, decoding modified UTF-8 without execution.",
+    "name": "search_dex_strings",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 50,
+          "description": "Maximum returned records, from 1 to 200.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Existing local APK path. Archive contents are never executed.",
+          "type": "string"
+        },
+        "query": {
+          "default": "",
+          "description": "Literal substring of a method signature, DEX string or native-library path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Find bounded class references in DEX declarations and direct instructions; does not resolve reflection or dynamic/native calls.",
+    "name": "find_class_references",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "class_name": {
+          "description": "Exact dotted class name to find in declarations and direct bytecode references.",
+          "type": "string"
+        },
+        "limit": {
+          "default": 50,
+          "description": "Maximum returned references, from 1 to 200.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Existing local APK path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "class_name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Find direct DEX invoke instructions for an exact owner/method, optionally narrowed by prototype; no decompilation.",
+    "name": "find_method_references",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "class_name": {
+          "description": "Exact dotted owner class.",
+          "type": "string"
+        },
+        "limit": {
+          "default": 50,
+          "description": "Maximum returned direct invoke references, from 1 to 200.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "method_name": {
+          "description": "Exact method name, including <init> or <clinit> when applicable.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Existing local APK path.",
+          "type": "string"
+        },
+        "prototype": {
+          "default": "",
+          "description": "Optional exact DEX prototype, such as (Ljava/lang/String;)V; empty matches overloads.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "class_name",
+        "method_name"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Inspect bounded Android binary manifest package/version/SDK/application metadata; resource values remain explicit IDs.",
+    "name": "inspect_manifest",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 50,
+          "description": "Maximum returned records, from 1 to 200.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "List requested and declared manifest permissions; does not infer installed grants or AppOps.",
+    "name": "list_permissions",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 50,
+          "description": "Maximum returned records, from 1 to 200.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "List explicitly/default exported components and unresolved exposure needing review; include target-SDK defaults and intent filters.",
+    "name": "list_exported_components",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 50,
+          "description": "Maximum returned records, from 1 to 200.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Find bounded lib/<abi>/*.so entries and inspect ELF prefixes without extracting or loading code.",
+    "name": "find_native_libs",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 50,
+          "description": "Maximum returned records, from 1 to 200.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Existing local APK path. Archive contents are never executed.",
+          "type": "string"
+        },
+        "query": {
+          "default": "",
+          "description": "Literal substring of a method signature, DEX string or native-library path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "description": "Read a size-limited UTF-8 text file. Absolute paths, parent components, and symlinks are supported.",
     "name": "read_file",
     "parameters": {

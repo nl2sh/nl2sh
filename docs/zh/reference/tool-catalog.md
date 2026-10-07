@@ -1650,6 +1650,145 @@ DeviceIdle 与白名单证据。
 }
 ```
 
+## `find_class_references`
+
+查找类在 DEX 声明和直接指令中的引用；不解析反射、动态或原生调用。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "class_name": {
+      "description": "Exact dotted class name to find in declarations and direct bytecode references.",
+      "type": "string"
+    },
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned references, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path",
+    "class_name"
+  ],
+  "type": "object"
+}
+```
+
+## `find_method_references`
+
+查找精确类/方法的直接 invoke 引用，可按 DEX 原型区分重载。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "class_name": {
+      "description": "Exact dotted owner class.",
+      "type": "string"
+    },
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned direct invoke references, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "method_name": {
+      "description": "Exact method name, including <init> or <clinit> when applicable.",
+      "type": "string"
+    },
+    "path": {
+      "description": "Existing local APK path.",
+      "type": "string"
+    },
+    "prototype": {
+      "default": "",
+      "description": "Optional exact DEX prototype, such as (Ljava/lang/String;)V; empty matches overloads.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path",
+    "class_name",
+    "method_name"
+  ],
+  "type": "object"
+}
+```
+
+## `find_native_libs`
+
+列出 lib/<abi>/*.so 条目和有界 ELF 前缀，不解压或加载代码。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path. Archive contents are never executed.",
+      "type": "string"
+    },
+    "query": {
+      "default": "",
+      "description": "Literal substring of a method signature, DEX string or native-library path.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
 ## `http_post`
 
 确认后发送公网有界 JSON POST。
@@ -2022,6 +2161,44 @@ DeviceIdle 与白名单证据。
 }
 ```
 
+## `inspect_manifest`
+
+有界解析二进制 Manifest 的包、版本、SDK 和应用属性，资源保持 ID。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
 ## `inspect_tls`
 
 校验公网 TLS 证书链。
@@ -2230,6 +2407,49 @@ DeviceIdle 与白名单证据。
 }
 ```
 
+## `list_dex_methods`
+
+有界索引 DEX 方法、类和原型，包含外部方法引用，无需 JADX。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path. Archive contents are never executed.",
+      "type": "string"
+    },
+    "query": {
+      "default": "",
+      "description": "Literal substring of a method signature, DEX string or native-library path.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
 ## `list_dir`
 
 不依赖 shell 列出有界直接子项。
@@ -2251,6 +2471,82 @@ DeviceIdle 与白名单证据。
   "properties": {
     "path": {
       "description": "Absolute or process-base-relative directory path, or `.`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
+## `list_exported_components`
+
+列出明确/默认导出的组件及需复核的未知暴露，说明 SDK 默认规则。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
+## `list_permissions`
+
+列出 Manifest 请求与声明的权限，不推断实际授权或 AppOps。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path containing Android binary AndroidManifest.xml.",
       "type": "string"
     }
   },
@@ -2336,6 +2632,49 @@ DeviceIdle 与白名单证据。
   "properties": {
     "path": {
       "description": "Absolute or process-base-relative file path.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "type": "object"
+}
+```
+
+## `search_dex_strings`
+
+按非空字面子串搜索 DEX 字符串，解码修改版 UTF-8。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": 50,
+      "description": "Maximum returned records, from 1 to 200.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "Existing local APK path. Archive contents are never executed.",
+      "type": "string"
+    },
+    "query": {
+      "default": "",
+      "description": "Literal substring of a method signature, DEX string or native-library path.",
       "type": "string"
     }
   },
