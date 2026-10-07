@@ -85,7 +85,7 @@ static METADATA: &[ToolMetadata] = &[
     meta!("android_clipboard", "Read clipboard text or, after confirmation, set bounded text.", Android, ReadOnly),
     meta!("android_media_control", "Read media status or, after confirmation, change playback or volume.", Android, ReadOnly),
     meta!("android_media_query", "Query bounded MediaStore image, video, or audio metadata.", Android, ReadOnly),
-    meta!("agent_memory", "Read or update a small private task notebook. Use get/list to read and set/delete/clear to write; writes require confirmation.", Memory, ReadOnly),
+    meta!("agent_memory", "Read or update persistent user and Agent memory across sessions. Before answering about the user's name, identity, preferences, standing instructions, or previously saved facts, use get when the key is known or list when relevant keys are unknown. Memory is not Android account or device-profile evidence. Writes require confirmation.", Memory, ReadOnly),
     meta!("android_connectivity", "Aggregate bounded Android connectivity evidence for a validated public host.", Android, ReadOnly),
     meta!("inspect_tls", "Inspect and validate the TLS certificate chain of a public host.", Network, ReadOnly),
 ];

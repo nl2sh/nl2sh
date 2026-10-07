@@ -8,7 +8,7 @@
 
 ## `agent_memory`
 
-get/list 读便签，set/delete/clear 写入，写操作需确认。
+跨会话读取或更新用户与 Agent 记忆；回答用户姓名、身份、偏好、长期约定或已保存事实前，已知键用 get，未知键用 list。记忆不是 Android 账户或设备资料证据；写操作需确认。
 
 ```json
 {

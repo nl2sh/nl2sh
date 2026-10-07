@@ -8,7 +8,7 @@ Generated from the Rust registry and derived JSON schemas, including disabled op
 
 ## `agent_memory`
 
-Read or update a small private task notebook. Use get/list to read and set/delete/clear to write; writes require confirmation.
+Read or update persistent user and Agent memory across sessions. Before answering about the user's name, identity, preferences, standing instructions, or previously saved facts, use get when the key is known or list when relevant keys are unknown. Memory is not Android account or device-profile evidence. Writes require confirmation.
 
 ```json
 {

@@ -8,7 +8,9 @@
 
 ## 私有便签
 
-`agent_memory` 的动作是 `get/list/set/delete/clear`；`read` 不是合法动作。读取只读，模型发起的写入/删除需确认。便签使用内嵌 SQLite：Android 原生部署保存在可执行文件旁的 `memory/agent-memory.sqlite3`，Termux 保存在状态目录的 `memory/`；不依赖系统 `sqlite3` 命令，也不迁移旧 `.nl2sh-agent-memory.json`。Web 记忆面板可由用户直接增删改查。便签是小型持久数据，不替代会话，也不授予执行权限。
+`agent_memory` 的动作是 `get/list/set/delete/clear`；`read` 不是合法动作。读取只读，模型发起的写入/删除需确认。询问姓名、个人身份、偏好、长期约定、已保存事实或“你记得我吗”时，Agent 应先查记忆：已知键使用 `get`，相关键未知时使用 `list`。记忆不是 Android 系统用户、设备 Owner 或应用账户的证据；只有明确询问设备账户时才查 Android 资料，记忆无答案且语义仍含糊时应先澄清。无关设备任务不会自动加载记忆。
+
+便签使用内嵌 SQLite：Android 原生部署保存在可执行文件旁的 `memory/agent-memory.sqlite3`，Termux 保存在状态目录的 `memory/`；不依赖系统 `sqlite3` 命令，也不迁移旧 `.nl2sh-agent-memory.json`。Web 记忆面板可由用户直接增删改查。便签是小型持久数据，不替代会话，也不授予执行权限。
 
 ## 图表
 

@@ -6,6 +6,8 @@
 
 - Replace Agent memory persistence with transactional embedded SQLite. Native Android stores it in `memory/` beside the executable and Termux uses its state directory, without a system `sqlite3` dependency or old-JSON migration. Add a Web sidebar memory panel with search and CRUD controls.
 
+- Improve Agent memory retrieval guidance: read memory before answering about the user's name, personal identity, preferences, standing instructions, or saved facts; distinguish persistent memory from Android system users, device Owners, and app accounts; ask when an unanswered identity question remains ambiguous, and avoid loading memory for unrelated device tasks.
+
 - Make `tailcat_send_file` default to the raw stream when `mode` is omitted, avoiding an scp dependency. Keep `copy` as an explicit drop-box compatibility mode and document that stock Android shells normally lack its external scp executable.
 
 - Add strongly confirmed `tailcat_adb_pair`: guide Android 11+ Wireless debugging, revalidate current pairing information, share pairing/connection and optional Web ports, and return the pairing code and peer commands; reject stale approvals and replacement of existing listeners.
