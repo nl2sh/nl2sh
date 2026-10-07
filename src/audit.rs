@@ -38,6 +38,8 @@ pub(crate) struct AuditEvent {
     requested_root: bool,
     result: &'static str,
     duration_ms: u128,
+    #[serde(skip)]
+    completed: bool,
 }
 
 pub(crate) fn digest(value: &str) -> String {
@@ -127,6 +129,7 @@ impl AuditGuard {
             requested_root: false,
             result: "cancelled",
             duration_ms: 0,
+            completed: false,
         }));
         if let Some(context) = &context {
             if let Ok(mut active) = context.active.lock() {
@@ -142,8 +145,9 @@ impl AuditGuard {
 
     pub(crate) fn finish(&self, result: &'static str) {
         if let Ok(mut event) = self.event.lock() {
-            if event.result == "cancelled" {
+            if !event.completed {
                 event.result = result;
+                event.completed = true;
             }
         }
     }
@@ -199,6 +203,7 @@ pub(crate) fn decision(decision: &crate::agent::ConfirmationDecision) {
     update(|event| {
         if matches!(decision, Reject) {
             event.result = "refused";
+            event.completed = true;
         }
         event.approval = match decision {
             Reject => "rejected",
@@ -211,9 +216,10 @@ pub(crate) fn decision(decision: &crate::agent::ConfirmationDecision) {
 }
 pub(crate) fn result(success: bool) {
     update(|event| {
-        if event.result != "cancelled" {
+        if event.completed {
             return;
         }
+        event.completed = true;
         event.result = if success {
             "success"
         } else if event.approval == "rejected" {
@@ -336,7 +342,7 @@ mod tests {
     }
 }
 
-pub(crate) fn shell_result(success: bool) {
+pub(crate) fn shell_result(execution: &crate::shell::ExecutionResult) {
     let shell = CONTEXT
         .try_with(|context| {
             context.active.lock().ok().and_then(|active| {
@@ -352,6 +358,26 @@ pub(crate) fn shell_result(success: bool) {
         .flatten()
         .unwrap_or(false);
     if shell {
-        result(success);
+        execution_result(execution);
+    }
+}
+
+pub(crate) fn execution_result(execution: &crate::shell::ExecutionResult) {
+    let failure = if execution.interrupted {
+        Some("cancelled")
+    } else if execution.timed_out {
+        Some("timed_out")
+    } else if execution.exit_code != Some(0) {
+        Some("error")
+    } else {
+        None
+    };
+    if let Some(failure) = failure {
+        update(|event| {
+            if !event.completed {
+                event.result = failure;
+                event.completed = true;
+            }
+        });
     }
 }

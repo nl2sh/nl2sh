@@ -197,7 +197,6 @@ fn read_only_android_package_version_queries_do_not_require_confirmation() {
     for command in [
         "dumpsys package com.example.app | grep versionName",
         "pm list packages --show-versioncode",
-        "for pkg in $(pm list packages -3 | cut -d: -f2); do dumpsys package $pkg | grep versionName; done",
     ] {
         let assessment = assess(command, &cfg);
         assert_eq!(assessment.risk_level, RiskLevel::ReadOnly, "{command}");
@@ -348,4 +347,55 @@ fn strict_still_confirms_queries_after_correct_readonly_classification() {
     assert_eq!(assessment.risk_level, RiskLevel::ReadOnly);
     assert!(!assessment.requires_root);
     assert!(assessment.requires_confirmation);
+}
+
+#[test]
+fn diagnostic_mutations_unknown_options_and_dynamic_dump_selectors_require_strong_confirmation() {
+    let config = Config::default();
+    for command in ["dumpsys battery set level 0", "dumpsys battery unplug", "dumpsys batterystats --reset",
+        "dumpsys deviceidle force-idle", "logcat -c", "logcat -G 32M", "logcat -f /data/local/tmp/log",
+        "for pkg in $(pm list packages -3 | cut -d: -f2); do dumpsys package $pkg | grep versionName; done"] {
+        let assessment = assess(command, &config);
+        assert!(assessment.risk_level >= RiskLevel::Dangerous, "{command}");
+        assert!(assessment.requires_confirmation && assessment.requires_double_confirmation, "{command}");
+    }
+    for command in [
+        "dumpsys battery",
+        "dumpsys activity activities",
+        "dumpsys window windows",
+        "logcat -d -t 50 '*:W'",
+    ] {
+        let assessment = assess(command, &config);
+        assert_eq!(assessment.risk_level, RiskLevel::ReadOnly, "{command}");
+    }
+}
+
+#[tokio::test]
+async fn readonly_diagnostics_never_consult_su_even_when_root_mode_is_configured(
+) -> anyhow::Result<()> {
+    use nl2sh::{
+        config::ExecuteUserMode,
+        shell::{CommandExecutor, RootProbe, ShellExecutor},
+    };
+    struct NoElevation;
+    impl RootProbe for NoElevation {
+        fn uid(&self) -> u32 {
+            2000
+        }
+        fn su_available(&self) -> bool {
+            panic!("read-only diagnostics must not probe elevation")
+        }
+    }
+    let config = Config {
+        execute_user_mode: ExecuteUserMode::Root,
+        ..Config::default()
+    };
+    let executor = ShellExecutor::with_probe(config, Box::new(NoElevation));
+    let result = executor.execute_readonly("printf query").await?;
+    assert_eq!(result.stdout, "query");
+    assert_eq!(result.exit_code, Some(0));
+    let result = executor.execute_machine("printf protocol", false).await?;
+    assert_eq!(result.stdout, "protocol");
+    assert_eq!(result.exit_code, Some(0));
+    Ok(())
 }

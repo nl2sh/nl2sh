@@ -313,11 +313,22 @@ impl AgentRunner<'_> {
                     );
                     let remaining = Duration::from_secs(self.config.max_task_execution_time_secs)
                         .saturating_sub(runtime.active_time());
-                    let completed = tokio::select! {
-                        results = timeout(remaining, batch_future) => results,
-                        _ = wait_cancel(cancel.clone()) => return Err(AgentRunFailure {
-                            source: anyhow::anyhow!("task cancelled by user"), transcript,
-                        }.into()),
+                    // Android diagnostics own subprocess groups. Let their executor
+                    // process cancellation/timeouts and wait children before dropping the batch.
+                    let needs_reaping = batch.iter().any(|call| {
+                        registry.get(&call.name).is_some_and(|tool| {
+                            tool.metadata().platform != crate::tools::ToolPlatform::Any
+                        })
+                    });
+                    let completed = if needs_reaping {
+                        Ok(batch_future.await)
+                    } else {
+                        tokio::select! {
+                            results = timeout(remaining, batch_future) => results,
+                            _ = wait_cancel(cancel.clone()) => return Err(AgentRunFailure {
+                                source: anyhow::anyhow!("task cancelled by user"), transcript,
+                            }.into()),
+                        }
                     };
                     match completed {
                         Ok(completed) => {
@@ -343,6 +354,12 @@ impl AgentRunner<'_> {
                         }
                     }
                     parallel_consumed_until = batch_end;
+                    if runtime.active_time()
+                        >= Duration::from_secs(self.config.max_task_execution_time_secs)
+                    {
+                        stopped_by = Some(LimitType::ExecutionTime);
+                        break 'tool_calls;
+                    }
                     continue;
                 }
                 runtime.tool_calls_used += 1;

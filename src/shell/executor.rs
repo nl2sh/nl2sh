@@ -65,6 +65,11 @@ pub trait CommandExecutor: Send + Sync {
         self.execute_machine(command, false).await
     }
 
+    /// Captures a validated diagnostic query in the current identity without elevation or PTY.
+    async fn execute_readonly(&self, command: &str) -> Result<ExecutionResult> {
+        self.execute_machine(command, false).await
+    }
+
     /// Executes an already assessed and approved command.
     async fn execute(
         &self,
@@ -187,29 +192,51 @@ impl ShellExecutor {
         quiet: bool,
         force_pipe: bool,
     ) -> Result<ExecutionResult> {
+        self.execute_with_config(
+            &self.config,
+            command,
+            needs_root,
+            interactive,
+            force_pty,
+            quiet,
+            force_pipe,
+        )
+        .await
+    }
+
+    async fn execute_with_config(
+        &self,
+        config: &Config,
+        command: &str,
+        needs_root: bool,
+        interactive: bool,
+        force_pty: bool,
+        quiet: bool,
+        force_pipe: bool,
+    ) -> Result<ExecutionResult> {
         let (program, args) = resolve_invocation(
             command,
-            self.config.execute_user_mode,
+            config.execute_user_mode,
             needs_root,
             self.probe.as_ref(),
         )?;
         let timeout = if interactive {
-            self.config.interactive_execute_timeout_secs
+            config.interactive_execute_timeout_secs
         } else {
-            self.config.execute_timeout_secs
+            config.execute_timeout_secs
         };
         let req = ExecutionRequest {
             program,
             args,
             timeout_secs: timeout,
-            use_pty: !force_pipe && (force_pty || self.config.enable_pty),
+            use_pty: !force_pipe && (force_pty || config.enable_pty),
             interactive,
             output: if quiet {
                 Arc::new(NullOutput)
             } else {
                 self.output.clone()
             },
-            capture_max_bytes: self.config.tool_output_max_bytes,
+            capture_max_bytes: config.tool_output_max_bytes,
             tui_active: self.tui_active,
             tui_suspended: self.tui_suspended.clone(),
             cancel: self.cancel.clone(),
@@ -297,8 +324,18 @@ impl CommandExecutor for ShellExecutor {
             .await
     }
 
+    async fn execute_readonly(&self, command: &str) -> Result<ExecutionResult> {
+        let mut config = self.config.clone();
+        config.execute_user_mode = crate::config::ExecuteUserMode::Normal;
+        self.execute_with_config(&config, command, false, false, false, true, true)
+            .await
+    }
+
     async fn execute_machine(&self, command: &str, needs_root: bool) -> Result<ExecutionResult> {
-        self.execute_resolved(command, needs_root, false, false, true, true)
+        if !needs_root {
+            return self.execute_readonly(command).await;
+        }
+        self.execute_resolved(command, true, false, false, true, true)
             .await
     }
 }

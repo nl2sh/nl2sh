@@ -781,7 +781,7 @@ Read clipboard text or, after confirmation, set bounded text.
 | --- | --- |
 | Group | `-` |
 | Enabled by default | `true` |
-| Platform | `android` |
+| Platform | `android_shell` |
 | Connector capabilities | `-` |
 | Runtime prerequisite | `none` |
 | Risk floor | `read_only` |
@@ -974,7 +974,7 @@ Run one bounded, validated read-only Android dumpsys service query.
 | Connector capabilities | `-` |
 | Runtime prerequisite | `none` |
 | Risk floor | `read_only` |
-| Declared scheduling policy | `sequential` |
+| Declared scheduling policy | `parallel` |
 | Lifetime | `call` |
 
 ```json
@@ -1011,7 +1011,7 @@ Read a bounded Android logcat snapshot with an optional validated filter.
 | Connector capabilities | `-` |
 | Runtime prerequisite | `none` |
 | Risk floor | `read_only` |
-| Declared scheduling policy | `sequential` |
+| Declared scheduling policy | `parallel` |
 | Lifetime | `call` |
 
 ```json
@@ -1047,7 +1047,7 @@ Read media status or, after confirmation, change playback or volume.
 | --- | --- |
 | Group | `-` |
 | Enabled by default | `true` |
-| Platform | `android` |
+| Platform | `android_shell` |
 | Connector capabilities | `-` |
 | Runtime prerequisite | `none` |
 | Risk floor | `read_only` |

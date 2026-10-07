@@ -2,6 +2,25 @@ use crate::security::{shell::effects::Effects, RiskLevel};
 
 pub(super) fn classify_command(name: &str, args: &[String], effects: &mut Effects) {
     match name {
+        "dumpsys"
+            if args.first().is_some_and(|service| {
+                !crate::security::readonly_dumpsys(
+                    service,
+                    &args.iter().skip(1).map(String::as_str).collect::<Vec<_>>(),
+                )
+            }) =>
+        {
+            effects.raise(
+                RiskLevel::Dangerous,
+                "android-dump-options",
+                "unreviewed dumpsys arguments may change Android state",
+            )
+        }
+        "logcat" if !crate::security::readonly_logcat(args) => effects.raise(
+            RiskLevel::Dangerous,
+            "android-log-options",
+            "unreviewed logcat options may clear logs, change buffers or write files",
+        ),
         "reboot" | "shutdown" | "halt" | "poweroff" | "wipe" => {
             effects.raise(
                 RiskLevel::Dangerous,

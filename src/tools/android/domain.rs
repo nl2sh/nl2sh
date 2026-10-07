@@ -416,7 +416,7 @@ async fn aggregate(
 }
 
 async fn readonly(executor: &dyn CommandExecutor, command: &str) -> Result<ExecutionResult> {
-    executor.execute_quiet(command, false, false).await
+    executor.execute_readonly(command).await
 }
 
 fn encode(kind: &str, result: ExecutionResult) -> Result<String> {

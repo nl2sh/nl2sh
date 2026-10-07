@@ -71,8 +71,8 @@ static METADATA: &[ToolMetadata] = &[
     meta!("inspect_android_environment", "Inspect Android version, device-supported ABI, available commands, memory, and data storage with bounded read-only probes.", Android, ReadOnly),
     meta!("list_android_apps", "List bounded installed Android applications with package, APK path, and UID.", Android, ReadOnly),
     meta!("top_android_apps", "Return a bounded Android process snapshot sorted by resident memory.", Android, ReadOnly),
-    meta!("android_dumpsys", "Run one bounded, validated read-only Android dumpsys service query.", Android, ReadOnly),
-    meta!("android_logcat", "Read a bounded Android logcat snapshot with an optional validated filter.", Android, ReadOnly),
+    meta!("android_dumpsys", "Run one bounded, validated read-only Android dumpsys service query.", Android, ReadOnly, platform = Android, concurrency = Parallel),
+    meta!("android_logcat", "Read a bounded Android logcat snapshot with an optional validated filter.", Android, ReadOnly, platform = Android, concurrency = Parallel),
     meta!("android_settings", "Read or list Android system, secure, or global settings; writes are unavailable.", Android, ReadOnly),
     meta!("android_content_query", "Run a bounded read-only query against a content URI; writes are unavailable.", Android, ReadOnly),
     meta!("http_request", "Perform a bounded GET or HEAD request to a public HTTP(S) URL without redirects or private targets.", Network, ReadOnly),
@@ -90,8 +90,8 @@ static METADATA: &[ToolMetadata] = &[
     meta!("android_wifi_eth", "Aggregate Wi-Fi, Ethernet, interface, IP, signal, and route evidence.", Android, ReadOnly),
     meta!("android_doze", "Return DeviceIdle state and whitelist evidence.", Android, ReadOnly),
     meta!("android_permission_audit", "Audit Android permissions and AppOps for a package or bounded app set.", Android, ReadOnly),
-    meta!("android_clipboard", "Read clipboard text or, after confirmation, set bounded text.", Android, ReadOnly, platform = Android, concurrency = AndroidUi),
-    meta!("android_media_control", "Read media status or, after confirmation, change playback or volume.", Android, ReadOnly, platform = Android, concurrency = AndroidUi),
+    meta!("android_clipboard", "Read clipboard text or, after confirmation, set bounded text.", Android, ReadOnly, platform = AndroidShell, concurrency = AndroidUi),
+    meta!("android_media_control", "Read media status or, after confirmation, change playback or volume.", Android, ReadOnly, platform = AndroidShell, concurrency = AndroidUi),
     meta!("android_media_query", "Query bounded MediaStore image, video, or audio metadata.", Android, ReadOnly),
     meta!("agent_memory", "Read or update persistent user and Agent memory across sessions. Before answering about the user's name, identity, preferences, standing instructions, or previously saved facts, use get when the key is known or list when relevant keys are unknown. Memory is not Android account or device-profile evidence. Writes require confirmation.", Memory, ReadOnly),
     meta!("android_connectivity", "Aggregate bounded Android connectivity evidence for a validated public host.", Android, ReadOnly),
@@ -125,8 +125,18 @@ impl Tool for ExtendedTool {
             }
             "list_android_apps" => ExtendedAction::ListApps(parse_args(name, arguments)?),
             "top_android_apps" => ExtendedAction::TopApps(parse_args(name, arguments)?),
-            "android_dumpsys" => ExtendedAction::Dumpsys(parse_args(name, arguments)?),
-            "android_logcat" => ExtendedAction::Logcat(parse_args(name, arguments)?),
+            "android_dumpsys" => {
+                let args = parse_args(name, arguments)?;
+                android_diagnostics::validate_dumpsys_query(&args)?;
+                ExtendedAction::Dumpsys(args)
+            }
+            "android_logcat" => {
+                let args: AndroidLogcatArgs = parse_args(name, arguments)?;
+                if let Some(filter) = args.filter.as_deref().filter(|value| !value.is_empty()) {
+                    android_diagnostics::validate_logcat_filter(filter)?;
+                }
+                ExtendedAction::Logcat(args)
+            }
             "android_settings" => ExtendedAction::Settings(parse_args(name, arguments)?),
             "android_content_query" => ExtendedAction::ContentQuery(parse_args(name, arguments)?),
             "http_request" => ExtendedAction::HttpRequest(parse_args(name, arguments)?),
@@ -470,7 +480,7 @@ fn agent_memory(ctx: &ToolContext<'_>) -> Result<AgentMemory> {
 }
 
 async fn checked_command(ctx: &ToolContext<'_>, command: &str) -> Result<()> {
-    let result = executor(ctx)?.execute(command, false, false).await?;
+    let result = executor(ctx)?.execute_machine(command, false).await?;
     if result.exit_code != Some(0) || result.timed_out || result.interrupted {
         bail!(
             "confirmed command failed: exit={:?} stderr={}",

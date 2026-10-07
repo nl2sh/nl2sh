@@ -662,7 +662,7 @@ async fn capture_screen_attachment(
     let path = directory.path().join("screen.png");
     let path_text = path.to_string_lossy().into_owned();
     let command = ui::capture_command(&path_text)?;
-    let result = executor.execute_quiet(&command, false, false).await?;
+    let result = executor.execute_readonly(&command).await?;
     check_result(&result)?;
     let viewed = tokio::task::spawn_blocking(move || {
         ui::view_screenshot(&ui::ViewScreenshotArgs { path: path_text })

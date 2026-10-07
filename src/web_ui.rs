@@ -2660,6 +2660,16 @@ struct CapturedExecutor(ShellExecutor);
 
 #[async_trait]
 impl CommandExecutor for CapturedExecutor {
+    async fn execute_probe(&self, command: &str) -> Result<ExecutionResult> {
+        self.0.execute_probe(command).await
+    }
+    async fn execute_readonly(&self, command: &str) -> Result<ExecutionResult> {
+        self.0.execute_readonly(command).await
+    }
+    async fn execute_machine(&self, command: &str, needs_root: bool) -> Result<ExecutionResult> {
+        self.0.execute_machine(command, needs_root).await
+    }
+
     async fn runtime_context(&self) -> Result<Option<String>> {
         self.0.runtime_context().await
     }

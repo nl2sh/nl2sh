@@ -781,7 +781,7 @@ Descriptor 是工具组、默认开关、平台/扩展要求、风险下限、�
 | --- | --- |
 | 工具组 | `-` |
 | 默认启用 | `true` |
-| 平台要求 | `android` |
+| 平台要求 | `android_shell` |
 | 连接器能力 | `-` |
 | 扩展要求 | `none` |
 | 风险下限 | `read_only` |
@@ -974,7 +974,7 @@ DeviceIdle 与白名单证据。
 | 连接器能力 | `-` |
 | 扩展要求 | `none` |
 | 风险下限 | `read_only` |
-| 调度策略声明 | `sequential` |
+| 调度策略声明 | `parallel` |
 | 生命周期 | `call` |
 
 ```json
@@ -1011,7 +1011,7 @@ DeviceIdle 与白名单证据。
 | 连接器能力 | `-` |
 | 扩展要求 | `none` |
 | 风险下限 | `read_only` |
-| 调度策略声明 | `sequential` |
+| 调度策略声明 | `parallel` |
 | 生命周期 | `call` |
 
 ```json
@@ -1047,7 +1047,7 @@ DeviceIdle 与白名单证据。
 | --- | --- |
 | 工具组 | `-` |
 | 默认启用 | `true` |
-| 平台要求 | `android` |
+| 平台要求 | `android_shell` |
 | 连接器能力 | `-` |
 | 扩展要求 | `none` |
 | 风险下限 | `read_only` |

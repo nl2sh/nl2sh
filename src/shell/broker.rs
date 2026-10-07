@@ -24,9 +24,10 @@ impl ExecutionBroker {
         let result = executor
             .execute(approved.command(), approved.requires_root(), interactive)
             .await;
-        crate::audit::shell_result(result.as_ref().is_ok_and(|result| {
-            result.exit_code == Some(0) && !result.interrupted && !result.timed_out
-        }));
+        if let Ok(execution) = &result {
+            crate::audit::shell_result(execution);
+        }
+
         result
     }
 }

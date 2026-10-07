@@ -71,7 +71,7 @@ pub async fn inspect_environment(executor: &dyn CommandExecutor) -> Result<Strin
 }
 
 async fn probe(executor: &dyn CommandExecutor, command: &str) -> Option<ExecutionResult> {
-    let result = executor.execute_quiet(command, false, false).await.ok()?;
+    let result = executor.execute_readonly(command).await.ok()?;
     (result.exit_code == Some(0) && !result.timed_out && !result.interrupted).then_some(result)
 }
 

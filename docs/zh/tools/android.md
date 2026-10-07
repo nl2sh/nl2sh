@@ -6,6 +6,8 @@
 
 还提供通知、Crash/ANR、温控/功耗、流量、存储、Wi-Fi/以太网、Doze、权限与连接性聚合。默认有界定向查询；超时后先缩小范围。`android_connectivity` 的 ping 成功不代表 HTTPS 下载成功。
 
+只读诊断使用当前进程身份，以非交互捕获模式运行，即使 Shell 配置了 root 模式。`android_dumpsys` 只接受经过审核的查询形式；`android_logcat` 接受标签/优先级过滤规则，不接受命令选项。原始 Shell 中未知或修改性的 `dumpsys`/`logcat` 选项要求强确认。独立诊断可并发执行，取消时等待子进程回收。
+
 ## 界面闭环
 
 先 `android.screen_dump` 获取有界节点，再按真实包名、文字、资源 ID 或 bounds 选择动作；`android.tap_text` / `android.tap_node` 在确认后重新核对身份。部分树不能证明语义目标唯一，会拒绝点击。

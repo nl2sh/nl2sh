@@ -195,6 +195,7 @@ pub async fn android_dumpsys(
     args: &AndroidDumpsysArgs,
 ) -> Result<String> {
     validate_identifier("dumpsys service", &args.service)?;
+    validate_dumpsys_query(args)?;
     let mut command = format!("dumpsys {}", shell_quote(&args.service));
     if let Some(arguments) = args.arguments.as_deref().filter(|value| !value.is_empty()) {
         validate_words("dumpsys arguments", arguments)?;
@@ -298,7 +299,9 @@ async fn execute_readonly(
     executor: &dyn CommandExecutor,
     command: &str,
 ) -> Result<ExecutionResult> {
-    executor.execute_quiet(command, false, false).await
+    let result = executor.execute_readonly(command).await?;
+    crate::audit::execution_result(&result);
+    Ok(result)
 }
 
 fn encode_single(kind: &str, result: ExecutionResult) -> Result<String> {
@@ -382,14 +385,25 @@ fn validate_words(label: &str, value: &str) -> Result<()> {
     }
 }
 
-fn validate_logcat_filter(value: &str) -> Result<()> {
-    if value.chars().all(|character| {
-        character.is_ascii_alphanumeric()
-            || matches!(character, '.' | '_' | '$' | '-' | ':' | '*' | ' ')
-    }) {
+pub(crate) fn validate_dumpsys_query(args: &AndroidDumpsysArgs) -> Result<()> {
+    let arguments = args.arguments.as_deref().unwrap_or_default();
+    if arguments.len() > 1024
+        || arguments.split_whitespace().count() > 16
+        || !crate::security::readonly_dumpsys(
+            &args.service,
+            &arguments.split_whitespace().collect::<Vec<_>>(),
+        )
+    {
+        bail!("dumpsys tool accepts reviewed read-only queries only; use an assessed shell command for other options")
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_logcat_filter(value: &str) -> Result<()> {
+    if crate::security::readonly_log_filter(value) {
         Ok(())
     } else {
-        bail!("invalid logcat filter")
+        bail!("logcat filter must contain Tag or Tag:Priority rules, not options")
     }
 }
 
@@ -427,6 +441,29 @@ mod tests {
         foreground_component, normalize_projection, parse_package_line, validate_content_uri,
         validate_identifier, ProjectionArg,
     };
+
+    #[test]
+    fn readonly_diagnostic_arguments_reject_actions_and_logcat_options() {
+        use super::{validate_dumpsys_query, validate_logcat_filter, AndroidDumpsysArgs};
+        for (service, arguments) in [
+            ("battery", "set level 0"),
+            ("battery", "unplug"),
+            ("batterystats", "--reset"),
+            ("deviceidle", "force-idle"),
+        ] {
+            assert!(validate_dumpsys_query(&AndroidDumpsysArgs {
+                service: service.into(),
+                arguments: Some(arguments.into())
+            })
+            .is_err());
+        }
+        for filter in ["-c", "*:D -c", "-G", "Tag:X", "   "] {
+            assert!(validate_logcat_filter(filter).is_err());
+        }
+        for filter in ["*:W", "ActivityManager:I", "My-App:D *:S"] {
+            assert!(validate_logcat_filter(filter).is_ok());
+        }
+    }
 
     #[test]
     fn parses_foreground_component_across_common_activity_formats() {

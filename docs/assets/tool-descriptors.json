@@ -1365,7 +1365,7 @@
     },
     "policy": {
       "category": "android",
-      "concurrency": "sequential",
+      "concurrency": "parallel",
       "default_enabled": true,
       "description": "Run one bounded, validated read-only Android dumpsys service query.",
       "group": null,
@@ -1402,7 +1402,7 @@
     },
     "policy": {
       "category": "android",
-      "concurrency": "sequential",
+      "concurrency": "parallel",
       "default_enabled": true,
       "description": "Read a bounded Android logcat snapshot with an optional validated filter.",
       "group": null,
@@ -2053,7 +2053,7 @@
       "group": null,
       "lifetime": "call",
       "name": "android_clipboard",
-      "platform": "android",
+      "platform": "android_shell",
       "requires": [],
       "risk": "read_only",
       "runtime": "none"
@@ -2090,7 +2090,7 @@
       "group": null,
       "lifetime": "call",
       "name": "android_media_control",
-      "platform": "android",
+      "platform": "android_shell",
       "requires": [],
       "risk": "read_only",
       "runtime": "none"

@@ -6,6 +6,8 @@
 
 Aggregates cover notifications, crashes/ANRs, thermal/power, network statistics, storage, Wi-Fi/Ethernet, Doze, permissions, and connectivity. Prefer bounded targeted queries; narrow scope after timeout. Successful ping in `android_connectivity` does not prove HTTPS downloads work.
 
+Read-only diagnostics run with the current process identity in captured, non-interactive mode, even when Shell root mode is configured. `android_dumpsys` accepts reviewed query forms; `android_logcat` accepts tag/priority filters rather than command options. Unknown or modifying `dumpsys`/`logcat` options in raw Shell require strong confirmation. Independent diagnostics may run concurrently; cancellation waits for their child processes to be reaped.
+
 ## UI feedback loop
 
 Read a bounded tree with `android.screen_dump`, then select actions using observed package/text/resource ID/bounds. `android.tap_text` / `android.tap_node` revalidate identity after approval. Partial trees cannot prove a unique semantic target and are refused.
