@@ -19,7 +19,7 @@
 - [x] 扩展端协议基础与 Bridge 诊断页面，API 26 验证。
 - [x] 主程序运行时能力与健康接口。
 - [x] 原生 service 与启动器迁移。
-- [ ] Helper 生命周期、回滚和更新归属。
+- [x] Helper 生命周期、回滚和更新归属。
 - [ ] Compatibility Manifest、JADX 协议执行校验与资产签名。
 - [ ] Helper Bridge 管理和扩展状态。
 - [ ] Descriptor、跨进程资源锁、UI Lease 和全入口 Audit Event。
