@@ -122,6 +122,18 @@ impl AgentRunner<'_> {
         text_sink: Option<&dyn TextDeltaSink>,
         cancel: Option<watch::Receiver<bool>>,
     ) -> Result<AgentOutcome> {
+        self.run_scoped_with_registry(input, history, text_sink, cancel, None)
+            .await
+    }
+
+    async fn run_scoped_with_registry(
+        &self,
+        input: &str,
+        history: &[Vec<ConversationItem>],
+        text_sink: Option<&dyn TextDeltaSink>,
+        cancel: Option<watch::Receiver<bool>>,
+        registry: Option<ToolRegistry>,
+    ) -> Result<AgentOutcome> {
         let mut system = system_prompt(
             self.executor
                 .runtime_context()
@@ -149,6 +161,7 @@ impl AgentRunner<'_> {
         let mut final_input_tokens = None;
         let mut history_turns_evicted = 0;
         let mut runtime = TaskRuntime::new();
+        runtime.background.enable();
         let mut action_history: HashMap<String, (u64, usize)> = HashMap::new();
         let mut invalid_argument_rounds = 0usize;
         let tool_base = std::env::current_dir().context("cannot determine tool base directory")?;
@@ -158,13 +171,15 @@ impl AgentRunner<'_> {
         let ima = ImaClient::from_config(self.config)?;
         let capabilities =
             crate::runtime::RuntimeCapabilities::discover(self.config, self.executor).await;
-        let registry = ToolRegistry::for_runtime(self.config, &capabilities);
+        let registry =
+            registry.unwrap_or_else(|| ToolRegistry::for_runtime(self.config, &capabilities));
         let effective_steps = self
             .config
             .max_agent_steps
             .min(self.config.hard_max_agent_steps)
             .min(super::SYSTEM_HARD_MAX_AGENT_STEPS);
         let mut stopped_by = None;
+        let mut background_interrupted = false;
         for step in 1..=effective_steps {
             if cancel.as_ref().is_some_and(|signal| *signal.borrow()) {
                 return Err(AgentRunFailure {
@@ -172,6 +187,117 @@ impl AgentRunner<'_> {
                     transcript,
                 }
                 .into());
+            }
+            if runtime.active_time()
+                >= Duration::from_secs(self.config.max_task_execution_time_secs)
+            {
+                stopped_by = Some(LimitType::ExecutionTime);
+                break;
+            }
+            while let Some(mut job) = runtime.background.pop() {
+                if runtime.active_time()
+                    >= Duration::from_secs(self.config.max_task_execution_time_secs)
+                {
+                    background_interrupted = true;
+                    stopped_by = Some(LimitType::ExecutionTime);
+                    break;
+                }
+                if runtime.tool_calls_used >= self.config.max_tool_calls {
+                    background_interrupted = true;
+                    stopped_by = Some(LimitType::ToolCalls);
+                    break;
+                }
+                runtime.release_ui_lease();
+                job.event("waiting");
+                if let Some(sink) = text_sink {
+                    sink.agent_activity("background", Some(&job.call.name));
+                }
+                let remaining = Duration::from_secs(self.config.max_task_execution_time_secs)
+                    .saturating_sub(runtime.active_time());
+                tokio::select! {
+                    result = timeout(remaining, tokio::time::sleep_until(job.ready_at)) => {
+                        if result.is_err() {
+                            background_interrupted = true;
+                            stopped_by = Some(LimitType::ExecutionTime);
+                            break;
+                        }
+                    }
+                    _ = wait_cancel(cancel.clone()) => return Err(AgentRunFailure {
+                        source: anyhow::anyhow!("task cancelled by user; background continuation cancelled; bounded captures may still auto-stop"),
+                        transcript,
+                    }.into()),
+                }
+                // Cancellation wins even when the timer becomes ready simultaneously.
+                if cancel.as_ref().is_some_and(|signal| *signal.borrow()) {
+                    return Err(AgentRunFailure {
+                        source: anyhow::anyhow!(
+                            "task cancelled by user; background continuation cancelled"
+                        ),
+                        transcript,
+                    }
+                    .into());
+                }
+                if runtime.active_time()
+                    >= Duration::from_secs(self.config.max_task_execution_time_secs)
+                {
+                    background_interrupted = true;
+                    stopped_by = Some(LimitType::ExecutionTime);
+                    break;
+                }
+                runtime.tool_calls_used += 1;
+                job.event("resuming");
+                if let Some(sink) = text_sink {
+                    sink.agent_progress(runtime.steps_used, runtime.tool_calls_used, &usage);
+                    sink.agent_activity("tool", Some(&job.call.name));
+                    sink.tool_requested(&job.call);
+                    sink.tool_started(&job.call.id, &job.call.name);
+                }
+                let mut tool_context = ToolContext {
+                    file_tools: &file_tools,
+                    ima: ima.as_ref(),
+                    config: Some(self.config),
+                    executor: Some(self.executor),
+                    llm: Some(self.llm),
+                    confirmer: Some(self.confirmer),
+                    audio_tools: Some(&audio_tools),
+                    runtime: Some(&mut runtime),
+                    audio_cache: Some(&mut audio_analysis_cache),
+                };
+                let result = self
+                    .resume_background(&job.call, &registry, &mut tool_context, cancel.clone())
+                    .await;
+                let result = match result {
+                    Ok(result) => result,
+                    Err(error) => self.tool_error_result(
+                        &job.call.id,
+                        format!("Background continuation failed: {error:#}"),
+                    ),
+                };
+                if let Some(sink) = text_sink {
+                    sink.tool_finished(&result.call_id, &result.output, result.success);
+                }
+                job.finish(result.success);
+                let round = ToolRound {
+                    calls: vec![job.call.clone()],
+                    results: vec![result],
+                };
+                let mut saved_round = round.clone();
+                for result in &mut saved_round.results {
+                    if !result.attachments.is_empty() {
+                        result
+                            .output
+                            .push_str("\n[image attachment omitted from persistent session]");
+                        result.attachments.clear();
+                    }
+                }
+                transcript.push(ConversationItem::Tools(saved_round));
+                current.extend(truncate_tool_results(
+                    &[ConversationItem::Tools(round)],
+                    self.config.model_tool_output_max_bytes,
+                ));
+            }
+            if stopped_by.is_some() {
+                break;
             }
             if runtime.active_time()
                 >= Duration::from_secs(self.config.max_task_execution_time_secs)
@@ -732,7 +858,7 @@ impl AgentRunner<'_> {
                 LimitType::Step
             }
         });
-        let final_text = format!(
+        let mut final_text = format!(
             "Agent stopped because the {:?} maximum limit was reached (steps {}/{}, tool calls {}/{}); completed evidence and the last tool results were retained.",
             limit,
             runtime.steps_used,
@@ -740,6 +866,9 @@ impl AgentRunner<'_> {
             runtime.tool_calls_used,
             self.config.max_tool_calls
         );
+        if background_interrupted || runtime.background.len() > 0 {
+            final_text.push_str(" Pending background continuations were cancelled; bounded captures may still auto-stop. Analyze retained traces explicitly in a new task.");
+        }
         current.push(ConversationItem::Message(ConversationMessage::new(
             Role::Assistant,
             final_text.clone(),
@@ -758,6 +887,59 @@ impl AgentRunner<'_> {
             final_input_tokens,
             history_turns_evicted,
         })
+    }
+
+    async fn resume_background(
+        &self,
+        call: &crate::llm::ToolCall,
+        registry: &ToolRegistry,
+        ctx: &mut ToolContext<'_>,
+        cancel: Option<watch::Receiver<bool>>,
+    ) -> Result<ToolResult> {
+        let audit = crate::audit::AuditGuard::begin(&call.name, "unassessed");
+        let result = async {
+            let tool = registry
+                .get(&call.name)
+                .context("background tool is unavailable")?;
+            let runtime = ctx.runtime.as_deref_mut().context("background runtime unavailable")?;
+            let remaining = Duration::from_secs(self.config.max_task_execution_time_secs)
+                .saturating_sub(runtime.active_time());
+            tokio::select! {
+                result = timeout(remaining, runtime.acquire_resources(tool.metadata())) => result.context("background resource wait exceeded task time limit")??,
+                _ = wait_cancel(cancel.clone()) => bail!("background resource wait cancelled"),
+            }
+            let held = runtime.holds_ui_lease();
+            let prepared = crate::runtime::resources::with_ui_lease(
+                held,
+                tool.prepare(ctx, call.arguments.clone()),
+            )
+            .await?;
+            let PreparedAction::Operation(operation) = prepared.action else {
+                bail!("background continuations must use a structured tool")
+            };
+            if cancel.as_ref().is_some_and(|signal| *signal.borrow()) {
+                bail!("background continuation cancelled before execution")
+            }
+            if ctx.runtime.as_deref().is_some_and(|runtime| runtime.active_time() >= Duration::from_secs(self.config.max_task_execution_time_secs)) {
+                bail!("background continuation exceeded task time limit before execution")
+            }
+            Ok(self
+                .run_prepared_operation(
+                    tool.metadata(),
+                    prepared.risk,
+                    &prepared.preview,
+                    operation,
+                    ctx,
+                    &call.id,
+                )
+                .await)
+        }
+        .await;
+        audit.finish(match &result {
+            Ok(result) if result.success => "success",
+            _ => "error",
+        });
+        result
     }
 
     async fn run_parallel_batch(
@@ -1334,3 +1516,7 @@ mod parallel_tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "background_tests.rs"]
+mod background_tests;

@@ -32,6 +32,8 @@ replayed through the legacy transport. Approval, target revalidation and shell/r
 
 Use `start_system_trace → stop_system_trace → analyze_system_trace`. Starting and stopping require mutation approval; analysis is read-only. No Perfetto installation or automatic elevation occurs. Capture requires `/system/bin/perfetto` and a service offering `linux.ftrace`, normally under Android shell/root. Supporting nl2sh on API 26+ does not guarantee Perfetto availability. Capture is not exposed to an ordinary Termux application UID.
 
+After `start_system_trace` succeeds inside an Agent task, the runtime registers task-owned background analysis, releases the Android UI lease while waiting, and invokes `analyze_system_trace` through normal preparation and security checks at the automatic stop deadline (including a five-second finalization allowance). The model receives the actual result before producing its conclusion. TUI/Web show a background wait with automatic continuation. Waiting counts against the task time limit; follow-up tools count against the tool budget, and model step budgets are not reset. Cancellation, budget exhaustion or process exit cancels the continuation. The bounded Perfetto capture still stops at its own duration/file limit, and its trace is retained. Cancellation does not automatically approve a stop operation, and restart does not replay old tasks. Direct tool invocation has no Agent continuation owner, returns `background_analysis_scheduled: false`, and requires explicit analysis. If recording is still active at the deadline or analysis fails, the failure is returned to the model instead of claiming completed analysis.
+
 Example start arguments (reproduce the slowdown on the device before stopping):
 
 ```json

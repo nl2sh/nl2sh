@@ -58,6 +58,17 @@ fn identifier() -> String {
 }
 
 impl AuditContext {
+    pub(crate) fn background_event(&self, id: &str, tool: &str, status: &'static str) {
+        if let Some(log) = &self.log {
+            let metadata = serde_json::json!({
+                "task_id": self.task_id, "session_id": self.session_id,
+                "source": self.source, "continuation_id": id, "tool": tool,
+                "status": status,
+            });
+            let _ = log.record("background_continuation", &metadata.to_string());
+        }
+    }
+
     pub(crate) fn fork_current() -> Option<Self> {
         CONTEXT
             .try_with(|context| Self {

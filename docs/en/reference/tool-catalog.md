@@ -2794,7 +2794,7 @@ Search recursively for literal text in bounded UTF-8 files. Paths are not confin
 
 ## `start_system_trace`
 
-After confirmation, start a bounded device Perfetto system trace (1–120s, 1–32 MiB buffer, 64 MiB file limit). Returns a managed trace_id for stop_system_trace and analyze_system_trace. Requires available linux.ftrace; optional FrameTimeline/process metadata are capability-probed. Does not elevate or install Perfetto.
+After confirmation, start a bounded device Perfetto system trace (1–120s, 1–32 MiB buffer, 64 MiB file limit). Returns a managed trace_id. In an Agent task, registers bounded background analysis after auto-stop; direct invocation requires explicit analysis. Requires available linux.ftrace; optional FrameTimeline/process metadata are capability-probed. Does not elevate or install Perfetto.
 
 | Descriptor | Value |
 | --- | --- |

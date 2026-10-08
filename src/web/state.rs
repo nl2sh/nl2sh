@@ -123,7 +123,7 @@ pub(in crate::web) fn task_metrics(inner: &SessionState) -> WebTaskMetrics {
         match inner.activity {
             "thinking" => task.model_ms = task.model_ms.saturating_add(elapsed),
             "tool" => task.tool_ms = task.tool_ms.saturating_add(elapsed),
-            "waiting" => task.waiting_ms = task.waiting_ms.saturating_add(elapsed),
+            "waiting" | "background" => task.waiting_ms = task.waiting_ms.saturating_add(elapsed),
             _ => {}
         }
     }

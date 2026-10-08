@@ -176,10 +176,12 @@ async fn run_inner(
         executor: &executor,
         confirmer: &confirmer,
     };
+    let (activity_tx, mut activity_rx) = mpsc::unbounded_channel();
     let stream_sink = SessionTextSink {
         history: history.clone(),
         max_bytes: config.ui_live_output_max_bytes,
         needs_full_redraw: Arc::new(AtomicBool::new(false)),
+        activity_tx,
     };
     let stream_redraw = stream_sink.needs_full_redraw.clone();
     let mut terminal = TerminalGuard::enter()?;
@@ -261,6 +263,29 @@ async fn run_inner(
     let mut tailcat_keys = super::events::FragmentedArrowFilter::default();
 
     loop {
+        while let Ok((phase, detail)) = activity_rx.try_recv() {
+            if active.is_some()
+                && confirmation.is_none()
+                && question_prompt.is_none()
+                && !task_cancel.as_ref().is_some_and(|cancel| *cancel.borrow())
+            {
+                app.status = match phase {
+                    "background" => localized_status(
+                        config.ui_language,
+                        "等待后台任务，完成后自动继续",
+                        "waiting for background task; will resume automatically",
+                    ),
+                    "tool" => localized_status(config.ui_language, "执行工具", "executing tool"),
+                    "thinking" => {
+                        localized_status(config.ui_language, "模型思考中", "model thinking")
+                    }
+                    _ => continue,
+                };
+                if let Some(detail) = detail {
+                    app.status.push_str(&format!(" · {detail}"));
+                }
+            }
+        }
         if tailcat_wizard.is_some() && tailcat_keys.take_expired_escape(Duration::from_millis(35)) {
             if let Some(wizard) = tailcat_wizard.as_mut() {
                 if wizard.key(KeyCode::Esc, config)? {
@@ -2877,9 +2902,13 @@ struct SessionTextSink {
     history: Arc<Mutex<Vec<String>>>,
     max_bytes: usize,
     needs_full_redraw: Arc<AtomicBool>,
+    activity_tx: mpsc::UnboundedSender<(&'static str, Option<String>)>,
 }
 
 impl TextDeltaSink for SessionTextSink {
+    fn agent_activity(&self, activity: &'static str, detail: Option<&str>) {
+        let _ = self.activity_tx.send((activity, detail.map(str::to_owned)));
+    }
     fn begin(&self) {
         let _ = begin_llm_stream(&self.history);
     }

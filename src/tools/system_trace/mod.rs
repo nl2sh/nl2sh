@@ -103,7 +103,7 @@ macro_rules! metadata {
         };
     };
 }
-metadata!(START, "start_system_trace", "After confirmation, start a bounded device Perfetto system trace (1–120s, 1–32 MiB buffer, 64 MiB file limit). Returns a managed trace_id for stop_system_trace and analyze_system_trace. Requires available linux.ftrace; optional FrameTimeline/process metadata are capability-probed. Does not elevate or install Perfetto.", StartArgs, Mutating, AndroidShell, Sequential);
+metadata!(START, "start_system_trace", "After confirmation, start a bounded device Perfetto system trace (1–120s, 1–32 MiB buffer, 64 MiB file limit). Returns a managed trace_id. In an Agent task, registers bounded background analysis after auto-stop; direct invocation requires explicit analysis. Requires available linux.ftrace; optional FrameTimeline/process metadata are capability-probed. Does not elevate or install Perfetto.", StartArgs, Mutating, AndroidShell, Sequential);
 metadata!(STOP, "stop_system_trace", "After confirmation, stop only the managed Perfetto session identified by trace_id and finalize its trace file. Safe across bridge processes; expired captures are recognized. Never kills an arbitrary PID or another tracing session.", StopArgs, Mutating, AndroidShell, Sequential);
 metadata!(ANALYZE, "analyze_system_trace", "Read a bounded raw Perfetto protobuf file in Rust: runnable main-thread/RenderThread delays, long render/Choreographer slices, legacy FrameTimeline jank, Binder send-to-receive latency, CPU competition and wakeup heuristics. Explicit coverage and limitations; missing events are not proof of health. No external trace processor required.", AnalyzeArgs, ReadOnly, Any, Parallel);
 
@@ -413,7 +413,7 @@ async fn prepare_start(ctx: &ToolContext<'_>, args: StartArgs) -> Result<Prepare
 }
 #[async_trait]
 impl PreparedExecution for StartOperation {
-    async fn execute(self: Box<Self>, _: &mut ToolContext<'_>) -> Result<ToolOutput> {
+    async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput> {
         // Re-probe after approval; fail instead of silently changing the approved data sources.
         if sources().await? != self.sources {
             bail!("Perfetto capabilities changed after confirmation; request a new capture")
@@ -480,9 +480,15 @@ impl PreparedExecution for StartOperation {
         ];
         let result = perfetto_io(&args, Some(config)).await;
         match result {
-            Ok((0, _, _)) => Ok(ToolOutput::success(serde_json::to_string(
-                &json!({"status":"recording", "trace_id":state.id,"path":trace_path,"auto_stop_deadline_unix_secs":state.deadline_unix_secs,"sources":state.sources,"next":"stop_system_trace then analyze_system_trace; short captures may auto-stop first"}),
-            )?)),
+            Ok((0, _, _)) => {
+                let (scheduled, scheduling_error) = match schedule_analysis(ctx, &state) {
+                    Ok(scheduled) => (scheduled, None),
+                    Err(error) => (false, Some(format!("{error:#}"))),
+                };
+                Ok(ToolOutput::success(serde_json::to_string(
+                    &json!({"status":"recording", "trace_id":state.id,"path":trace_path,"auto_stop_deadline_unix_secs":state.deadline_unix_secs,"sources":state.sources,"background_analysis_scheduled":scheduled,"background_analysis_error":scheduling_error,"next":if scheduled {"Task runtime will wait until the deadline and invoke analyze_system_trace through the normal tool boundary before requesting the final model answer. Cancellation or process exit cancels continuation, not the bounded Perfetto capture."} else {"Background analysis is not scheduled: after auto-stop, invoke analyze_system_trace explicitly; stop_system_trace requires approval if needed."}}),
+                )?))
+            }
             other => {
                 // A detach acknowledgement can fail after service start. Attempt only this key.
                 let _ = perfetto(&[format!("--attach={}", state.id), "--stop".into()]).await;
@@ -496,6 +502,20 @@ impl PreparedExecution for StartOperation {
             }
         }
     }
+}
+
+fn schedule_analysis(ctx: &mut ToolContext<'_>, state: &Session) -> Result<bool> {
+    let Some(runtime) = ctx.runtime.as_deref_mut() else {
+        return Ok(false);
+    };
+    runtime.background.schedule(
+        Duration::from_secs(state.deadline_unix_secs.saturating_sub(now()?)),
+        crate::llm::ToolCall {
+            id: String::new(),
+            name: "analyze_system_trace".into(),
+            arguments: json!({"trace_id":state.id,"package":state.package}),
+        },
+    )
 }
 struct StopOperation {
     root: PathBuf,
@@ -664,6 +684,54 @@ impl PreparedExecution for AnalyzeOperation {
 mod tests {
     use super::super::{Tool, ToolRegistry};
     use super::*;
+    #[test]
+    fn trace_schedules_exact_analysis_only_for_an_agent_owner() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let files = crate::tools::file::domain::FileToolExecutor::new(temp.path())?;
+        let mut runtime = crate::agent::TaskRuntime::new();
+        let state = Session {
+            id: "trace-abcdefghijklmnop".into(),
+            deadline_unix_secs: now()? + 35,
+            package: Some("com.example.app".into()),
+            sources: vec![],
+        };
+        let mut ctx = ToolContext {
+            file_tools: &files,
+            ima: None,
+            config: None,
+            executor: None,
+            llm: None,
+            confirmer: None,
+            audio_tools: None,
+            runtime: Some(&mut runtime),
+            audio_cache: None,
+        };
+        assert!(!schedule_analysis(&mut ctx, &state)?);
+        ctx.runtime
+            .as_deref_mut()
+            .context("runtime")?
+            .background
+            .enable();
+        assert!(schedule_analysis(&mut ctx, &state)?);
+        let job = ctx
+            .runtime
+            .as_deref_mut()
+            .context("runtime")?
+            .background
+            .pop()
+            .context("job")?;
+        assert_eq!(job.call.name, "analyze_system_trace");
+        assert_eq!(
+            job.call.arguments,
+            json!({"trace_id":state.id,"package":state.package})
+        );
+        assert!(
+            job.ready_at
+                .saturating_duration_since(tokio::time::Instant::now())
+                <= Duration::from_secs(35)
+        );
+        Ok(())
+    }
     #[test]
     fn descriptors_require_confirmation_and_restrict_input() -> Result<()> {
         let registry = ToolRegistry::builtin(&[]);

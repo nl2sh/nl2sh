@@ -2794,7 +2794,7 @@ DeviceIdle 与白名单证据。
 
 ## `start_system_trace`
 
-确认后用设备可用 Perfetto 启动有界系统采集，返回 trace_id；不安装或自动提权。
+确认后用设备可用 Perfetto 启动有界系统采集，返回 trace_id；Agent 任务登记到期后台分析，直接调用需显式分析；不安装或自动提权。
 
 | 描述项 | 值 |
 | --- | --- |

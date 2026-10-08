@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add a bounded task-owned Agent continuation queue: system traces trigger read-only analysis at their deadline before the final model response; TUI/Web display the wait, cancellation and budgets stop continuation, security checks and audits remain enforced, and restart does not replay jobs.
+
 - Add `start_system_trace`, `stop_system_trace`, and `analyze_system_trace`: approved bounded device Perfetto capture/stop, with read-only Rust decoding of supported protobuf scheduling, rendering, frame, Binder and wakeup events and explicit evidence coverage/limitations.
 
 ## [1.1.0] - 2026-10-08

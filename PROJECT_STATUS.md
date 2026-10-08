@@ -4,6 +4,9 @@ Last Updated: 2026-10-08
 
 ## Recent Changes
 
+- Agent 有界后台续跑：成功工具通过类型化接口登记具名结构化续跑动作，Runner 在到期后经同一 Registry/安全确认链执行，再请求模型总结真实结果。系统 Trace 接入自动分析，直接调用显式返回未调度；TUI/Web 展示等待，后台时长计入任务预算，取消/退出撤销队列并保留有界采集证据，进程重启不重放。生命周期审计关联任务/会话，不改变 Root、Android PTY 或终端恢复路径。
+  验证：`cargo fmt --all -- --check`、`cargo check`、7 项新增调度/续跑/Trace 注册回归通过；Rust 库和集成套件按权限要求分组通过（普通 UID 402 项，需 root 的 Android UI/ADB 组 29 项，包含与普通组重复的用例）。33 项前端测试及 Cargo 内嵌前端生产构建、Android API 26 AArch64 `cargo check`、双语派生参考、严格 MkDocs 构建和生成站点检查通过。
+
 - 系统性能 Trace：新增 `start_system_trace → stop_system_trace → analyze_system_trace`。开始/停止维持修改确认，固定二进制 Perfetto 配置按设备能力选择 ftrace、进程元数据和 FrameTimeline；服务托管随机会话支持跨 bridge 进程停止、自动时限与文件上限。Android SELinux 路径使用系统 Perfetto trace 目录和 `0600` 文件，配置/会话元数据私有保存；不自动提权、不改 PTY。Rust 有界读取标准 protobuf 子集，报告 runnable 主线程/RenderThread 等待、长渲染/Choreographer 切片、旧格式 FrameTimeline 标志、Binder 投递延迟与 CPU/唤醒启发式，并明确数据缺失、序列/丢失标志、未配对区间和非根因结论。
 
 - v1.1.0 正式发布：Bridge/JADX v0.2.0 已发布，生产 APK/GPG 签名流程及 ARM64/ARMv7/x86_64 原生与 Termux 构建、统一压缩包、签名运行时清单和 APT 快照全部成功，GitHub Release 提供 24 个资产。TUR 配方同步到 v1.1.0 与实际标签源码 SHA-256，包管理器构建禁用原生自更新；发布脚本 15 项测试及配方语法/源码摘要校验通过。

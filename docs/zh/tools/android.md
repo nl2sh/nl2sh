@@ -31,6 +31,8 @@ v2 动作失败或回复 ID 不匹配时不会回退重放。原有审批、目�
 
 按 `start_system_trace → stop_system_trace → analyze_system_trace` 使用。开始和停止都需要修改确认，分析只读；不安装 Perfetto、不自动提权。采集要求设备 `/system/bin/perfetto` 和服务中的 `linux.ftrace` 可用，通常需要 Android shell/root；API 26+ 可运行 nl2sh 不代表设备一定提供 Perfetto。普通 Termux 应用 UID 不提供采集入口。
 
+Agent 内调用 `start_system_trace` 成功后，运行时会登记绑定当前任务的后台分析，释放等待期间的 Android UI 租约，并在自动结束截止时间（包含 5 秒收尾余量）到达后通过正常工具准备与安全链调用 `analyze_system_trace`，随后请求模型给出结论。TUI/Web 显示“等待后台任务，完成后自动继续”；后台等待计入任务时限，续跑工具计入工具预算，模型步骤预算不重置。取消、预算耗尽或进程退出会撤销续跑；已启动的 Perfetto 采集继续按自身时限/文件上限停止，Trace 文件保留。运行时不会因取消自动批准停止操作，也不会在重启后重放旧任务。直接工具调用没有 Agent 续跑所有者，返回 `background_analysis_scheduled: false`，必须显式调用分析。若到期检查仍在采集或分析失败，结果会明确反馈给模型，不宣称已完成分析。
+
 示例参数（开始后在设备上复现卡顿，再停止）：
 
 ```json

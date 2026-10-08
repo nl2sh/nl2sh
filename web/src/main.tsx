@@ -60,7 +60,7 @@ function SessionStatus({state,quick,advanced}:{state?:Snapshot;quick?:QuickSetti
   const[retryError,setRetryError]=useState('');
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer)},[]);
   const activity=state?.pending?'waiting':state?.busy?state.activity:'idle';
-  const label=activity==='waiting'?(state?.pending?.kind==='questions'?'等待补充信息':'等待审批'):activity==='cancelling'?'正在取消':activity==='tool'?'执行工具':activity==='thinking'?'模型思考中':state?.busy?'准备任务':'空闲';
+  const label=activity==='waiting'?(state?.pending?.kind==='questions'?'等待补充信息':'等待审批'):activity==='background'?'等待后台任务，完成后自动继续':activity==='cancelling'?'正在取消':activity==='tool'?'执行工具':activity==='thinking'?'模型思考中':state?.busy?'准备任务':'空闲';
   const detail=activity==='tool'&&state?.activity_detail?` · ${state.activity_detail}`:'';
   const seconds=Math.max(0,Math.floor(((state?.activity_elapsed_ms||0)+now-(state?.received_at_ms||now))/1000));
   const duration=`${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`;

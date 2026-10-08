@@ -41,6 +41,7 @@ pub struct TaskStats {
 }
 
 pub(crate) struct TaskRuntime {
+    pub(crate) background: super::background::BackgroundQueue,
     ui_lease: Option<crate::runtime::resources::UiLease>,
     started: Instant,
     confirmation_time: Duration,
@@ -53,6 +54,7 @@ pub(crate) struct TaskRuntime {
 impl TaskRuntime {
     pub(crate) fn new() -> Self {
         Self {
+            background: super::background::BackgroundQueue::default(),
             ui_lease: None,
             started: Instant::now(),
             confirmation_time: Duration::ZERO,
@@ -79,6 +81,10 @@ impl TaskRuntime {
 
     pub(crate) fn holds_ui_lease(&self) -> bool {
         self.ui_lease.is_some()
+    }
+
+    pub(crate) fn release_ui_lease(&mut self) {
+        self.ui_lease = None;
     }
 
     pub(crate) fn active_time(&self) -> Duration {

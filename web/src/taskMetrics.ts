@@ -14,6 +14,6 @@ export function liveTaskMetrics(state:Snapshot,now:number):TaskMetrics|undefined
   task.total_ms+=elapsed;
   if(state.activity==='thinking')task.model_ms+=elapsed;
   else if(state.activity==='tool')task.tool_ms+=elapsed;
-  else if(state.activity==='waiting')task.waiting_ms+=elapsed;
+  else if((state.activity==='waiting'||state.activity==='background'))task.waiting_ms+=elapsed;
   return task;
 }

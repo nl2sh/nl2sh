@@ -4,7 +4,7 @@ import {liveTaskMetrics,formatDuration} from '../src/taskMetrics.ts';
 
 const task={timing_available:true,steps:3,tool_calls:4,total_ms:10000,model_ms:5000,tool_ms:3000,waiting_ms:1000};
 test('running timing advances only the active phase and preserves the source snapshot',()=>{
-  for(const [activity,field] of [['thinking','model_ms'],['tool','tool_ms'],['waiting','waiting_ms']]){
+  for(const [activity,field] of [['thinking','model_ms'],['tool','tool_ms'],['waiting','waiting_ms'],['background','waiting_ms']]){
     const snapshot={task,busy:true,activity,received_at_ms:1000};
     const result=liveTaskMetrics(snapshot,3500);
     assert.equal(result.total_ms,12500);

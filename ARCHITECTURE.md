@@ -280,3 +280,7 @@ Web `/api/tailcat` 与 TUI `/tailcat` 共用 `tools::tailcat::quick` 的进程�
 ## 系统 Trace 工具
 
 `src/tools/system_trace` 提供结构化开始/停止（Mutating）与只读分析。固定二进制 Perfetto 配置由设备 capability query 选择 ftrace、可用进程元数据及旧格式 FrameTimeline；有界服务托管 detached 会话用随机 ID 跨进程停止，不执行模型配置或任意 PID 信号。私有状态与文件、跨进程锁、自动时限/文件上限及保留数量约束生命周期；不改 PTY/终端路径、不自动提权。Rust wire reader 只解码明确字段，限制文件/packet/事件/线程，跨 CPU 排序并在丢失处清空配对。分析输出区分 runnable 调度等待、长渲染/Choreographer 切片、FrameTimeline 标志、Binder 投递延迟与 CPU/唤醒启发式，未知编码和缺失证据显式声明，不把睡眠或不完整证据当作健康/根因结论。
+
+## 有界后台续跑
+
+`src/agent/background` 提供任务绑定的具名结构化工具续跑队列，最多 16 个待决项、单次等待最多 125 秒；只有成功执行的内置工具通过类型化接口登记，模型回复或工具 JSON 文字不能生成调度权限。使用 Tokio 单调时钟，Runner 在下一模型请求前等待到期并通过 Registry、资源获取、prepare、统一风险/确认边界执行续跑，真实结果组成独立 Tool Round。等待期间释放 Android UI Lease，后续 UI 动作重新获取并复核状态；等待计入活跃时限，续跑计入工具预算，步骤/审批/配置快照不重置。等待可取消，队列 RAII 在任务退出时撤销，并记录 scheduled/waiting/resuming/completed/failed/cancelled 与任务/会话关联的元数据，不写参数。进程退出后不恢复调度，普通会话恢复也不重放。当前仅系统 Trace 注册到期只读分析；直接 invoke 的队列默认禁用。该机制是进程内有界延迟续跑，不是跨重启任务调度器，也不把定时到期视为后台操作成功证据。
