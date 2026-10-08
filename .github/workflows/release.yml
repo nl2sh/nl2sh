@@ -10,7 +10,7 @@ on:
       tag:
         description: "Tag for the draft release (must match Cargo.toml)"
         required: false
-        default: "v1.0.6"
+        default: "v1.1.0"
 
 permissions:
   contents: write

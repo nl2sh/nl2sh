@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-08
+
+- Verify GPG signatures, sizes, and checksums for runtime manifests and assets using a pinned trust root and embedded extension policy; Helper management supports healthy reconnects, update ownership, rollback, and extension installation.
+- Unify tool descriptors, environment filtering, resource locks, and execution audit; constrain diagnostic queries and preserve execution identity.
+- Add eight bounded static APK/DEX tools for methods, strings, references, manifests, permissions, exported components, and native libraries without JADX.
+- Separate Web API responsibilities and show installation ownership, the correct update entry point, and verified extension versions in device information.
+
 - Tailcat shortcut confirmation/retry stops and reaps the old managed listener before sharing selected ports. Filter fragmented arrow-key Escape sequences in TUI to prevent accidental dismissal; keep success and failure dialogs open.
 - Simplify Web/TUI Tailcat guidance; detect the ADB connection port with an editable 5555 fallback, using a Web input or TUI P key, and share selected existing services through the port-sharing tool.
 - Added a Tailcat icon/label at the top right of Web and `/tailcat` in TUI. The model-free dialog selects Web/ADB by default, shows actual download and execution status, stays open with copyable peer commands, and executes directly after port selection without further safety prompts, retaining existing tool verification.
@@ -59,7 +66,7 @@
 
 ### Changed
 
-- Move Android Bridge and JADX helper source into independent `nl2sh/android-bridge` and `nl2sh/jadx-helper` repositories with their own Android builds, CI, tagged releases, and bilingual docs. Main releases no longer rebuild or republish the helper; its runtime URL and digest stay pinned to historical `v1.0.4`.
+- Move Android Bridge and JADX helper source into independent `nl2sh/android-bridge` and `nl2sh/jadx-helper` repositories with their own Android builds, CI, tagged releases, and bilingual docs. Main releases no longer build the helper from source; current releases select and bundle component assets through the signed compatibility manifest.
 
 - Record credential-free diagnostics for Web Quick Start model discovery, including a request ID, provider host, duration and upstream error status.
 - Replace the Web high-risk `CONFIRM` text field with two explicit approval clicks, enforced per pending request by the server; color the approval button with the warning palette.
