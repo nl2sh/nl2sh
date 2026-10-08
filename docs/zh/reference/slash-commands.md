@@ -10,6 +10,7 @@
 | `/config`、`/setting` | 统一设置面板 |
 | `/permission` | 查看运行期普通修改许可 |
 | `/permission allow`、`/permission ask` | 开启 / 关闭该内存许可 |
+| `/tailcat` | 无需模型的 Web / ADB 共享弹窗，显示进度与可复制对端命令 |
 | `/balance` | 查询支持 Provider 的只读余额，内存保存 |
 | `/sessions` | 最近会话列表 |
 | `/sessions resume NAME` | 恢复会话 |

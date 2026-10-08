@@ -508,3 +508,80 @@ async fn wait_for_text(master: &mut File, needle: &str, limit: Duration) -> anyh
         sleep(Duration::from_millis(20)).await;
     }
 }
+
+#[tokio::test]
+async fn tailcat_dialog_opens_without_provider_and_closes_back_to_tui() -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "enable_pty=false\nshow_buddha_ascii_art=false\nshow_train_ascii_art=false\n",
+    )?;
+    let mut process = spawn_tui(&config)?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+    process.master.write_all(b"/tailcat\r")?;
+    wait_for_text(&mut process.master, "No LLM", Duration::from_secs(3)).await?;
+    process.master.write_all(&[0x1b])?;
+    sleep(Duration::from_millis(100)).await;
+    assert!(process.child.try_wait()?.is_none());
+    process.master.write_all(&[0x11])?;
+    assert!(timeout(Duration::from_secs(3), process.child.wait())
+        .await??
+        .success());
+    let log = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
+    assert!(log.contains("local_command"));
+    assert!(log.contains("/tailcat"));
+    assert!(!log.contains("agent_user_input"));
+    assert!(!log.contains("llm_request"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn tailcat_user_selected_ports_share_after_one_enter_without_model_or_safety_prompts(
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use base64::Engine;
+    use std::os::unix::fs::PermissionsExt;
+    let server = MockServer::start().await;
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    let binary = directory.path().join("tailcat");
+    std::fs::write(&binary, "#!/bin/sh\nif [ \"$1\" = version ]; then printf 'tailcat v0.7.0\\n'; exit 0; fi\nprintf 'tc0123456789abcdef\\n'\nexec sleep 30\n")?;
+    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))?;
+    std::fs::write(&config, format!("api_key=''\nendpoint='{}/v1'\ntailcat_binary_path={:?}\nenable_pty=false\nshow_buddha_ascii_art=false\nshow_train_ascii_art=false\n", server.uri(), binary))?;
+    let mut process = spawn_tui(&config)?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
+    process.master.write_all(b"/tailcat\r")?;
+    wait_for_text(&mut process.master, "No LLM", Duration::from_secs(3)).await?;
+    // Deselect ADB and confirm the Web port once. No more input is sent until completion.
+    process.master.write_all(b"a\r")?;
+    let captured =
+        wait_for_text_capture(&mut process.master, "Completed", Duration::from_secs(5)).await?;
+    // Copy the result to inspect its exact bytes, independent of ratatui ANSI diffs.
+    process.master.write_all(b"C")?;
+    let clipboard =
+        wait_for_text_capture(&mut process.master, "\x07", Duration::from_secs(3)).await?;
+    let encoded = clipboard
+        .split("\x1b]52;c;")
+        .nth(1)
+        .and_then(|s| s.split('\x07').next())
+        .context("missing clipboard sequence")?;
+    let command = String::from_utf8(base64::engine::general_purpose::STANDARD.decode(encoded)?)?;
+    assert!(command.starts_with("tailcat forward tc0123456789abcdef 19999:"));
+    assert!(!captured.contains("Approve"));
+    assert!(!captured.contains("Review"));
+    assert!(server
+        .received_requests()
+        .await
+        .is_some_and(|requests| requests.is_empty()));
+    assert!(process.child.try_wait()?.is_none());
+    process.master.write_all(&[0x1b])?;
+    sleep(Duration::from_millis(100)).await;
+    process.master.write_all(&[0x11])?;
+    assert!(timeout(Duration::from_secs(3), process.child.wait())
+        .await??
+        .success());
+    let log = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
+    assert!(!log.contains("llm_request"));
+    Ok(())
+}

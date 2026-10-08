@@ -10,6 +10,7 @@ use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers, MouseEventKin
 use std::time::{Duration, Instant};
 const LOCAL_COMMANDS: &[&str] = &[
     "/balance",
+    "/tailcat",
     "/clear",
     "/config",
     "/exit",

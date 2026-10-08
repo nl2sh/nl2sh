@@ -58,3 +58,7 @@ adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service st
 `/api/info` 还返回 `update_ownership`：独立安装可自行更新，Termux APT 使用 `pkg upgrade nl2sh`，Helper 安装使用助手的检查更新动作。主程序对相邻 Helper 归属记录进行有界读取及程序摘要复核；损坏或不匹配时阻止自更新并给出检查提示，避免同时使用两个更新来源。
 
 工具面板从运行时目录派生可选组，将保存的启用开关与已发现的可用性分开展示。当前环境不可用的工具仍可配置，但禁用示例提问按钮；开启不获取能力，也不批准执行。
+
+## Tailcat 快捷共享
+
+点击右上角 Tailcat 图标和文字打开弹窗。默认选择 Web 实际端口与 ADB 配对/连接端口，点击确定后直接安装并共享，不再弹出安全确认；显示下载及执行状态，完成后保留窗口和可复制对端命令。全程无需 LLM，复用现有工具的校验和执行逻辑。详见 [Tailcat](../tools/tailcat.md#tailcat-quick)。

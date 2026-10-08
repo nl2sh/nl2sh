@@ -272,3 +272,7 @@ Every explicitly registered adapter exposes one ToolDescriptor with typed schema
 ## Web 后端职责
 
 `src/web/` 按 server、auth、state、agent、interaction、事件流与 routes 拆分；routes 分会话、配置、文件、工具、记忆、运行信息和终端。公开 `web_ui` 入口仅转发兼容 API，HTTP/SSE/WebSocket 路径、请求大小、CSP、Host/Origin 校验和原安全执行链保持既有行为。Web 设备概览读取已签名推荐版本与更新归属，不执行安装或推断 Helper 当前版本。
+
+## Tailcat 本地快捷流程
+
+Web `/api/tailcat` 与 TUI `/tailcat` 共用 `tools::tailcat::quick` 的进程内有界状态与单任务互斥，直接调用 Tool Runtime，无 LLM 或模型历史写入。任务配置快照临时启用所需具名工具；准备、安全评估、权限检查、资源锁、执行和端口/配对信息复核复用原工具。用户在快捷弹窗确定端口即授权本次固定操作，私有 `UserInitiatedConfirmer` 直接批准，不再产生安全确认或二次确认弹窗；只允许检查、安装、端口共享与无线 ADB 四种快捷工具，不提供通用调用或全局放行开关。模型、bridge 和其他工具调用不使用该确认器，原审批规则保持。下载字节通过 task-local scope 报告，普通 Agent 安装不写入弹窗状态。Web 状态轮询与 TUI frame 读取同一快照；成功结果不自动关闭，复制用浏览器现有 fallback 或 TUI OSC 52。窗口关闭不停止托管监听器。

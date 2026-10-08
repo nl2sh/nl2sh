@@ -5,6 +5,7 @@ mod input;
 mod markdown;
 mod output;
 mod session;
+mod tailcat;
 mod terminal;
 mod theme;
 mod ui;

@@ -257,6 +257,7 @@ async fn run_inner(
     let windows_scroll = super::terminal::windows_scroll_fallback();
     let mut windows_scroll_filter = super::events::WindowsScrollFilter::default();
     let mut last_conversation_scroll = app.conversation_scroll;
+    let mut tailcat_wizard: Option<super::tailcat::Wizard> = None;
 
     loop {
         if settings_editor.is_some()
@@ -314,6 +315,7 @@ async fn run_inner(
                 .as_ref()
                 .map(ConfirmationUi::view)
                 .or_else(|| question_prompt.as_ref().map(QuestionUi::view))
+                .or_else(|| tailcat_wizard.as_ref().map(super::tailcat::Wizard::view))
                 .or_else(|| session_picker.as_ref().map(SessionPicker::view))
                 .or_else(|| update_prompt.as_ref().map(UpdatePrompt::view))
                 .or_else(|| {
@@ -806,6 +808,12 @@ async fn run_inner(
                 }
                 continue;
             }
+            if let Some(wizard) = tailcat_wizard.as_mut() {
+                if wizard.key(key.code, config)? {
+                    tailcat_wizard = None;
+                }
+                continue;
+            }
             if active.is_some()
                 && key.code == KeyCode::Char('c')
                 && key.modifiers == KeyModifiers::CONTROL
@@ -1096,6 +1104,11 @@ async fn run_inner(
                                     );
                                 }
                             }
+                            continue;
+                        }
+                        "/tailcat" => {
+                            log.record("local_command", "/tailcat")?;
+                            tailcat_wizard = Some(super::tailcat::Wizard::new());
                             continue;
                         }
                         "/balance" => {

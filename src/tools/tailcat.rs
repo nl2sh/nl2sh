@@ -1,6 +1,7 @@
 //! Opt-in Tailcat operations with argv-only execution and managed listeners.
 
 mod adb_pair;
+pub mod quick;
 
 use super::{
     definition, parse_args, PreparedExecution, PreparedToolCall, Tool, ToolCategory, ToolContext,
@@ -321,6 +322,8 @@ async fn download_release(client: &reqwest::Client, asset: ReleaseAsset) -> Resu
     {
         bail!("Tailcat release archive is too large")
     }
+    let total = response.content_length();
+    quick::progress(0, total);
     let mut archive = Vec::new();
     while let Some(chunk) = response
         .chunk()
@@ -331,6 +334,7 @@ async fn download_release(client: &reqwest::Client, asset: ReleaseAsset) -> Resu
             bail!("Tailcat release archive is too large")
         }
         archive.extend_from_slice(&chunk);
+        quick::progress(archive.len() as u64, total);
     }
     Ok(archive)
 }
@@ -422,12 +426,15 @@ async fn install_release(
     asset: ReleaseAsset,
     target: &Path,
 ) -> Result<String> {
+    quick::phase("正在下载官方 Tailcat / Downloading official Tailcat");
     let archive = download_release(client, asset).await?;
+    quick::phase("校验 SHA-256 和架构 / Verifying SHA-256 and architecture");
     let target = target.to_path_buf();
     let stage_target = target.clone();
     let staged = tokio::task::spawn_blocking(move || stage_binary(archive, asset, &stage_target))
         .await
         .context("Tailcat installation worker failed")??;
+    quick::phase("验证版本并安装 / Checking version and installing");
     let staged_path: &Path = staged.as_ref();
     let output = timeout(
         Duration::from_secs(8),

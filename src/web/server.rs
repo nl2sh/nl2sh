@@ -227,6 +227,7 @@ pub(in crate::web) fn router(state: Arc<Shared>) -> Router {
         .route("/api/models", get(get_models).post(get_draft_models))
         .route("/api/model-check", post(check_model))
         .route("/api/device-overview", get(get_device_overview))
+        .route("/api/tailcat", get(get_tailcat).post(start_tailcat))
         .route("/api/tools", get(get_tools))
         .route("/api/tools/toggle", post(toggle_tool))
         .route("/api/apps", get(get_apps))

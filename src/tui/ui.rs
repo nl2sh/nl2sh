@@ -576,6 +576,8 @@ fn render_command_menu(f: &mut Frame, app: &App, input_area: ratatui::layout::Re
         .enumerate()
         .map(|(index, command)| {
             let description = match (app.language, *command) {
+                (UiLanguage::ZhCn, "/tailcat") => "共享 Web / ADB 端口（无需模型）",
+                (UiLanguage::En, "/tailcat") => "Share Web / ADB ports without a model",
                 (UiLanguage::ZhCn, "/balance") => "查询 Provider 余额",
                 (UiLanguage::ZhCn, "/clear") => "清空当前会话",
                 (UiLanguage::ZhCn, "/config") => "重新配置模型服务",

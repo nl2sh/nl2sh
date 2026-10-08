@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added a Tailcat icon/label at the top right of Web and `/tailcat` in TUI. The model-free dialog selects Web/ADB by default, shows actual download and execution status, stays open with copyable peer commands, and executes directly after port selection without further safety prompts, retaining existing tool verification.
+
 - Service directory ownership errors report the path, UIDs and permissions, with recovery steps for shell/root transitions; cross-UID takeover remains forbidden.
 
 - Verify Helper installation ownership and checksum before native self-update; runtime information reports the correct update entry point.

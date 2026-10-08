@@ -13,3 +13,6 @@ mod sessions;
 pub(super) use sessions::*;
 mod terminal;
 pub(super) use terminal::*;
+
+mod tailcat;
+pub(super) use tailcat::*;

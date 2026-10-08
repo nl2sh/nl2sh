@@ -1,8 +1,12 @@
 # Project Status
 
-Last Updated: 2026-10-07
+Last Updated: 2026-10-08
 
 ## Recent Changes
+
+- Tailcat 快捷弹窗验证：`cargo fmt --all -- --check`、`cargo check --all-targets`、全量 `cargo test`、新增无 Provider TUI 伪终端测试与快捷操作直接授权/下载进度作用域测试通过；前端构建及 33 项测试、桌面/窄屏浏览器的真实 API 流程（使用测试 Tailcat 程序）、确定后直接共享、窗口保留、命令复制与重开通过；Android API 26 AArch64 `--no-default-features` 检查及双语参考/严格文档构建通过。 `cargo clippy --all-targets -- -D warnings` 受既有文档注释空行、大枚举、测试模块布局等告警阻断，新增快捷流程未产生 Clippy 告警。
+
+- Web/TUI 增加无需模型的 Tailcat 共享弹窗：右上角图标与文字、`/tailcat`、默认 Web/ADB 选择、实际下载字节与校验状态、完成后保留对端命令及复制入口；复用既有工具运行时，临时启用所需工具而不改变持久配置；用户确定端口后直接安装与共享，快捷入口不再弹出安全或二次确认，模型和通用工具审批保持。
 
 - 服务目录校验错误补充路径、当前/实际 UID、权限及切换身份恢复建议；保留跨 UID 拒绝，不自动改属主或接管服务。双语 ADB 排障说明补齐先由原 UID 停止、备份旧运行目录后重建的流程；新增 root 下的属主冲突回归，验证拒绝后目录属主与内容不变。公共参数、安全审批和 PTY 路径不变。
   验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`、`python3 scripts/check-docs.py`、`mkdocs build --strict` 与构建后 `python3 scripts/check-docs.py --site site` 通过；49 对双语页面及生成站点检查通过。x86_64 Android API 26 release 构建通过；ADB 设备验证 shell 目录停止与备份、root 私有目录重建，以及 `./android-build-run.sh --web-only` 返回 `ready`，随后验证服务正常停止。

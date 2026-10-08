@@ -10,6 +10,7 @@ Every TUI input starting with `/` after leading whitespace is local and excluded
 | `/config`, `/setting` | Unified settings |
 | `/permission` | Inspect process ordinary-mutation grants |
 | `/permission allow`, `/permission ask` | Enable / disable that memory-only grant |
+| `/tailcat` | Model-free Web / ADB dialog with progress and copyable peer commands |
 | `/balance` | Read supported provider balances, kept in memory |
 | `/sessions` | Recent sessions |
 | `/sessions resume NAME` | Restore |

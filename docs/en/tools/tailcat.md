@@ -18,6 +18,16 @@ For live testing set `NL2SH_TAILCAT_TEST_BINARY` and run `cargo test --test tail
 
 x86_64 devices use the pinned official static Linux amd64 archive with the same checksum, ELF architecture, and version verification. Devices advertising only 32-bit x86 remain outside the automatic installation list.
 
+## Model-free shortcut {#tailcat-quick}
+
+Click **Tailcat** with the cat icon at the top right of Web, or enter `/tailcat` in TUI, to open the sharing dialog. The actual Web listening port and ADB pairing/connection ports are selected by default; deselect either option as needed. Confirming the selection authorizes and starts installation and sharing for the selected ports, without further safety or double-confirmation dialogs. When Tailcat is missing, the wizard downloads the pinned official version and verifies it before installation; status messages show the source, checksum, and target path. It shows actual downloaded bytes and verification/installation status. Failed installation preserves the previous file; an existing executable that fails to run is not silently replaced.
+
+The shortcut enables only the required tools in its temporary configuration snapshot, without changing tool-group settings, calling an LLM, or saving results to model history. Confirming the selection authorizes this wizard's fixed operations; subsequent safety prompts are skipped here. Model and general tool calls retain their existing approval rules. Tool preparation, security assessment, permission checks, download verification, resource locks, and execution revalidation remain in use. ADB requires Android 11+ shell/root permissions and may enable wireless debugging or open Settings; follow device guidance and retry. Changed ports or pairing state stop sharing and require the user to start again. An existing managed listener is never automatically stopped or replaced.
+
+The dialog stays open after completion, showing peer `tailcat forward`, `adb pair`, and `adb connect` commands and the current pairing code. Web copy icons copy complete commands. In TUI, W/A toggle selections, Enter confirms, 1–4 copy individual commands, C copies all commands, PageUp/PageDown scroll, and Esc closes. Copy uses OSC 52 and requires host terminal support; otherwise select text with your terminal. R returns to port selection for a retry.
+
+Closing the dialog does not stop an installation or sharing operation already started, or disable wireless debugging; reopening shows the current result. Keep the device pairing dialog open and the peer `forward` process running. Run pairing with the displayed code in another terminal, then connect explicitly. Web-only sharing maps `19999:<actual device port>` on the peer; visit `http://127.0.0.1:19999/`. Web has no login, so share the address only with trusted peers. Install Tailcat separately on the peer; ADB commands also require Android SDK Platform Tools.
+
 ## Enable and call the tools
 
 Enable the group in configuration, then start a new task:
