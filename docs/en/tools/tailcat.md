@@ -22,11 +22,11 @@ x86_64 devices use the pinned official static Linux amd64 archive with the same 
 
 Click **Tailcat** at the top right of Web, or enter `/tailcat` in TUI. The actual Web port and ADB connection port are selected by default. ADB discovery falls back to **5555** when unavailable. Edit it directly in Web or press **P** in TUI. W/A toggle selections; Enter starts sharing.
 
-Confirmation directly installs and shares through existing tools, without an LLM or additional safety prompts. The dialog shows download progress, execution status, and peer commands, and stays open after completion. Use Web copy icons; in TUI, 1–2 copy individual commands and C copies all (requires OSC 52 terminal support), R returns to selection, and Esc closes.
+Confirmation directly installs and shares through existing tools, without an LLM or additional safety prompts. The dialog shows download progress, execution status, and peer commands, and stays open after success or failure until explicitly closed. Use Web copy icons; in TUI, 1–2 copy individual commands and C copies all (requires OSC 52 terminal support), R returns to selection, and Esc closes.
 
 Keep the peer's `tailcat forward` process running. Web maps to `http://127.0.0.1:19999/`; ADB maps to `127.0.0.1:13702`. The selected ADB service must already be enabled. Complete wireless ADB pairing separately when required. This shortcut does not open Settings or pairing dialogs.
 
-Closing does not stop downloads or sharing; reopen to view results. Share the address only with trusted peers. Installation still verifies the pinned version, checksum, and executable; existing managed listeners are not replaced. Temporary tool overrides do not change saved configuration. Model and general tool calls retain their approval rules.
+Closing does not stop downloads or sharing; reopen to view results. Share the address only with trusted peers. Installation still verifies the pinned version, checksum, and executable; confirmation or retry automatically stops this process's previous managed listener before sharing the selected ports; peers must run the new command. Temporary tool overrides do not change saved configuration. Model and general tool calls retain their approval rules.
 
 ## Enable and call the tools
 

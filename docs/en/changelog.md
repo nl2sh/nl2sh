@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Tailcat shortcut confirmation/retry stops and reaps the old managed listener before sharing selected ports. Filter fragmented arrow-key Escape sequences in TUI to prevent accidental dismissal; keep success and failure dialogs open.
 - Simplify Web/TUI Tailcat guidance; detect the ADB connection port with an editable 5555 fallback, using a Web input or TUI P key, and share selected existing services through the port-sharing tool.
 - Added a Tailcat icon/label at the top right of Web and `/tailcat` in TUI. The model-free dialog selects Web/ADB by default, shows actual download and execution status, stays open with copyable peer commands, and executes directly after port selection without further safety prompts, retaining existing tool verification.
 

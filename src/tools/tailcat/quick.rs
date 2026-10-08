@@ -66,7 +66,12 @@ pub(super) fn phase(status: &str) {
         update(|s| s.status = status.into());
     }
 }
-const QUICK_TOOLS: &[&str] = &["tailcat_check", "tailcat_install", "tailcat_serve"];
+const QUICK_TOOLS: &[&str] = &[
+    "tailcat_check",
+    "tailcat_install",
+    "tailcat_stop",
+    "tailcat_serve",
+];
 
 // Selecting ports and starting this local wizard authorizes its fixed operations.
 // This private confirmer is never passed to Agent, bridge, or general tool callers.
@@ -176,6 +181,9 @@ async fn run(cfg: &Config, web_port: Option<u16>, adb_port: Option<u16>) -> Resu
     call(cfg, "tailcat_check", json!({})).await?;
     let ports: Vec<_> = web_port.into_iter().chain(adb_port).collect();
     let port = ports.first().context("No ports selected")?;
+    // User confirmation authorizes replacing this process's managed listener.
+    // Stop is idempotent and waits for the old child before starting a new one.
+    call(cfg, "tailcat_stop", json!({})).await?;
     let output = call(
         cfg,
         "tailcat_serve",

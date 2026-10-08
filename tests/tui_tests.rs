@@ -568,6 +568,44 @@ async fn tailcat_user_selected_ports_share_after_one_enter_without_model_or_safe
         .context("missing clipboard sequence")?;
     let command = String::from_utf8(base64::engine::general_purpose::STANDARD.decode(encoded)?)?;
     assert!(command.starts_with("tailcat forward tc0123456789abcdef 19999:"));
+    // A fragmented arrow escape must not dismiss the completed dialog.
+    process.master.write_all(&[0x1b])?;
+    sleep(Duration::from_millis(5)).await;
+    process.master.write_all(b"[")?;
+    sleep(Duration::from_millis(5)).await;
+    process.master.write_all(b"A")?;
+    process.master.write_all(b"r")?;
+    wait_for_text(&mut process.master, "P:", Duration::from_secs(3)).await?;
+    process.master.write_all(b"\r")?;
+    let retried =
+        wait_for_text_capture(&mut process.master, "Completed", Duration::from_secs(5)).await?;
+    assert!(!retried.contains("stop it first"));
+    // Copy after retry proves the dialog still accepts input after completion.
+    sleep(Duration::from_millis(100)).await;
+    process.master.write_all(b"C")?;
+    let copied_again =
+        wait_for_text_capture(&mut process.master, "\x07", Duration::from_secs(3)).await?;
+    let encoded_again = copied_again
+        .split("\x1b]52;c;")
+        .nth(1)
+        .and_then(|s| s.split('\x07').next())
+        .context("missing retry clipboard sequence")?;
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD.decode(encoded_again)?,
+        command.as_bytes()
+    );
+
+    // Failure must leave the wizard open too, ready for another retry.
+    std::fs::write(
+        &binary,
+        "#!/bin/sh\nprintf 'unavailable fixture\\n' >&2\nexit 1\n",
+    )?;
+    process.master.write_all(b"r")?;
+    wait_for_text(&mut process.master, "P:", Duration::from_secs(3)).await?;
+    process.master.write_all(b"\r")?;
+    wait_for_text(&mut process.master, "Incomplete", Duration::from_secs(5)).await?;
+    process.master.write_all(b"r")?;
+    wait_for_text(&mut process.master, "P:", Duration::from_secs(3)).await?;
     assert!(!captured.contains("Approve"));
     assert!(!captured.contains("Review"));
     assert!(server

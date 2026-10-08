@@ -258,8 +258,16 @@ async fn run_inner(
     let mut windows_scroll_filter = super::events::WindowsScrollFilter::default();
     let mut last_conversation_scroll = app.conversation_scroll;
     let mut tailcat_wizard: Option<super::tailcat::Wizard> = None;
+    let mut tailcat_keys = super::events::FragmentedArrowFilter::default();
 
     loop {
+        if tailcat_wizard.is_some() && tailcat_keys.take_expired_escape(Duration::from_millis(35)) {
+            if let Some(wizard) = tailcat_wizard.as_mut() {
+                if wizard.key(KeyCode::Esc, config)? {
+                    tailcat_wizard = None;
+                }
+            }
+        }
         if settings_editor.is_some()
             && fragmented_arrow.take_expired_escape(Duration::from_millis(35))
         {
@@ -812,6 +820,9 @@ async fn run_inner(
                 continue;
             }
             if let Some(wizard) = tailcat_wizard.as_mut() {
+                let Some(key) = tailcat_keys.normalize(key) else {
+                    continue;
+                };
                 if wizard.key(key.code, config)? {
                     tailcat_wizard = None;
                 }
@@ -1111,6 +1122,7 @@ async fn run_inner(
                         }
                         "/tailcat" => {
                             log.record("local_command", "/tailcat")?;
+                            tailcat_keys.reset();
                             tailcat_wizard = Some(super::tailcat::Wizard::new(config));
                             continue;
                         }
