@@ -155,6 +155,77 @@ Descriptor 是工具组、默认开关、平台/扩展要求、风险下限、�
 }
 ```
 
+## `analyze_system_trace`
+
+Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread 调度等待、帧异常、Binder 投递延迟与 CPU/唤醒启发式，明确覆盖与限制。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "frame_budget_ms": {
+      "default": 16.667,
+      "description": "Choreographer duration budget, 1–100 ms; default 16.667. Set for the actual refresh rate.",
+      "format": "double",
+      "type": "number"
+    },
+    "package": {
+      "default": null,
+      "description": "Optional exact recorded package name; selects one process, mutually exclusive with pid.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "path": {
+      "default": null,
+      "description": "Existing raw protobuf trace file (at most 64 MiB), including externally recorded files.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pid": {
+      "default": null,
+      "description": "Optional target process ID; main thread has tid == pid.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "threshold_ms": {
+      "default": 50,
+      "description": "Long wait/slice/Binder delivery threshold, 1–1000 ms; default 50.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "trace_id": {
+      "default": null,
+      "description": "Managed trace ID. Provide either trace_id or path.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "type": "object"
+}
+```
+
 ## `android.find_node`
 
 按精确文字或 bounds 查找当前唯一节点。
@@ -2716,6 +2787,83 @@ DeviceIdle 与白名单证据。
   },
   "required": [
     "query"
+  ],
+  "type": "object"
+}
+```
+
+## `start_system_trace`
+
+确认后用设备可用 Perfetto 启动有界系统采集，返回 trace_id；不安装或自动提权。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "buffer_mb": {
+      "default": 8,
+      "description": "Ring buffer size in MiB, 1–32; default 8.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "duration_secs": {
+      "default": 10,
+      "description": "Automatic stop after 1–120 seconds; default 10.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "package": {
+      "default": null,
+      "description": "Optional exact application package for atrace instrumentation; system scheduling remains global.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "type": "object"
+}
+```
+
+## `stop_system_trace`
+
+确认后仅停止 trace_id 对应的托管 Perfetto 会话，保留私有 protobuf 证据；不杀任意 PID。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android_shell` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "trace_id": {
+      "description": "Opaque ID returned by start_system_trace.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "trace_id"
   ],
   "type": "object"
 }

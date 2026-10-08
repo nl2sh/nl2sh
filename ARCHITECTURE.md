@@ -276,3 +276,7 @@ Every explicitly registered adapter exposes one ToolDescriptor with typed schema
 ## Tailcat 本地快捷流程
 
 Web `/api/tailcat` 与 TUI `/tailcat` 共用 `tools::tailcat::quick` 的进程内有界状态与单任务互斥，直接调用 Tool Runtime，无 LLM 或模型历史写入。任务配置快照临时启用所需具名工具；准备、安全评估、权限检查、资源锁、执行复用原工具；只读检测现有 ADB 属性，失败默认 5555，允许用户编辑；`tailcat_serve` 的可选 `additional_ports` 复用同一监听器共享 Web/ADB。用户在快捷弹窗确定端口即授权本次固定操作，私有 `UserInitiatedConfirmer` 直接批准，不再产生安全确认或二次确认弹窗；只允许检查、安装、停止与端口共享四种快捷工具，不提供通用调用或全局放行开关。模型、bridge 和其他工具调用不使用该确认器，原审批规则保持。下载字节通过 task-local scope 报告，普通 Agent 安装不写入弹窗状态。Web 状态轮询与 TUI frame 读取同一快照；确定或重试先通过既有停止工具回收旧托管监听器再共享；成功和失败结果不自动关闭；TUI 对分段方向键 Esc 做过滤，只有独立 Esc 才关闭，复制用浏览器现有 fallback 或 TUI OSC 52。窗口关闭不停止托管监听器。
+
+## 系统 Trace 工具
+
+`src/tools/system_trace` 提供结构化开始/停止（Mutating）与只读分析。固定二进制 Perfetto 配置由设备 capability query 选择 ftrace、可用进程元数据及旧格式 FrameTimeline；有界服务托管 detached 会话用随机 ID 跨进程停止，不执行模型配置或任意 PID 信号。私有状态与文件、跨进程锁、自动时限/文件上限及保留数量约束生命周期；不改 PTY/终端路径、不自动提权。Rust wire reader 只解码明确字段，限制文件/packet/事件/线程，跨 CPU 排序并在丢失处清空配对。分析输出区分 runnable 调度等待、长渲染/Choreographer 切片、FrameTimeline 标志、Binder 投递延迟与 CPU/唤醒启发式，未知编码和缺失证据显式声明，不把睡眠或不完整证据当作健康/根因结论。

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add `start_system_trace`, `stop_system_trace`, and `analyze_system_trace`: approved bounded device Perfetto capture/stop, with read-only Rust decoding of supported protobuf scheduling, rendering, frame, Binder and wakeup events and explicit evidence coverage/limitations.
+
 ## [1.1.0] - 2026-10-08
 
 - Verify GPG signatures, sizes, and checksums for runtime manifests and assets using a pinned trust root and embedded extension policy; Helper management supports healthy reconnects, update ownership, rollback, and extension installation.

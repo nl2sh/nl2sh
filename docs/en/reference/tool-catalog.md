@@ -155,6 +155,77 @@ Analyze a local WAV or raw PCM file using deterministic DSP. Missing raw PCM met
 }
 ```
 
+## `analyze_system_trace`
+
+Read a bounded raw Perfetto protobuf file in Rust: runnable main-thread/RenderThread delays, long render/Choreographer slices, legacy FrameTimeline jank, Binder send-to-receive latency, CPU competition and wakeup heuristics. Explicit coverage and limitations; missing events are not proof of health. No external trace processor required.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `-` |
+| Enabled by default | `true` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "frame_budget_ms": {
+      "default": 16.667,
+      "description": "Choreographer duration budget, 1–100 ms; default 16.667. Set for the actual refresh rate.",
+      "format": "double",
+      "type": "number"
+    },
+    "package": {
+      "default": null,
+      "description": "Optional exact recorded package name; selects one process, mutually exclusive with pid.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "path": {
+      "default": null,
+      "description": "Existing raw protobuf trace file (at most 64 MiB), including externally recorded files.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pid": {
+      "default": null,
+      "description": "Optional target process ID; main thread has tid == pid.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "threshold_ms": {
+      "default": 50,
+      "description": "Long wait/slice/Binder delivery threshold, 1–1000 ms; default 50.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "trace_id": {
+      "default": null,
+      "description": "Managed trace ID. Provide either trace_id or path.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "type": "object"
+}
+```
+
 ## `android.find_node`
 
 Find one current UI node by exact text or bounds.
@@ -2716,6 +2787,83 @@ Search recursively for literal text in bounded UTF-8 files. Paths are not confin
   },
   "required": [
     "query"
+  ],
+  "type": "object"
+}
+```
+
+## `start_system_trace`
+
+After confirmation, start a bounded device Perfetto system trace (1–120s, 1–32 MiB buffer, 64 MiB file limit). Returns a managed trace_id for stop_system_trace and analyze_system_trace. Requires available linux.ftrace; optional FrameTimeline/process metadata are capability-probed. Does not elevate or install Perfetto.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `-` |
+| Enabled by default | `true` |
+| Platform | `android_shell` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `mutating` |
+| Declared scheduling policy | `sequential` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "buffer_mb": {
+      "default": 8,
+      "description": "Ring buffer size in MiB, 1–32; default 8.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "duration_secs": {
+      "default": 10,
+      "description": "Automatic stop after 1–120 seconds; default 10.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "package": {
+      "default": null,
+      "description": "Optional exact application package for atrace instrumentation; system scheduling remains global.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "type": "object"
+}
+```
+
+## `stop_system_trace`
+
+After confirmation, stop only the managed Perfetto session identified by trace_id and finalize its trace file. Safe across bridge processes; expired captures are recognized. Never kills an arbitrary PID or another tracing session.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `-` |
+| Enabled by default | `true` |
+| Platform | `android_shell` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `mutating` |
+| Declared scheduling policy | `sequential` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "trace_id": {
+      "description": "Opaque ID returned by start_system_trace.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "trace_id"
   ],
   "type": "object"
 }

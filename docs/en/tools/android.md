@@ -27,3 +27,27 @@ Try “Inspect recent ANRs and cite log evidence without restarting apps” or �
 Bridge protocol v2 uses a single base64url JSON payload with a protocol version and request ID.
 Legacy companions retain per-method calls. A failed v2 action or mismatched reply ID is never
 replayed through the legacy transport. Approval, target revalidation and shell/root checks still apply.
+
+## System performance traces
+
+Use `start_system_trace → stop_system_trace → analyze_system_trace`. Starting and stopping require mutation approval; analysis is read-only. No Perfetto installation or automatic elevation occurs. Capture requires `/system/bin/perfetto` and a service offering `linux.ftrace`, normally under Android shell/root. Supporting nl2sh on API 26+ does not guarantee Perfetto availability. Capture is not exposed to an ordinary Termux application UID.
+
+Example start arguments (reproduce the slowdown on the device before stopping):
+
+```json
+{"package":"com.example.app","duration_secs":30,"buffer_mb":8}
+```
+
+Start returns a `trace_id`; use `{"trace_id":"returned ID"}` for both subsequent tools. Analysis optionally accepts either `package` or `pid`, plus `threshold_ms: 50` and `frame_budget_ms: 16.667`. For 120 Hz, set the frame budget to approximately 8.333 ms. Existing external raw protobuf files can also be analyzed: `{"path":"/data/local/tmp/example.pftrace","pid":1234}`. Symbolic links, compressed traces and general TrackEvent decoding are unsupported.
+
+Capture requests scheduler, wakeup, Binder and gfx/view atrace events, adding process metadata and `android.surfaceflinger.frametimeline` only when advertised. A fixed binary Perfetto configuration disables compact_sched; model-supplied configuration and commands are rejected. Duration defaults to 10 seconds with a 120-second maximum; the buffer defaults to 8 MiB with a 32 MiB maximum; files are capped at 64 MiB. Perfetto owns the session and automatically ends it at the duration/file limit, allowing stop across bridge processes. Only a randomly named session created by this tool is stopped; arbitrary PIDs are never signaled. Managed traces cannot be analyzed while recording. Private metadata resides in `system-traces/` under the configuration's state directory. Perfetto creates protobuf files with mode `0600` at `/data/misc/perfetto-traces/nl2sh-<trace_id>.pftrace`, the location allowed by Android SELinux. It cannot write directly to arbitrary application directories. At most 16 captures are retained; delete old evidence and its metadata explicitly. Nothing is uploaded. The package filter affects application atrace only: system scheduling/Binder remain global and may contain sensitive names.
+
+Reports include coverage counts, target PID, thresholds, anomaly counts with at most 50 examples per category, and running/waiting/wakeup summaries for at most 30 threads:
+
+- Main thread: long waits from wakeup or runnable preemption until scheduling, excluding normal sleep; this is not an ANR diagnosis.
+- RenderThread: long runnable waits and atrace slices, requiring recorded thread identity.
+- Frames: an over-budget Choreographer#doFrame is evidence of a long callback. Legacy FrameTimeline late/drop/jank flags are separate presentation evidence; combined counts are not unique dropped frames.
+- Binder: send-to-receive delay for a matching debug_id, excluding handler time and synchronous reply round-trip.
+- CPU: long runnable waits and at least 100 observed wakeups/second are heuristics, not energy measurements or proven root causes.
+
+Rust parsing is limited to 64 MiB, 100,000 packets, 500,000 events and 32,768 threads, with a 4 MiB packet limit. Malformed or oversized inputs fail. Events are sorted across CPUs. Loss markers reset pairing; non-boot clocks, compression, compact_sched and newer TrackEvent FrameTimeline yield unsupported/partial coverage. Unmatched and unfinished boundary intervals are excluded. Missing data or empty findings do not prove the device is healthy. See the [tool catalog](../reference/tool-catalog.md) for all parameters.

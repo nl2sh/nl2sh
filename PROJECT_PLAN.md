@@ -408,3 +408,9 @@
 - [x] Android Bridge 与 JADX helper 提取模块 Git 历史，建立独立 Gradle 根工程与 Git 仓库。
 - [x] 独立 PR/main CI、`v*` 标签发布、许可证、忽略规则和双语构建/发布文档。
 - [x] 主仓库移除 Android 源码与 helper 构建发布 job；文档更新为独立仓库入口，历史固定 helper 下载保持兼容。
+
+## 系统性能 Trace 工具
+
+- [x] 固定有界设备 Perfetto 采集、随机会话停止及私有跨进程状态，保留修改确认链。
+- [x] Rust 有界原始 protobuf 子集解析，调度/渲染/帧/Binder/CPU/唤醒证据及缺失/启发式说明。
+- [ ] 更多 Android 版本、厂商真机和新版 TrackEvent FrameTimeline 格式验证。

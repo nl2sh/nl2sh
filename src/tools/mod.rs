@@ -34,6 +34,7 @@ pub mod memory;
 pub mod network;
 pub mod runtime;
 mod shell;
+pub mod system_trace;
 pub mod tailcat;
 pub mod ui;
 
@@ -511,6 +512,9 @@ fn all_adapters() -> Vec<Box<dyn Tool>> {
         Box::new(SearchTextTool),
         Box::new(ApplyPatchTool),
         Box::new(ChartTool),
+        Box::new(system_trace::StartTool),
+        Box::new(system_trace::StopTool),
+        Box::new(system_trace::AnalyzeTool),
         Box::new(configuration::ConfigTool),
         Box::new(ImaListTool),
         Box::new(ImaSearchTool),
@@ -663,7 +667,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 54);
+        assert_eq!(names.len(), 57);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增 `start_system_trace`、`stop_system_trace`、`analyze_system_trace`：确认后以设备 Perfetto 有界采集并停止，Rust 只读解析受支持的 protobuf 调度、渲染、帧、Binder 与唤醒事件，报告证据覆盖和限制。
+
 ## [1.1.0] - 2026-10-08
 
 - 运行时发布资产及兼容清单使用固定信任根验证 GPG 签名、大小和摘要，内嵌签名扩展策略；Helper 管理支持健康重连、更新归属、失败回滚和扩展安装。

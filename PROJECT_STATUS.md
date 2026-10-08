@@ -4,6 +4,8 @@ Last Updated: 2026-10-08
 
 ## Recent Changes
 
+- 系统性能 Trace：新增 `start_system_trace → stop_system_trace → analyze_system_trace`。开始/停止维持修改确认，固定二进制 Perfetto 配置按设备能力选择 ftrace、进程元数据和 FrameTimeline；服务托管随机会话支持跨 bridge 进程停止、自动时限与文件上限。Android SELinux 路径使用系统 Perfetto trace 目录和 `0600` 文件，配置/会话元数据私有保存；不自动提权、不改 PTY。Rust 有界读取标准 protobuf 子集，报告 runnable 主线程/RenderThread 等待、长渲染/Choreographer 切片、旧格式 FrameTimeline 标志、Binder 投递延迟与 CPU/唤醒启发式，并明确数据缺失、序列/丢失标志、未配对区间和非根因结论。
+
 - v1.1.0 正式发布：Bridge/JADX v0.2.0 已发布，生产 APK/GPG 签名流程及 ARM64/ARMv7/x86_64 原生与 Termux 构建、统一压缩包、签名运行时清单和 APT 快照全部成功，GitHub Release 提供 24 个资产。TUR 配方同步到 v1.1.0 与实际标签源码 SHA-256，包管理器构建禁用原生自更新；发布脚本 15 项测试及配方语法/源码摘要校验通过。
 
 - 准备 v1.1.0 次版本发布：汇总 v1.0.6 后的原生 service、运行时签名与归属、SQLite 记忆、静态 APK/DEX、三 ABI 支持和 Tailcat 快捷共享；组件策略选择 Bridge/JADX v0.2.0。发布门禁：格式、全部目标检查、工作区测试、33 项前端测试及生产构建、15 项发布脚本测试、双语派生参考与严格站点检查通过。
@@ -421,6 +423,8 @@ Last Updated: 2026-10-08
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- 系统性能 Trace：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 通过（400 项通过、4 项显式 live 测试忽略）；12 项新增回归覆盖五类证据、跨 CPU 排序、睡眠排除、丢失/序列起始时长、损坏/超限、私有路径、锁与拒绝停止不执行。Android API 26 AArch64、ARMv7、x86_64 的 `cargo check --target <target> --no-default-features` 与 x86_64 release 构建通过。Android 15/API 35 x86_64 模拟器经 `bridge invoke` 与本地交互审批验证拒绝开始、批准采集、采集中分析拒绝、复现设置页滚动、跨进程停止/分析、重复停止、自动到期以及拒绝停止保持采集；真实 trace 覆盖 sched_switch、sched_wakeup、atrace、Binder send/receive 和 FrameTimeline，并保留部分证据标志。双语派生参考、页面/站点检查、严格 MkDocs 构建及签名/摘要校验后的 APT 合并通过。严格 Clippy 被既有模块告警阻断；新增 Trace 模块无告警。此验证不代替厂商真机或其他 Perfetto 编码验收。
 
 - `tailcat_adb_pair`：`cargo fmt --all -- --check`、`cargo check`、`cargo clippy --all-targets -- -D warnings` 与完整 `cargo test` 通过（350 项通过，4 项显式 live 测试忽略），新增 7 项安全/状态/配对信息回归；Web 构建和 27 项测试通过。Android API 26 x86_64 的 `tailcat_adb_pair_device_check` release 示例构建及 AArch64/ARMv7 `cargo check --no-default-features` 通过；API 35 竖屏模拟器工具级验证通过 setup、返回配对码、拒绝审批、三端口共享、对端配对/连接/设备 shell、HTTP 200、已有监听器拒绝替换及停止清理。示例复用 Tool Runtime 并逐项要求 CONFIRM，不请求模型，未覆盖完整 TUI/Web 审批界面或厂商设备。
 
