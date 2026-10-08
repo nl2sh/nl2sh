@@ -4,6 +4,9 @@ Last Updated: 2026-10-08
 
 ## Recent Changes
 
+- DEX 静态分析不再被单个畸形文件整体拖垮：`src/tools/apk/dex.rs` 的单字符串上限由 8,192 提升到 1,048,576 UTF-16 单位（实测混淆类映射表可达约 47.5 万单位，仍在分配前校验，单串上限 2 MiB）；`scan_dex` 改为按文件降级，单个 DEX 解析失败只跳过该文件，其余文件继续检索，并在 `unindexed_dex` 列出被跳过文件与单行 200 字符原因；DEX 文件数上限由 32 提升到 256，字节预算（每项 32 MiB、总计 64 MiB、压缩数据、16 MiB 解码元数据）保持不变，因为解压与解析工作量本就不随文件数增长。四项 DEX 工具（类、方法、字符串、类/方法引用）统一返回 `unindexed_dex`。
+  验证：`cargo fmt --all -- --check`、`cargo check --all-targets` 通过，新增 4 项回归（超长字符串边界、混合好坏 DEX 继续检索、恶意元数据下原因有界、35 个 DEX 文件且上限仍拒绝）通过；库套件 310 项通过，5 项需 root 的 Android UI/ADB 用例与 1 项 TUI 伪终端用例为改动前既有失败（`git stash` 对照确认），集成套件其余全部通过；`cargo clippy --all-targets` 告警数与改动前一致（19 项，均为既有）；Android armv7-linux-androideabi API 26 release 交叉编译通过并部署；Android API 34 ARMv7 真机用 52 MB、35 个 DEX 的混淆 APK 验证，34 个 DEX 可索引、1 个因超 16 MiB 解码元数据被跳过并报告原因，6 项工具均返回真实结果。内存：基线进程约 7 MB；单文件 1.7 MiB DEX 峰值约 14 MB、单文件 10.3 MiB DEX 峰值约 44.6 MB、全部 35 个 DEX（合计 28.8 MiB）峰值约 47 MB，即峰值随最大单个 DEX 而非总量增长，无跨文件累积；同一进程内连续 12 轮、共 24 次重型扫描后 VmRSS 稳定在约 8 MB、VmHWM 在第 2 轮后稳定于约 47 MB 不再增长，结果逐轮一致，未见泄漏或内存台阶。双语工具页、`ARCHITECTURE.md` 与计划同步。
+
 - Agent 有界后台续跑：成功工具通过类型化接口登记具名结构化续跑动作，Runner 在到期后经同一 Registry/安全确认链执行，再请求模型总结真实结果。系统 Trace 接入自动分析，直接调用显式返回未调度；TUI/Web 展示等待，后台时长计入任务预算，取消/退出撤销队列并保留有界采集证据，进程重启不重放。生命周期审计关联任务/会话，不改变 Root、Android PTY 或终端恢复路径。
   验证：`cargo fmt --all -- --check`、`cargo check`、7 项新增调度/续跑/Trace 注册回归通过；Rust 库和集成套件按权限要求分组通过（普通 UID 402 项，需 root 的 Android UI/ADB 组 29 项，包含与普通组重复的用例）。33 项前端测试及 Cargo 内嵌前端生产构建、Android API 26 AArch64 `cargo check`、双语派生参考、严格 MkDocs 构建和生成站点检查通过。
 

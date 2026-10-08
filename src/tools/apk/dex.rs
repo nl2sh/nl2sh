@@ -8,6 +8,11 @@ use serde::Serialize;
 
 const MAX_TEXT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_INSTRUCTION_UNITS: usize = 4 * 1024 * 1024;
+/// Per-string guard, checked before allocating so a bogus `utf16_size` cannot force a large
+/// allocation. Real APKs embed whole obfuscator class maps as one string; the largest observed in
+/// the field is 475,507 units, so this leaves over 2x headroom while capping a single decoded
+/// string at 2 MiB. [`MAX_TEXT_BYTES`] still bounds the decoded total per DEX file.
+const MAX_STRING_UNITS: usize = 1024 * 1024;
 
 pub(super) fn u16_at(bytes: &[u8], offset: usize) -> Result<usize> {
     let end = offset.checked_add(2).context("DEX offset overflow")?;
@@ -40,8 +45,8 @@ fn uleb(bytes: &[u8], position: &mut usize) -> Result<usize> {
 fn string(bytes: &[u8], offset: usize) -> Result<String> {
     let mut position = offset;
     let length = uleb(bytes, &mut position)?;
-    if length > 8192 {
-        bail!("DEX string exceeds 8192 UTF-16 units")
+    if length > MAX_STRING_UNITS {
+        bail!("DEX string exceeds {MAX_STRING_UNITS} UTF-16 units")
     }
     let mut units = Vec::with_capacity(length);
     while units.len() < length {
@@ -729,6 +734,36 @@ mod tests {
         ] {
             assert!(kinds.contains(kind), "missing {kind}");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_strings_well_above_the_former_bound_and_rejects_beyond_the_current_one() -> Result<()>
+    {
+        // Obfuscator class maps embedded as single DEX strings exceed 8,192 units in real APKs, and the
+        // largest measured in the field is 475,507 units.
+        for units in [8193usize, 10_790, 475_507, MAX_STRING_UNITS] {
+            let mut bytes = Vec::with_capacity(units + 8);
+            let mut value = units;
+            while value >= 128 {
+                bytes.push(0x80 | (value & 127) as u8);
+                value >>= 7;
+            }
+            bytes.push(value as u8);
+            bytes.extend(std::iter::repeat_n(b'a', units));
+            bytes.push(0);
+            assert_eq!(string(&bytes, 0)?, "a".repeat(units));
+        }
+        let mut bytes = vec![0x80 | (MAX_STRING_UNITS & 127) as u8];
+        let mut value = MAX_STRING_UNITS >> 7;
+        while value >= 128 {
+            bytes.push(0x80 | (value & 127) as u8);
+            value >>= 7;
+        }
+        bytes.push(value as u8);
+        bytes.extend(std::iter::repeat_n(b'a', MAX_STRING_UNITS + 1));
+        bytes.push(0);
+        assert!(string(&bytes, 0).is_err());
         Ok(())
     }
 

@@ -23,6 +23,10 @@ use zip::ZipArchive;
 const MAX_ENTRIES: usize = 50_000;
 const MAX_APK_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_DEX_BYTES: u64 = 32 * 1024 * 1024;
+/// File-count ceiling only. Decompression and parse work stay bounded by [`MAX_DEX_BYTES`] per
+/// entry and by the aggregate budget in `analysis::scan_dex`, so a higher count does not raise
+/// peak memory; shipping APKs routinely exceed a few dozen DEX files.
+const MAX_DEX_FILES: usize = 256;
 
 const INSPECT_META: ToolMetadata = ToolMetadata {
     name: "inspect_apk",
@@ -302,7 +306,7 @@ fn dex_classes(args: &DexClassesArgs) -> Result<String> {
     }
     let mut classes = Vec::new();
     let mut matches = 0usize;
-    let dex_files = analysis::scan_dex(&args.path, |name, dex| {
+    let scan = analysis::scan_dex(&args.path, |name, dex| {
         for class in dex.class_names()? {
             if class.contains(&args.query) {
                 matches += 1;
@@ -313,7 +317,7 @@ fn dex_classes(args: &DexClassesArgs) -> Result<String> {
         }
         Ok(())
     })?;
-    Ok(json!({"status":"ok","path":args.path,"dex_file_count":dex_files,"matches":matches,"classes":classes,"truncated":matches>classes.len()}).to_string())
+    Ok(json!({"status":"ok","path":args.path,"dex_file_count":scan.indexed,"matches":matches,"classes":classes,"truncated":matches>classes.len(),"unindexed_dex":scan.json()}).to_string())
 }
 
 fn u32_at(bytes: &[u8], offset: usize) -> Result<usize> {

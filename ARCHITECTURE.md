@@ -102,7 +102,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/runtime` | `AndroidRuntime`、Termux 标记与 prefix 探测 | 进程环境 → Android shell/Termux | 只提供兼容性信息和 shell/path 选择，不参与安全分类、确认或 root 授权 |
 | `src/network` | 统一 rustls HTTP Client、HTTP/SOCKS 代理、认证和绕过策略 | `Config` → `reqwest::Client` | 代理凭据不得进入日志、错误详情或模型上下文；关闭总开关不清理配置 |
 | `src/tools/network` | 公网 HTTP(S) 有界读取、确认后 POST/下载与 TLS 诊断 | URL/主机 → 有界正文、文件或证书信息 | 禁止重定向、URL 凭据、本机/私网目标和任意 header；POST、下载均须确认 |
-| `src/tools/apk` | APK ZIP 概览、条目检索、DEX 类/方法/字符串/引用、二进制 Manifest/权限/导出组件/原生库与单类反编译适配 | 本地 APK → 有界 JSON 证据或 Java 源码 | 静态分析为有界纯 Rust 只读；ZIP 清单分配前核验目录上限，引用扫描有预算；反编译为 Dangerous 强确认，不执行 APK 内容 |
+| `src/tools/apk` | APK ZIP 概览、条目检索、DEX 类/方法/字符串/引用、二进制 Manifest/权限/导出组件/原生库与单类反编译适配 | 本地 APK → 有界 JSON 证据或 Java 源码 | 静态分析为有界纯 Rust 只读；ZIP 清单分配前核验目录上限，引用扫描有预算；单个 DEX 解析失败只跳过该文件并在 `unindexed_dex` 报告原因，不放弃整个 APK；文件数/单项大小/总字节预算超限仍整体拒绝；反编译为 Dangerous 强确认，不执行 APK 内容 |
 | `src/tools/tailcat` | 可选 tailcat 检查、一次性接收、文件发送、端口服务和状态/停止 | 校验后的参数 → argv 子进程与当前进程管理的监听器 | 组默认关闭；接收确认，发送及开放端口强确认；临时密钥和父进程退出信号限制监听器生命周期 |
 | `src/runtime_dependencies/jadx` | Android DEX helper 校验/按需下载、私有缓存和受控子进程 | 含 `classes.dex` 的 helper → 带私有 Java 临时目录的 `app_process` → 单类源码 | 仅在反编译强确认后下载；普通 JVM JAR 拒绝；helper 只处理目标类并拒绝 XML 解析；无默认未验证资产 |
 | `src/web_ui` | Axum 0.8 HTTP/SSE/WebSocket、多 Agent 会话、LLM 自动标题、快捷运行设置、记忆 CRUD、浏览器审批、rust-embed 资源 | serde JSON + SSE + WebSocket → 独立 Agent Runner、结构化显示条目、SQLite 记忆、原子配置文件 | 无登录，优先监听 IPv4 9999（占用时使用可用端口）；每会话独立锁和审批通道；直接记忆管理仅代表用户操作，模型写入仍确认；WebSocket 终端仍走安全分类和确认；请求有大小上限；不直接执行模型输出 |

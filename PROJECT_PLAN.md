@@ -401,7 +401,8 @@
 - [x] 发布并锁定经真机验证的 Android DEX helper，提供默认 GitHub Release 下载地址和固定摘要；自定义下载源仍强制提供独立摘要。
 - [x] 在 Android API 35 模拟器通过 `app_process` 对单 DEX 和双 DEX 测试 APK 完成单类反编译；不使用设备端 Java 或安装 helper APK。
 - [x] 在 Android API 28 ARMv7 设备通过完整强确认链反编译单类；运行时为 ART 提供私有临时目录，helper 限定目标类并拒绝 XML 解析。
-- [ ] 在 Android API 26 真机及其他 API 版本验证，并覆盖大型多 DEX APK、内存与超时清理。
+- [x] 在 Android API 34 ARMv7 真机用 52 MB、35 个 DEX 的混淆商业 APK 覆盖大型多 DEX：34 个文件可索引，单文件超 16 MiB 解码元数据时只跳过该文件并在 `unindexed_dex` 报告原因；峰值与常驻内存见 PROJECT_STATUS。
+- [ ] 在 Android API 26 真机及其他 API 版本验证反编译路径，并覆盖内存与超时清理。
 
 ## Android 项目独立仓库 — 已实现
 

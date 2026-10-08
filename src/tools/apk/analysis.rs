@@ -4,7 +4,7 @@ use super::dex::{Dex, Query};
 use super::manifest::Manifest;
 use super::{
     archive, default_limit, is_dex, limit, validate_class_name, validate_path, ReadOperation,
-    MAX_DEX_BYTES,
+    MAX_DEX_BYTES, MAX_DEX_FILES,
 };
 use crate::tools::{PreparedToolCall, ToolContext, ToolMetadata};
 use anyhow::{bail, Context, Result};
@@ -72,12 +72,42 @@ fn query(value: &str) -> Result<()> {
     Ok(())
 }
 
+/// Bounded outcome of indexing every DEX entry in one archive.
+///
+/// A single unparsable DEX file must not discard the evidence from every other file, so a
+/// per-file parse failure is recorded in [`DexScan::skipped`] instead of aborting the scan.
+/// Archive-level resource limits still fail the whole call.
+pub(super) struct DexScan {
+    pub indexed: usize,
+    pub skipped: Vec<SkippedDex>,
+}
+
+/// One DEX entry that could not be indexed, with a bounded reason for the model.
+pub(super) struct SkippedDex {
+    pub dex: String,
+    pub reason: String,
+}
+
+impl DexScan {
+    pub fn json(&self) -> Value {
+        json!({
+            "count": self.skipped.len(),
+            "files": self.skipped
+                .iter()
+                .map(|skip| json!({"dex": skip.dex, "reason": skip.reason}))
+                .collect::<Vec<Value>>(),
+        })
+    }
+}
+
 pub(super) fn scan_dex(
     path: &str,
     mut visit: impl FnMut(&str, &Dex<'_>) -> Result<()>,
-) -> Result<usize> {
+) -> Result<DexScan> {
     let mut zip = archive(path)?;
-    let mut count = 0;
+    let mut seen = 0usize;
+    let mut indexed = 0usize;
+    let mut skipped = Vec::new();
     let mut total = 0u64;
     let mut compressed = 0u64;
     for index in 0..zip.len() {
@@ -85,14 +115,14 @@ pub(super) fn scan_dex(
         if !is_dex(entry.name()) {
             continue;
         }
-        count += 1;
+        seen += 1;
         compressed = compressed
             .checked_add(entry.compressed_size())
             .context("DEX compressed size overflow")?;
         if compressed > 65 * 1024 * 1024 || entry.compressed_size() > MAX_DEX_BYTES + 1024 * 1024 {
             bail!("DEX compressed data exceeds inspection limit")
         }
-        if count > 32 || entry.size() > MAX_DEX_BYTES {
+        if seen > MAX_DEX_FILES || entry.size() > MAX_DEX_BYTES {
             bail!("DEX count or entry size exceeds inspection limit")
         }
         total = total
@@ -111,10 +141,48 @@ pub(super) fn scan_dex(
         if bytes.len() as u64 > MAX_DEX_BYTES || bytes.len() as u64 != entry.size() {
             bail!("DEX size mismatch")
         }
-        let dex = Dex::parse(&bytes).with_context(|| format!("cannot index {name}"))?;
+        let dex = match Dex::parse(&bytes) {
+            Ok(dex) => dex,
+            Err(error) => {
+                skipped.push(SkippedDex {
+                    dex: bounded_entry_name(&name),
+                    reason: bounded_reason(&error),
+                });
+                continue;
+            }
+        };
         visit(&name, &dex)?;
+        indexed += 1;
     }
-    Ok(count)
+    Ok(DexScan { indexed, skipped })
+}
+
+/// Bounds a reason reported to the model: single-line and length-capped, so hostile DEX metadata
+/// cannot bloat the result or inject control characters.
+fn bounded_reason(error: &anyhow::Error) -> String {
+    let filtered = format!("{error:#}")
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(201)
+        .collect::<String>();
+    match filtered.chars().count() {
+        201 => filtered[..].trim_end().to_owned() + "…",
+        _ => filtered,
+    }
+}
+
+/// Bounds a ZIP entry name reported for a skipped file. `is_dex` accepts arbitrarily long
+/// all-digit names, so the length is capped before it reaches the result.
+fn bounded_entry_name(name: &str) -> String {
+    const MAX: usize = 128;
+    if name.len() <= MAX {
+        return name.to_owned();
+    }
+    let mut end = MAX;
+    while end > 0 && !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &name[..end])
 }
 
 fn methods(args: &IndexArgs) -> Result<String> {
@@ -122,7 +190,7 @@ fn methods(args: &IndexArgs) -> Result<String> {
     query(&args.query)?;
     let mut result = Vec::new();
     let mut matches = 0usize;
-    let files = scan_dex(&args.path, |name, dex| {
+    let scan = scan_dex(&args.path, |name, dex| {
         for method in &dex.methods {
             if method.signature.contains(&args.query) || method.class.contains(&args.query) {
                 matches += 1;
@@ -133,8 +201,12 @@ fn methods(args: &IndexArgs) -> Result<String> {
         }
         Ok(())
     })?;
-    Ok(json!({"status":"ok","dex_file_count":files,"matches":matches,"methods":result,
-        "truncated":matches>result.len(),"scope":"method_ids, including external method references"}).to_string())
+    Ok(
+        json!({"status":"ok","dex_file_count":scan.indexed,"matches":matches,"methods":result,
+        "truncated":matches>result.len(),"scope":"method_ids, including external method references",
+        "unindexed_dex":scan.json()})
+        .to_string(),
+    )
 }
 
 fn strings(args: &IndexArgs) -> Result<String> {
@@ -145,7 +217,7 @@ fn strings(args: &IndexArgs) -> Result<String> {
     }
     let mut result = Vec::new();
     let mut matches = 0usize;
-    let files = scan_dex(&args.path, |name, dex| {
+    let scan = scan_dex(&args.path, |name, dex| {
         for (index, value) in dex.strings.iter().enumerate() {
             if value.contains(&args.query) {
                 matches += 1;
@@ -157,13 +229,17 @@ fn strings(args: &IndexArgs) -> Result<String> {
         }
         Ok(())
     })?;
-    Ok(json!({"status":"ok","dex_file_count":files,"matches":matches,"strings":result,"truncated":matches>result.len()}).to_string())
+    Ok(
+        json!({"status":"ok","dex_file_count":scan.indexed,"matches":matches,"strings":result,
+        "truncated":matches>result.len(),"unindexed_dex":scan.json()})
+        .to_string(),
+    )
 }
 
 fn references(path: &str, max: usize, query: Query<'_>) -> Result<String> {
     let mut result = Vec::new();
     let mut matches = 0usize;
-    let files = scan_dex(path, |name, dex| {
+    let scan = scan_dex(path, |name, dex| {
         let query = match &query {
             Query::Class(class) => Query::Class(class),
             Query::Method {
@@ -183,8 +259,9 @@ fn references(path: &str, max: usize, query: Query<'_>) -> Result<String> {
             }
         })
     })?;
-    Ok(json!({"status":"ok","dex_file_count":files,"matches":matches,"references":result,
-        "truncated":matches>result.len(),"scope":"declarations and direct instructions; reflection, dynamic call sites, method handles and native references are not resolved"}).to_string())
+    Ok(json!({"status":"ok","dex_file_count":scan.indexed,"matches":matches,"references":result,
+        "truncated":matches>result.len(),"scope":"declarations and direct instructions; reflection, dynamic call sites, method handles and native references are not resolved",
+        "unindexed_dex":scan.json()}).to_string())
 }
 fn class_references(args: &ClassReferencesArgs) -> Result<String> {
     validate_class_name(&args.class_name)?;
@@ -469,6 +546,131 @@ mod tests {
         assert_eq!(result["matches"], 2);
         assert_eq!(result["libraries"][0]["elf_machine"], 62);
         assert_eq!(result["libraries"][1]["elf"], false);
+        Ok(())
+    }
+
+    #[test]
+    fn keeps_indexing_healthy_dex_files_when_one_file_is_unparsable() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("mixed.apk");
+        let mut archive = ZipWriter::new(File::create(&path)?);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        archive.start_file("classes.dex", options)?;
+        archive.write_all(include_bytes!("../../../tests/fixtures/apk/classes.dex"))?;
+        // A single corrupt entry must not discard the evidence from every other file.
+        archive.start_file("classes2.dex", options)?;
+        archive.write_all(b"not a dex file")?;
+        archive.start_file("classes3.dex", options)?;
+        let mut oversized = include_bytes!("../../../tests/fixtures/apk/classes.dex").to_vec();
+        oversized[56..60].copy_from_slice(&u32::MAX.to_le_bytes());
+        archive.write_all(&oversized)?;
+        archive.finish()?;
+        let path = path.to_string_lossy().into_owned();
+
+        let result: Value = serde_json::from_str(&strings(&IndexArgs {
+            path: path.clone(),
+            query: "needle".into(),
+            limit: 50,
+        })?)?;
+        assert_eq!(result["status"], "ok");
+        assert_eq!(result["dex_file_count"], 1);
+        assert_eq!(result["matches"], 1);
+        assert_eq!(result["unindexed_dex"]["count"], 2);
+        let skipped = result["unindexed_dex"]["files"]
+            .as_array()
+            .expect("skipped files");
+        let names: Vec<&str> = skipped
+            .iter()
+            .map(|file| file["dex"].as_str().expect("dex name"))
+            .collect();
+        assert_eq!(names, ["classes2.dex", "classes3.dex"]);
+        for file in skipped {
+            let reason = file["reason"].as_str().expect("reason");
+            assert!(!reason.is_empty(), "skipped file needs a reason");
+            assert!(!reason.contains('\n'), "reason must stay single-line");
+        }
+
+        let result: Value = serde_json::from_str(&methods(&IndexArgs {
+            path,
+            query: "example.Target".into(),
+            limit: 50,
+        })?)?;
+        assert_eq!(result["dex_file_count"], 1);
+        assert_eq!(result["matches"], 3);
+        assert_eq!(result["unindexed_dex"]["count"], 2);
+        Ok(())
+    }
+
+    #[test]
+    fn indexes_apk_with_more_dex_files_than_the_old_thirty_two_file_ceiling() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("many.apk");
+        let mut archive = ZipWriter::new(File::create(&path)?);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        // Matches a shipping APK observed in the field, well past the former 32-file ceiling.
+        let count = 35;
+        for index in 0..count {
+            archive.start_file(format!("classes{index}.dex"), options)?;
+            archive.write_all(include_bytes!("../../../tests/fixtures/apk/classes.dex"))?;
+        }
+        archive.start_file(format!("classes{count}.dex"), options)?;
+        archive.write_all(b"not a dex file")?;
+        archive.finish()?;
+        let result: Value = serde_json::from_str(&strings(&IndexArgs {
+            path: path.to_string_lossy().into_owned(),
+            query: "needle".into(),
+            limit: 1,
+        })?)?;
+        assert_eq!(result["dex_file_count"], count);
+        assert_eq!(result["matches"], count);
+        assert_eq!(result["unindexed_dex"]["count"], 1);
+
+        // The ceiling itself must still reject an archive with too many DEX files.
+        let path = directory.path().join("excess.apk");
+        let mut archive = ZipWriter::new(File::create(&path)?);
+        for index in 0..=MAX_DEX_FILES {
+            archive.start_file(format!("classes{index}.dex"), options)?;
+            archive.write_all(include_bytes!("../../../tests/fixtures/apk/classes.dex"))?;
+        }
+        archive.finish()?;
+        assert!(strings(&IndexArgs {
+            path: path.to_string_lossy().into_owned(),
+            query: "needle".into(),
+            limit: 1,
+        })
+        .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn bounds_skip_reasons_from_hostile_dex_metadata() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("hostile.apk");
+        let mut archive = ZipWriter::new(File::create(&path)?);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        archive.start_file("classes.dex", options)?;
+        let mut dex = include_bytes!("../../../tests/fixtures/apk/classes.dex").to_vec();
+        // Point the string table at an offset whose declared length and payload are attacker text.
+        dex[56..60].copy_from_slice(&1u32.to_le_bytes());
+        let data_offset =
+            u32::from_le_bytes(dex[60..64].try_into().expect("string table offset")) as usize;
+        dex[data_offset..data_offset + 5].copy_from_slice(&[0x20, b'a', b'\n', b'b', 0]);
+        archive.write_all(&dex)?;
+        archive.finish()?;
+        let result: Value = serde_json::from_str(&strings(&IndexArgs {
+            path: path.to_string_lossy().into_owned(),
+            query: "needle".into(),
+            limit: 50,
+        })?)?;
+        assert_eq!(result["unindexed_dex"]["count"], 1);
+        let reason = result["unindexed_dex"]["files"][0]["reason"]
+            .as_str()
+            .expect("reason");
+        assert!(!reason.contains('\n'));
+        assert!(
+            reason.chars().count() <= 201,
+            "reason {reason:?} is unbounded"
+        );
         Ok(())
     }
 
