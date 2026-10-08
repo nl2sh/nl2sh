@@ -520,7 +520,7 @@ async fn tailcat_dialog_opens_without_provider_and_closes_back_to_tui() -> anyho
     let mut process = spawn_tui(&config)?;
     wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
     process.master.write_all(b"/tailcat\r")?;
-    wait_for_text(&mut process.master, "No LLM", Duration::from_secs(3)).await?;
+    wait_for_text(&mut process.master, "P:", Duration::from_secs(3)).await?;
     process.master.write_all(&[0x1b])?;
     sleep(Duration::from_millis(100)).await;
     assert!(process.child.try_wait()?.is_none());
@@ -552,7 +552,7 @@ async fn tailcat_user_selected_ports_share_after_one_enter_without_model_or_safe
     let mut process = spawn_tui(&config)?;
     wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(3)).await?;
     process.master.write_all(b"/tailcat\r")?;
-    wait_for_text(&mut process.master, "No LLM", Duration::from_secs(3)).await?;
+    wait_for_text(&mut process.master, "P:", Duration::from_secs(3)).await?;
     // Deselect ADB and confirm the Web port once. No more input is sent until completion.
     process.master.write_all(b"a\r")?;
     let captured =

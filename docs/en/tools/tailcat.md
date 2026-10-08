@@ -7,7 +7,7 @@ The optional `tailcat` group defaults off. `tailcat_check` reads the configured 
 | `tailcat_receive_stream` | One raw transfer into a new file; confirmation |
 | `tailcat_receive` | File drop box in an existing directory; confirmation |
 | `tailcat_send_file` | Defaults to `stream` for raw receivers; explicit `copy` targets drop boxes and requires external scp; strong confirmation |
-| `tailcat_serve` | Share one local TCP port; strong confirmation |
+| `tailcat_serve` | Share one or more local TCP ports; strong confirmation |
 | `tailcat_adb_pair` | Wireless debugging guidance, pairing information, and multi-port sharing; strong confirmation |
 | `tailcat_status` | Read current process listener state |
 | `tailcat_stop` | Stop a current process listener; confirmation |
@@ -20,13 +20,13 @@ x86_64 devices use the pinned official static Linux amd64 archive with the same 
 
 ## Model-free shortcut {#tailcat-quick}
 
-Click **Tailcat** with the cat icon at the top right of Web, or enter `/tailcat` in TUI, to open the sharing dialog. The actual Web listening port and ADB pairing/connection ports are selected by default; deselect either option as needed. Confirming the selection authorizes and starts installation and sharing for the selected ports, without further safety or double-confirmation dialogs. When Tailcat is missing, the wizard downloads the pinned official version and verifies it before installation; status messages show the source, checksum, and target path. It shows actual downloaded bytes and verification/installation status. Failed installation preserves the previous file; an existing executable that fails to run is not silently replaced.
+Click **Tailcat** at the top right of Web, or enter `/tailcat` in TUI. The actual Web port and ADB connection port are selected by default. ADB discovery falls back to **5555** when unavailable. Edit it directly in Web or press **P** in TUI. W/A toggle selections; Enter starts sharing.
 
-The shortcut enables only the required tools in its temporary configuration snapshot, without changing tool-group settings, calling an LLM, or saving results to model history. Confirming the selection authorizes this wizard's fixed operations; subsequent safety prompts are skipped here. Model and general tool calls retain their existing approval rules. Tool preparation, security assessment, permission checks, download verification, resource locks, and execution revalidation remain in use. ADB requires Android 11+ shell/root permissions and may enable wireless debugging or open Settings; follow device guidance and retry. Changed ports or pairing state stop sharing and require the user to start again. An existing managed listener is never automatically stopped or replaced.
+Confirmation directly installs and shares through existing tools, without an LLM or additional safety prompts. The dialog shows download progress, execution status, and peer commands, and stays open after completion. Use Web copy icons; in TUI, 1–2 copy individual commands and C copies all (requires OSC 52 terminal support), R returns to selection, and Esc closes.
 
-The dialog stays open after completion, showing peer `tailcat forward`, `adb pair`, and `adb connect` commands and the current pairing code. Web copy icons copy complete commands. In TUI, W/A toggle selections, Enter confirms, 1–4 copy individual commands, C copies all commands, PageUp/PageDown scroll, and Esc closes. Copy uses OSC 52 and requires host terminal support; otherwise select text with your terminal. R returns to port selection for a retry.
+Keep the peer's `tailcat forward` process running. Web maps to `http://127.0.0.1:19999/`; ADB maps to `127.0.0.1:13702`. The selected ADB service must already be enabled. Complete wireless ADB pairing separately when required. This shortcut does not open Settings or pairing dialogs.
 
-Closing the dialog does not stop an installation or sharing operation already started, or disable wireless debugging; reopening shows the current result. Keep the device pairing dialog open and the peer `forward` process running. Run pairing with the displayed code in another terminal, then connect explicitly. Web-only sharing maps `19999:<actual device port>` on the peer; visit `http://127.0.0.1:19999/`. Web has no login, so share the address only with trusted peers. Install Tailcat separately on the peer; ADB commands also require Android SDK Platform Tools.
+Closing does not stop downloads or sharing; reopen to view results. Share the address only with trusted peers. Installation still verifies the pinned version, checksum, and executable; existing managed listeners are not replaced. Temporary tool overrides do not change saved configuration. Model and general tool calls retain their approval rules.
 
 ## Enable and call the tools
 
@@ -137,7 +137,7 @@ Use `tailcat_status({})` to inspect sharing and approve `tailcat_stop({})` to st
 
 An Android 15 / API 35 emulator with a 1080×2400 portrait display passed UI activation of Developer options and Wireless debugging, including reading the connection port and pairing dialog information. A direct Tailcat v0.7.0 invocation shared both actual ports. After the peer mapped them locally with `tailcat forward`, `adb pair`, `adb connect`, and tunneled `adb shell getprop ro.build.version.sdk` all succeeded. The peer needs Android SDK Platform Tools with support for `adb pair`.
 
-This verifies that TCP forwarding can carry wireless ADB pairing and TLS connections. It does not validate the full nl2sh Agent/approval flow or simultaneous sharing of Web port 9999. `tailcat_serve` still accepts one `port`; the new `tailcat_adb_pair` shares pairing, connection, and optional Web ports through one managed listener. Emulator success does not establish identical Settings navigation across vendor devices; read the current port values.
+This verifies that TCP forwarding can carry wireless ADB pairing and TLS connections. It does not validate the full nl2sh Agent/approval flow or simultaneous sharing of Web port 9999. `tailcat_serve` accepts `port` and optional `additional_ports`; the new `tailcat_adb_pair` shares pairing, connection, and optional Web ports through one managed listener. Emulator success does not establish identical Settings navigation across vendor devices; read the current port values.
 
 Device-level verification of the new tool used the `tailcat_adb_pair_device_check` example on an Android 15/API 35 emulator with a 1080×2400 portrait display, invoking the same Tool Runtime directly. With Wireless debugging initially off, approved `setup` returned the current code. `share` exposed both ADB ports and a test HTTP service on 9999; the returned commands successfully paired, connected, executed shell, and accessed Web with HTTP 200. Rejected approvals performed no actions, an existing listener was not replaced, and the managed process was stopped afterward. This example does not call a model and requires `CONFIRM` for each approval. These results cover tool preparation, confirmation, and execution, rather than the full TUI/Web approval interfaces, real model planning, or vendor devices.
 

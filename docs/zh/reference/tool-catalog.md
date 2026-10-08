@@ -2948,7 +2948,7 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 
 ## `tailcat_serve`
 
-把 Tailcat 连接转发到已有 localhost TCP 服务；参数是目标端口，不重复绑定，无需停止服务；缺少程序时先确认安装，共享需强确认。
+把 Tailcat 连接转发到已有 localhost TCP 服务（additional_ports 可增加共享端口）；参数是目标端口，不重复绑定，无需停止服务；缺少程序时先确认安装，共享需强确认。
 
 | 描述项 | 值 |
 | --- | --- |
@@ -2965,6 +2965,17 @@ Android 11+ 无线 ADB 配对引导：setup 打开设置并尝试进入配对界
 {
   "additionalProperties": false,
   "properties": {
+    "additional_ports": {
+      "default": [],
+      "description": "Additional existing localhost TCP service ports to share through the same listener.",
+      "items": {
+        "format": "uint16",
+        "maximum": 65535,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "array"
+    },
     "port": {
       "description": "Destination port of an existing localhost TCP service; keep that service running.",
       "format": "uint16",

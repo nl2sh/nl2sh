@@ -4,6 +4,8 @@ Last Updated: 2026-10-08
 
 ## Recent Changes
 
+- 精简 Web/TUI Tailcat 提示；只读检测现有 ADB 连接端口，失败回退 5555，Web 输入框与 TUI P 键允许编辑，异步检测不覆盖用户输入。快捷入口复用 tailcat_serve 的可选 additional_ports 共享 Web/ADB，不自动打开无线配对设置。验证：Rust 全量测试、前端生产构建及 33 项测试、Android API 26 AArch64 检查、双语参考与严格站点检查通过；浏览器测试程序验证默认 5555、无效端口阻止启动、编辑后实际命令、复制及完成窗口保留。
+
 - Tailcat 快捷弹窗验证：`cargo fmt --all -- --check`、`cargo check --all-targets`、全量 `cargo test`、新增无 Provider TUI 伪终端测试与快捷操作直接授权/下载进度作用域测试通过；前端构建及 33 项测试、桌面/窄屏浏览器的真实 API 流程（使用测试 Tailcat 程序）、确定后直接共享、窗口保留、命令复制与重开通过；Android API 26 AArch64 `--no-default-features` 检查及双语参考/严格文档构建通过。 `cargo clippy --all-targets -- -D warnings` 受既有文档注释空行、大枚举、测试模块布局等告警阻断，新增快捷流程未产生 Clippy 告警。
 
 - Web/TUI 增加无需模型的 Tailcat 共享弹窗：右上角图标与文字、`/tailcat`、默认 Web/ADB 选择、实际下载字节与校验状态、完成后保留对端命令及复制入口；复用既有工具运行时，临时启用所需工具而不改变持久配置；用户确定端口后直接安装与共享，快捷入口不再弹出安全或二次确认，模型和通用工具审批保持。

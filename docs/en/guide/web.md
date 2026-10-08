@@ -66,4 +66,4 @@ The tools panel derives optional groups from the runtime catalog and separates t
 
 ## Tailcat shortcut
 
-Click the Tailcat icon and label at the top right. The dialog selects the actual Web port and ADB pairing/connection ports by default. Confirming the selection starts installation and sharing without further safety prompts. It shows download and execution status, then stays open with copyable peer commands. No LLM is used; existing tools handle validation and execution. See [Tailcat](../tools/tailcat.md#tailcat-quick).
+Click the Tailcat icon and label at the top right. The dialog selects the actual Web port and ADB connection port (automatically detected, falling back to editable 5555) by default. Confirming the selection starts installation and sharing without further safety prompts. It shows download and execution status, then stays open with copyable peer commands. No LLM is used; existing tools handle validation and execution. See [Tailcat](../tools/tailcat.md#tailcat-quick).

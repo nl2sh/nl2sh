@@ -61,4 +61,4 @@ adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service st
 
 ## Tailcat 快捷共享
 
-点击右上角 Tailcat 图标和文字打开弹窗。默认选择 Web 实际端口与 ADB 配对/连接端口，点击确定后直接安装并共享，不再弹出安全确认；显示下载及执行状态，完成后保留窗口和可复制对端命令。全程无需 LLM，复用现有工具的校验和执行逻辑。详见 [Tailcat](../tools/tailcat.md#tailcat-quick)。
+点击右上角 Tailcat 图标和文字打开弹窗。默认选择 Web 实际端口与 ADB 连接端口（自动检测，失败默认 5555，可编辑），点击确定后直接安装并共享，不再弹出安全确认；显示下载及执行状态，完成后保留窗口和可复制对端命令。全程无需 LLM，复用现有工具的校验和执行逻辑。详见 [Tailcat](../tools/tailcat.md#tailcat-quick)。

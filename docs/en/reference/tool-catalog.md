@@ -2948,7 +2948,7 @@ Send an existing file to a Tailcat raw receiver. mode defaults to stream. Explic
 
 ## `tailcat_serve`
 
-Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.
+Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. Optional additional_ports shares more existing services through the same listener. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.
 
 | Descriptor | Value |
 | --- | --- |
@@ -2965,6 +2965,17 @@ Forward connections through Tailcat to an existing localhost TCP service and ret
 {
   "additionalProperties": false,
   "properties": {
+    "additional_ports": {
+      "default": [],
+      "description": "Additional existing localhost TCP service ports to share through the same listener.",
+      "items": {
+        "format": "uint16",
+        "maximum": 65535,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "array"
+    },
     "port": {
       "description": "Destination port of an existing localhost TCP service; keep that service running.",
       "format": "uint16",

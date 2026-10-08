@@ -36,7 +36,7 @@ static META: &[ToolMetadata] = &[
     ToolMetadata { name: "tailcat_receive", description: "Start a managed Tailcat file drop box in an existing directory and return its address. Incoming peers can write files there.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
     ToolMetadata { name: "tailcat_receive_stream", description: "Start a managed raw Tailcat receiver, saving one incoming byte stream to a new file. Return its address.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
     ToolMetadata { name: "tailcat_send_file", description: "Send an existing file to a Tailcat raw receiver. mode defaults to stream. Explicit mode=copy targets a file drop box and requires an external scp executable, which stock Android does not provide.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Call, schema: tailcat_schema },
-    ToolMetadata { name: "tailcat_serve", description: "Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
+    ToolMetadata { name: "tailcat_serve", description: "Forward connections through Tailcat to an existing localhost TCP service and return a Tailcat address. Optional additional_ports shares more existing services through the same listener. The port is the destination service port, not a new local listening port; an existing listener (including nl2sh Web on 9999) is required, not a port conflict. Do not replace or stop that service or start nc on the same port. If Tailcat is missing, use tailcat_install after approval, then retry.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::Tailcat, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
     ToolMetadata { name: "tailcat_adb_pair", description: "Guide Android 11+ wireless debugging with action=setup, then action=share to expose the current pairing and TLS connection ports plus an optional Web port through one managed Tailcat listener. Strong confirmation is required. Returns the current pairing code to the model/conversation after approval. Requires shell/root and an installed Tailcat. Does not pair the remote computer automatically or stop an existing listener.", category: ToolCategory::Network, risk: ToolRisk::Dangerous, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::AndroidShell, runtime: crate::tools::RuntimeRequirement::None, concurrency: crate::tools::ToolConcurrency::AndroidUi, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
     ToolMetadata { name: "tailcat_status", description: "Inspect this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::ReadOnly, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None, concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
     ToolMetadata { name: "tailcat_stop", description: "Stop this nl2sh process's managed Tailcat listener.", category: ToolCategory::Network, risk: ToolRisk::Mutating, requires: &[], group: Some(crate::tools::ToolGroup::Tailcat), default_enabled: false, platform: crate::tools::ToolPlatform::Any, runtime: crate::tools::RuntimeRequirement::None, concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Process, schema: tailcat_schema },
@@ -79,6 +79,9 @@ struct SendFile {
 struct Serve {
     /// Destination port of an existing localhost TCP service; keep that service running.
     port: u16,
+    /// Additional existing localhost TCP service ports to share through the same listener.
+    #[serde(default)]
+    additional_ports: Vec<u16>,
 }
 
 struct TailcatTool(&'static ToolMetadata);
@@ -139,10 +142,14 @@ impl Tool for TailcatTool {
             }
             "tailcat_serve" => {
                 let args: Serve = parse_args(self.0.name, arguments)?;
-                if args.port == 0 {
-                    bail!("Tailcat port must be 1–65535")
+                let mut ports = vec![args.port];
+                ports.extend(args.additional_ports);
+                if ports.len() > 16 || ports.contains(&0) {
+                    bail!("Tailcat requires 1–16 ports in the range 1–65535")
                 }
-                Action::Serve(args.port)
+                ports.sort_unstable();
+                ports.dedup();
+                Action::Serve(ports)
             }
             "tailcat_status" => {
                 let _: Empty = parse_args(self.0.name, arguments)?;
@@ -179,7 +186,8 @@ impl Tool for TailcatTool {
                     SendMode::Copy => "file copy",
                 }
             ),
-            Action::Serve(port) => {
+            Action::Serve(ports) => {
+                let port = ports.iter().map(u16::to_string).collect::<Vec<_>>().join(",");
                 format!("Forward Tailcat peers to the existing localhost TCP service on port {port}. Keep the local service running; this does not bind its port again.")
             }
             Action::Stop => "Stop managed Tailcat listener".into(),
@@ -511,7 +519,7 @@ enum Action {
     Receive(PathBuf),
     ReceiveStream(PathBuf),
     SendFile(PathBuf, String, SendMode),
-    Serve(u16),
+    Serve(Vec<u16>),
     Status,
     Stop,
 }
@@ -589,7 +597,12 @@ impl PreparedExecution for TailcatOperation {
                     }
                 }
             }
-            Action::Serve(port) => {
+            Action::Serve(ports) => {
+                let port = ports
+                    .iter()
+                    .map(u16::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",");
                 start(
                     &self.binary,
                     vec!["serve".into(), port.to_string()],

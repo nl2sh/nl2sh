@@ -311,6 +311,9 @@ async fn run_inner(
         if !is_suspended {
             app.history = snapshot(&history)?;
             app.turn = model_history.len();
+            if let Some(wizard) = tailcat_wizard.as_mut() {
+                wizard.poll();
+            }
             app.popup = confirmation
                 .as_ref()
                 .map(ConfirmationUi::view)
@@ -1108,7 +1111,7 @@ async fn run_inner(
                         }
                         "/tailcat" => {
                             log.record("local_command", "/tailcat")?;
-                            tailcat_wizard = Some(super::tailcat::Wizard::new());
+                            tailcat_wizard = Some(super::tailcat::Wizard::new(config));
                             continue;
                         }
                         "/balance" => {

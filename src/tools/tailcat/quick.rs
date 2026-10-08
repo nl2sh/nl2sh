@@ -66,12 +66,7 @@ pub(super) fn phase(status: &str) {
         update(|s| s.status = status.into());
     }
 }
-const QUICK_TOOLS: &[&str] = &[
-    "tailcat_check",
-    "tailcat_install",
-    "tailcat_serve",
-    "tailcat_adb_pair",
-];
+const QUICK_TOOLS: &[&str] = &["tailcat_check", "tailcat_install", "tailcat_serve"];
 
 // Selecting ports and starting this local wizard authorizes its fixed operations.
 // This private confirmer is never passed to Agent, bridge, or general tool callers.
@@ -83,23 +78,19 @@ impl Confirmer for UserInitiatedConfirmer {
     }
     async fn confirm(
         &self,
-        preview: &str,
+        _preview: &str,
         _assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
-        update(|s| {
-            s.messages
-                .push(preview.replace("the model and conversation", "this local dialog (no LLM)"));
-        });
         Ok(ConfirmationDecision::Approve)
     }
 }
 /// Begin a single wizard, explicitly enabling only its tools in a temporary config snapshot.
-pub fn begin(mut cfg: Config, web_port: Option<u16>, adb: bool) -> Result<Snapshot> {
-    if web_port.is_none() && !adb {
+pub fn begin(mut cfg: Config, web_port: Option<u16>, adb_port: Option<u16>) -> Result<Snapshot> {
+    if web_port.is_none() && adb_port.is_none() {
         bail!("Select at least one port")
     }
-    if web_port == Some(0) {
-        bail!("Invalid Web port")
+    if web_port == Some(0) || adb_port == Some(0) {
+        bail!("Invalid port")
     }
     {
         let mut s = state()
@@ -121,7 +112,7 @@ pub fn begin(mut cfg: Config, web_port: Option<u16>, adb: bool) -> Result<Snapsh
     }
     cfg.enable_pty = false;
     tokio::spawn(PROGRESS.scope(true, async move {
-        let result = run(&cfg, web_port, adb).await;
+        let result = run(&cfg, web_port, adb_port).await;
         update(|s| {
             s.busy = false;
             match result {
@@ -145,66 +136,72 @@ async fn call(cfg: &Config, name: &str, args: Value) -> Result<String> {
     }
     Ok(r.output)
 }
-async fn run(cfg: &Config, web_port: Option<u16>, adb: bool) -> Result<()> {
-    // Only absence triggers installation; a broken existing binary must be diagnosed.
-    if !cfg.tailcat_binary_path.exists() {
-        let output = call(cfg, "tailcat_install", json!({})).await?;
-        update(|s| s.messages.push(output));
-    }
-    let checked = call(cfg, "tailcat_check", json!({})).await?;
-    update(|s| s.messages.push(checked));
-    if adb {
-        let output = call(cfg, "tailcat_adb_pair", json!({"action":"setup"})).await?;
-        let value: Value = serde_json::from_str(&output)?;
-        update(|s| {
-            if value["status"] == "ready_to_share" {
-                s.messages.push(format!(
-                    "ADB 配对端口 / Pairing port: {}；连接端口 / Connection port: {}",
-                    value["pairing_port"], value["connect_port"]
-                ));
-            } else {
-                s.messages.push(output);
+/// Default ADB TCP port when device discovery is unavailable.
+pub const DEFAULT_ADB_PORT: u16 = 5555;
+
+/// Read existing Android ADB port properties; never enable debugging or open Settings.
+pub async fn detect_adb_port(cfg: &Config) -> u16 {
+    #[cfg(target_os = "android")]
+    {
+        use crate::shell::CommandExecutor;
+        let mut cfg = cfg.clone();
+        cfg.enable_pty = false;
+        cfg.execute_user_mode = crate::config::ExecuteUserMode::Normal;
+        cfg.execute_timeout_secs = 3;
+        let executor = ShellExecutor::new(cfg);
+        if let Ok(Ok(output)) = tokio::time::timeout(std::time::Duration::from_secs(4), executor.execute_machine(
+            "getprop service.adb.tls.port; getprop service.adb.tcp.port; getprop persist.adb.tcp.port", false
+        )).await {
+            if output.exit_code == Some(0) && !output.timed_out && !output.interrupted {
+                return parsed_adb_port(&output.stdout);
             }
-        });
-        if value["status"] != "ready_to_share" {
-            bail!("请按提示完成设备设置后重试 / Complete device setup and retry")
         }
-        let output = call(
-            cfg,
-            "tailcat_adb_pair",
-            json!({"action":"share","web_port":web_port}),
-        )
-        .await?;
-        let value: Value = serde_json::from_str(&output)?;
-        let commands = value["peer_commands"]
-            .as_object()
-            .context("Missing peer commands")?;
-        update(|s| {
-            for key in ["forward", "pair", "connect", "verify"] {
-                if let Some(command) = commands.get(key).and_then(Value::as_str) {
-                    s.commands.push(command.into());
-                }
-            }
-            s.messages
-                .push(format!("配对码 / Pairing code: {}", value["pairing_code"]));
-            s.messages.push("保持设备配对窗口和对端 forward 命令运行；在另一终端执行 adb pair 并输入配对码，再执行 adb connect。关闭弹窗不会停止共享或关闭无线调试。 / Keep device pairing dialog and peer forward running; run adb pair with the code, then adb connect in another terminal. Closing this dialog does not stop sharing or wireless debugging.".into());
-            if let Some(url) = value["web_url"].as_str() {
-                s.messages.push(format!("Web: {url}"));
-            }
-        });
-    } else if let Some(port) = web_port {
-        let output = call(cfg, "tailcat_serve", json!({"port":port})).await?;
-        let address = output
-            .lines()
-            .find_map(|l| l.strip_prefix("address="))
-            .context("Missing Tailcat address")?;
-        let command = format!("tailcat forward {address} 19999:{port}");
-        update(|s| {
-            s.commands.push(command);
-            s.messages.push(output);
-            s.messages.push("Web: http://127.0.0.1:19999/".into());
-        });
     }
+    #[cfg(not(target_os = "android"))]
+    let _ = cfg;
+    DEFAULT_ADB_PORT
+}
+#[cfg(any(target_os = "android", test))]
+fn parsed_adb_port(properties: &str) -> u16 {
+    properties
+        .lines()
+        .find_map(|line| line.trim().parse::<u16>().ok().filter(|port| *port > 0))
+        .unwrap_or(DEFAULT_ADB_PORT)
+}
+
+async fn run(cfg: &Config, web_port: Option<u16>, adb_port: Option<u16>) -> Result<()> {
+    if !cfg.tailcat_binary_path.exists() {
+        call(cfg, "tailcat_install", json!({})).await?;
+    }
+    call(cfg, "tailcat_check", json!({})).await?;
+    let ports: Vec<_> = web_port.into_iter().chain(adb_port).collect();
+    let port = ports.first().context("No ports selected")?;
+    let output = call(
+        cfg,
+        "tailcat_serve",
+        json!({"port":port,"additional_ports":&ports[1..]}),
+    )
+    .await?;
+    let address = output
+        .lines()
+        .find_map(|l| l.strip_prefix("address="))
+        .context("Missing Tailcat address")?;
+    let mut forward = format!("tailcat forward {address}");
+    if let Some(port) = web_port {
+        forward.push_str(&format!(" 19999:{port}"));
+    }
+    if let Some(port) = adb_port {
+        forward.push_str(&format!(" 13702:{port}"));
+    }
+    update(|s| {
+        s.commands.push(forward);
+        if adb_port.is_some() {
+            s.commands.push("adb connect 127.0.0.1:13702".into());
+        }
+        if web_port.is_some() {
+            s.messages.push("Web: http://127.0.0.1:19999/".into());
+        }
+    });
     Ok(())
 }
 
@@ -213,10 +210,19 @@ mod tests {
     use super::*;
     use crate::security::RiskLevel;
 
+    #[test]
+    fn adb_discovery_prefers_tls_then_tcp_and_defaults_to_5555() {
+        assert_eq!(parsed_adb_port("37123\n5555\n5556"), 37123);
+        assert_eq!(parsed_adb_port("-1\n4567\n"), 4567);
+        for value in ["", "0\n-1", "invalid\n65536"] {
+            assert_eq!(parsed_adb_port(value), 5555);
+        }
+    }
+
     #[tokio::test]
     async fn user_initiated_wizard_runs_without_further_confirmation_and_scopes_progress(
     ) -> Result<()> {
-        assert!(begin(Config::default(), None, false).is_err());
+        assert!(begin(Config::default(), None, None).is_err());
         for risk in [RiskLevel::Mutating, RiskLevel::Dangerous] {
             let assessment = SecurityAssessment::from_policy(
                 risk,
@@ -255,7 +261,7 @@ mod tests {
             ..Config::default()
         };
         let original = cfg.tool_overrides.clone();
-        begin(cfg.clone(), Some(9999), false)?;
+        begin(cfg.clone(), Some(9999), None)?;
         tokio::time::timeout(std::time::Duration::from_secs(5), async {
             while snapshot()?.busy {
                 tokio::task::yield_now().await;
