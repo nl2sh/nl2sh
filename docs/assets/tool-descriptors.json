@@ -173,7 +173,7 @@
       "category": "file",
       "concurrency": "sequential",
       "default_enabled": false,
-      "description": "Decompile one exact APK class using a verified Android DEX helper through app_process. Strong confirmation required.",
+      "description": "Decompile one exact APK class using an already installed Android DEX helper through app_process. Strong confirmation required. Does not download; if no helper is installed, use jadx_install after approval, then retry.",
       "group": "jadx",
       "lifetime": "call",
       "name": "decompile_apk_class",
@@ -181,6 +181,44 @@
       "requires": [],
       "risk": "dangerous",
       "runtime": "jadx"
+    }
+  },
+  {
+    "parameters": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "policy": {
+      "category": "file",
+      "concurrency": "parallel",
+      "default_enabled": false,
+      "description": "Report the Android DEX helper source, its authentication, and whether a validated helper is installed. Read-only; downloads nothing and runs no helper.",
+      "group": "jadx",
+      "lifetime": "call",
+      "name": "jadx_check",
+      "platform": "android",
+      "requires": [],
+      "risk": "read_only",
+      "runtime": "none"
+    }
+  },
+  {
+    "parameters": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "policy": {
+      "category": "network",
+      "concurrency": "sequential",
+      "default_enabled": false,
+      "description": "Download, verify, and cache the pinned Android DEX helper so decompile_apk_class can run. Mutating and Android-only. Use jadx_check first to see the exact source and digest.",
+      "group": "jadx",
+      "lifetime": "call",
+      "name": "jadx_install",
+      "platform": "android",
+      "requires": [],
+      "risk": "mutating",
+      "runtime": "none"
     }
   },
   {

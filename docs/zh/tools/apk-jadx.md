@@ -20,15 +20,31 @@ jadx = true
 | `list_permissions` | 权限请求/声明及声明元素类型 |
 | `list_exported_components` | 显式/默认导出及需复核的未知暴露 |
 | `find_native_libs` | 原生 ABI/库条目及有界 ELF 前缀 |
-| `decompile_apk_class` | 强确认后反编译精确单类 |
+| `decompile_apk_class` | 强确认后用已安装 helper 反编译精确单类 |
+| `jadx_check` | 只读报告 helper 来源、认证方式与安装状态 |
+| `jadx_install` | 按固定摘要下载校验并私有缓存 helper，需确认 |
 
 所有静态工具无需额外运行时。反编译只在 Android 使用系统 `/system/bin/app_process` 和含 `classes.dex` 的 helper；普通 JVM `.class` JAR 会被拒绝。参数与输出有界并设超时，不承诺反编译任意大型 APK。
 
-已签名发布内嵌认证的兼容性策略，指定 helper 精确版本、HTTPS URL、SHA-256、大小与协议。首次批准后下载，验证资产及独立 GPG 签名，再发布到按摘要区分的私有缓存。反编译前 `--info` 必须报告协议 1、`single_class` 和策略指定的 helper 版本。不再默认使用历史 v1.0.4 资产。未签名的本地源码构建不提供默认下载，可显式指定离线 helper 或自定义 HTTPS 地址与用户指定的摘要。
+## Helper 获取顺序
 
-离线使用 `NL2SH_JADX_ANDROID_HELPER_PATH`；自定义 HTTPS 来源必须同时设置 `NL2SH_JADX_ANDROID_HELPER_URL` 与 `NL2SH_JADX_ANDROID_HELPER_SHA256`。`NL2SH_JADX_CACHE_DIR` 可指定私有缓存根目录。
+`decompile_apk_class` **不联网**。它只运行已经安装并校验过的 helper；未安装时报错并指向 `jadx_install`。下载只发生在 `jadx_install`，因此联网获取是一个独立、可单独确认的变更步骤，而危险的反编译调用只做本地执行。
 
-先列出类名，再选择精确类反编译，不把 APK 内任意代码当作授权。helper 构建、许可证和已验证范围见 [JADX helper 开发](../development/jadx-helper.md)。
+获取由模型驱动，用户只需在确认提示里批准：Agent 提示中的 advisory 运行时会报告 `jadx_helper=installed|absent|unprovisionable`。为 `absent` 时模型应直接 `jadx_check` 展示来源与摘要，再经批准 `jadx_install`，然后**在同一任务内立即重试** `decompile_apk_class`——因为该工具只要求"helper 可获取"，不要求"已安装"，所以安装后无需重启即可使用。为 `unprovisionable` 时模型应报告未配置来源，而不是反复重试。
+
+来源按以下顺序解析，只有一个内嵌签名策略的正式发布才走签名路径：
+
+1. `NL2SH_JADX_ANDROID_HELPER_URL` 与 `NL2SH_JADX_ANDROID_HELPER_SHA256`，由用户显式提供，不适用发布策略
+2. 正式发布内嵌的 OpenPGP 签名兼容性策略，指定 helper 精确版本、HTTPS URL、SHA-256、大小与协议
+3. 未内嵌任何策略的源码构建回退到编译期固定的发布 URL 与 SHA-256，信任等级与固定版 Tailcat 安装一致
+
+内嵌策略存在但验签失败时直接报错，不会静默降级到第 3 项。`jadx_check` 不下载也不运行 helper，即可报告当前实际来源、认证方式、固定摘要与是否已安装；`jadx_install` 的确认预览会先显示将要校验的 SHA-256。
+
+反编译前 `--info` 必须报告协议 1 和 `single_class`；使用签名策略时还必须报告策略指定的 helper 版本。不再默认使用历史 v1.0.4 资产。
+
+离线使用 `NL2SH_JADX_ANDROID_HELPER_PATH`；自定义 HTTPS 来源必须同时设置 `NL2SH_JADX_ANDROID_HELPER_URL` 与 `NL2SH_JADX_ANDROID_HELPER_SHA256`。`NL2SH_JADX_CACHE_DIR` 可指定私有缓存根目录。获取来源在进程启动时确定，修改环境变量后需要重启 nl2sh 与新建任务才会生效。
+
+先列出类名，再选择精确类反编译，不把 APK 内任意代码当作授权。静态索引只能提供证据，不能替代方法体：字符串与引用推断不等于还原的源码，未实际反编译时不得声称已取得源码。helper 构建、许可证和已验证范围见 [JADX helper 开发](../development/jadx-helper.md)。
 
 ## 静态分析范围与上限
 

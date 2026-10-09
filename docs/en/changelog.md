@@ -6,6 +6,8 @@
 
 - Add `start_system_trace`, `stop_system_trace`, and `analyze_system_trace`: approved bounded device Perfetto capture/stop, with read-only Rust decoding of supported protobuf scheduling, rendering, frame, Binder and wakeup events and explicit evidence coverage/limitations.
 
+- Make DEX helper acquisition explicitly on-demand: add read-only `jadx_check` and approval-gated `jadx_install`, and stop `decompile_apk_class` from reaching the network so it only runs an already installed, verified helper and points at the install step when none exists. Acquisition is model-driven: the advisory runtime line reports `jadx_helper=installed|absent|unprovisionable`, and when `absent` the model inspects the source, installs after approval, and retries in the same task with no restart. A source build that embeds no signed policy falls back to a compile-time pinned release URL and SHA-256, with the signed policy still taking precedence; a policy that fails verification now errors instead of downgrading. The Agent is instructed never to claim recovered source from static indexes alone.
+
 ## [1.1.0] - 2026-10-08
 
 - Verify GPG signatures, sizes, and checksums for runtime manifests and assets using a pinned trust root and embedded extension policy; Helper management supports healthy reconnects, update ownership, rollback, and extension installation.

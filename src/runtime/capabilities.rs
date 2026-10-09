@@ -163,6 +163,11 @@ mod tests {
         assert!(registry.get("android.screen_dump").is_some()); // shell fallback without Bridge
         assert!(registry.get("tailcat_install").is_some());
         assert!(registry.get("decompile_apk_class").is_some()); // acquisition still requires approval
+                                                                // Helper recovery stays reachable on Android even before any source exists, so a missing
+                                                                // helper is reported as an install step rather than an unavailable capability.
+        for name in ["jadx_check", "jadx_install"] {
+            assert!(registry.get(name).is_some(), "{name}");
+        }
         let termux = RuntimeCapabilities {
             android_shell: false,
             uid: 10001,
@@ -172,5 +177,15 @@ mod tests {
         let registry = ToolRegistry::for_runtime(&config, &termux);
         assert!(registry.get("android.tap").is_none());
         assert!(registry.get("inspect_android_environment").is_some());
+        // Without an acquisition source the dangerous call must not be offered, but recovery stays.
+        let unsourced = RuntimeCapabilities {
+            jadx_provisionable: false,
+            ..termux
+        };
+        let registry = ToolRegistry::for_runtime(&config, &unsourced);
+        assert!(registry.get("decompile_apk_class").is_none());
+        for name in ["jadx_check", "jadx_install"] {
+            assert!(registry.get(name).is_some(), "{name}");
+        }
     }
 }

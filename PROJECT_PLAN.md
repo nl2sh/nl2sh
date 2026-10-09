@@ -21,6 +21,8 @@
 - [x] 原生 service 与启动器迁移。
 - [x] Helper 生命周期、回滚和更新归属。
 - [x] Compatibility Manifest、JADX 协议执行校验与资产签名。
+- [x] JADX helper 显式按需获取：`jadx_check` 只读报告、`jadx_install` 需确认且唯一联网，`decompile_apk_class` 只用已安装 helper；来源优先级为显式环境、签名策略、编译期固定发布摘要，验签失败不降级。
+- [x] 获取由模型驱动：advisory 运行时报告 `jadx_helper` 状态，缺失时直接检查、批准安装并在同任务内重试，安装后无需重启。
 - [x] Helper Bridge 管理和扩展状态。
 - [x] Descriptor、跨进程资源锁、UI Lease 和全入口 Audit Event。
 - [x] 八项 APK 静态分析与 Web 职责拆分。
@@ -397,6 +399,7 @@
 
 - [x] 结构化只读 APK 概览、ZIP 条目检索和 DEX 类索引，限制条目、解压量和结果数量。
 - [x] 单类 JADX 反编译经过 Dangerous 强确认；只接受含 `classes.dex` 的 Android helper，并通过 `CLASSPATH` + `/system/bin/app_process` 启动；离线 JAR 或 HTTPS URL + 固定 SHA-256 可在强确认后使用。
+- [x] 反编译不再隐式下载：helper 由 `jadx_install` 在独立确认步骤获取并按摘要私有缓存，未安装时 `decompile_apk_class` 返回可执行的恢复指引；`jadx_check`/`jadx_install` 使用 `RuntimeRequirement::None`，与 Tailcat 的检查/安装分离一致。
 - [x] 独立 `nl2sh/jadx-helper` 仓库提供固定 JADX 1.5.1 的最小 Android helper 源码、Gradle 构建和发布元数据生成脚本；该版本兼容 API 28 的 `Inflater` 接口基线。
 - [x] 发布并锁定经真机验证的 Android DEX helper，提供默认 GitHub Release 下载地址和固定摘要；自定义下载源仍强制提供独立摘要。
 - [x] 在 Android API 35 模拟器通过 `app_process` 对单 DEX 和双 DEX 测试 APK 完成单类反编译；不使用设备端 Java 或安装 helper APK。

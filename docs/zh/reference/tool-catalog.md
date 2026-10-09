@@ -1598,7 +1598,7 @@ DeviceIdle 与白名单证据。
 
 ## `decompile_apk_class`
 
-通过验证过的 Android DEX helper/app_process 反编译精确单类，需强确认。
+用已安装的 Android DEX helper 经 app_process 反编译精确单类，需强确认；不下载任何内容，缺少 helper 时先用 jadx_install 确认安装后重试。
 
 | 描述项 | 值 |
 | --- | --- |
@@ -2306,6 +2306,50 @@ DeviceIdle 与白名单证据。
   "required": [
     "host"
   ],
+  "type": "object"
+}
+```
+
+## `jadx_check`
+
+只读报告 Android DEX helper 的来源、认证方式与安装状态，不下载也不运行 helper。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "type": "object"
+}
+```
+
+## `jadx_install`
+
+按签名策略、固定 URL 与 SHA-256 下载校验并私有缓存 helper，需确认；仅此工具联网。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `jadx` |
+| 默认启用 | `false` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
   "type": "object"
 }
 ```

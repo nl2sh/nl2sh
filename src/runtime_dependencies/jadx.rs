@@ -39,10 +39,35 @@ fn cache_identity() -> Result<String> {
     Ok(source.sha)
 }
 
+/// How an acquisition source is authenticated before any download is trusted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HelperTrust {
+    /// Operator-supplied and not covered by any release policy: a URL with digest, or a local file.
+    Explicit,
+    /// Verified against this build's OpenPGP-signed runtime policy.
+    SignedPolicy,
+    /// Pinned release checksum compiled into this source build.
+    ReleasePin,
+}
+
+/// Release pin for source builds that embed no signed runtime policy.
+///
+/// Precedence is explicit environment, then the embedded signed policy, then this pin. An
+/// embedded policy that fails to decode is an error rather than a reason to fall back, so a
+/// damaged signature can never silently downgrade to the unsigned pin. The digest is the
+/// authority here exactly as it is for the pinned Tailcat release; `version` is reported for
+/// diagnostics only and is not independently verified.
+const RELEASE_PIN_VERSION: &str = "0.2.0";
+const RELEASE_PIN_URL: &str =
+    "https://github.com/nl2sh/jadx-helper/releases/download/v0.2.0/jadx-helper.jar";
+const RELEASE_PIN_SHA256: &str = "083b8d9d6223c009350688ed5f8fc3ae1ad1a39ce23e930498aa8035a4b89899";
+
 struct HelperSource {
     url: String,
     sha: String,
     signed: Option<super::manifest::RuntimeArtifact>,
+    trust: HelperTrust,
 }
 
 fn parse_sha(sha: String) -> Result<String> {
@@ -150,37 +175,34 @@ fn validate_info(info: &JadxInfo, expected: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Whether an explicit offline helper or validated download source can be used after approval.
-/// This does not download or execute the helper during discovery.
-pub fn provisionable() -> bool {
-    if let Some(path) =
-        std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH").filter(|value| !value.is_empty())
-    {
-        return Path::new(&path).is_file();
+/// Cheap advisory state for the Agent prompt.
+///
+/// This only reports whether a helper file exists at the expected location; full digest and DEX
+/// structure validation still runs before any helper is executed.
+pub fn installed_hint() -> &'static str {
+    let offline = offline_path().is_some_and(|path| path.is_file());
+    let cached = cache_dir()
+        .ok()
+        .is_some_and(|dir| dir.join("jadx-helper.jar").is_file());
+    if offline || cached {
+        "installed"
+    } else if download_source().is_ok() {
+        "absent"
+    } else {
+        "unprovisionable"
     }
-    download_source().is_ok()
 }
 
+/// Resolve and validate the acquisition source without touching the network.
 fn download_source() -> Result<HelperSource> {
-    let source = if let Ok(url) = std::env::var("NL2SH_JADX_ANDROID_HELPER_URL") {
-        let sha = std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")
-            .context("NL2SH_JADX_ANDROID_HELPER_SHA256 is required with a custom helper URL")?;
-        HelperSource {
-            url,
-            sha: parse_sha(sha)?,
-            signed: None,
-        }
-    } else {
-        let artifact = super::manifest::embedded()?
-            .and_then(|manifest| manifest.jadx_helper)
-            .context("this build has no signed default JADX policy; configure an explicit offline helper or HTTPS URL with SHA-256")?;
-        HelperSource {
-            url: artifact.url.clone(),
-            sha: artifact.sha256.to_ascii_lowercase(),
-            signed: Some(artifact),
-        }
-    };
-    let parsed = reqwest::Url::parse(&source.url).context("invalid Android JADX helper URL")?;
+    let source = resolve_source()?;
+    validate_source_url(&source.url)?;
+    Ok(source)
+}
+
+/// Enforce the transport requirements every acquisition source must meet.
+fn validate_source_url(url: &str) -> Result<()> {
+    let parsed = reqwest::Url::parse(url).context("invalid Android JADX helper URL")?;
     if parsed.scheme() != "https"
         || !parsed.username().is_empty()
         || parsed.password().is_some()
@@ -188,7 +210,69 @@ fn download_source() -> Result<HelperSource> {
     {
         bail!("Android JADX helper URL must be HTTPS without credentials or fragment")
     }
-    Ok(source)
+    Ok(())
+}
+
+/// Resolve the acquisition source without touching the network.
+fn resolve_source() -> Result<HelperSource> {
+    let explicit = match std::env::var("NL2SH_JADX_ANDROID_HELPER_URL") {
+        Ok(url) => {
+            let sha = std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")
+                .context("NL2SH_JADX_ANDROID_HELPER_SHA256 is required with a custom helper URL")?;
+            Some((url, sha))
+        }
+        Err(_) => None,
+    };
+    choose_source(
+        explicit,
+        super::manifest::embedded()?.and_then(|it| it.jadx_helper),
+    )
+}
+
+/// Pick the authoritative acquisition source.
+///
+/// Precedence is an operator-supplied URL and digest, then the embedded signed policy, then the
+/// compiled-in release pin. The caller passes the embedded policy as `Ok(None)` only when this
+/// build genuinely carries no policy; a policy that fails to decode is returned as an error by
+/// the caller so a damaged signature can never silently downgrade to the unsigned pin.
+fn choose_source(
+    explicit: Option<(String, String)>,
+    policy: Option<super::manifest::RuntimeArtifact>,
+) -> Result<HelperSource> {
+    if let Some((url, sha)) = explicit {
+        return Ok(HelperSource {
+            url,
+            sha: parse_sha(sha)?,
+            signed: None,
+            trust: HelperTrust::Explicit,
+        });
+    }
+    let Some(artifact) = policy else {
+        return Ok(HelperSource {
+            url: RELEASE_PIN_URL.to_string(),
+            sha: RELEASE_PIN_SHA256.to_string(),
+            signed: None,
+            trust: HelperTrust::ReleasePin,
+        });
+    };
+    Ok(HelperSource {
+        url: artifact.url.clone(),
+        sha: artifact.sha256.to_ascii_lowercase(),
+        signed: Some(artifact),
+        trust: HelperTrust::SignedPolicy,
+    })
+}
+
+/// Whether an offline helper or a downloadable source can supply the helper.
+///
+/// Discovery never downloads or executes anything.
+pub fn provisionable() -> bool {
+    if let Some(path) =
+        std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH").filter(|value| !value.is_empty())
+    {
+        return Path::new(&path).is_file();
+    }
+    download_source().is_ok()
 }
 
 fn make_private_dir(path: &Path) -> Result<()> {
@@ -272,32 +356,61 @@ fn verified(path: &Path, expected: &str) -> bool {
         && validate_dex_jar(path).is_ok()
 }
 
-async fn ensure_helper(config: &Config) -> Result<PathBuf> {
-    if let Some(path) =
-        std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH").filter(|value| !value.is_empty())
-    {
-        let path = PathBuf::from(path);
+fn offline_path() -> Option<PathBuf> {
+    std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Validate an operator-supplied offline helper without downloading anything.
+async fn validated_offline(path: PathBuf) -> Result<PathBuf> {
+    let checked = path.clone();
+    tokio::task::spawn_blocking(move || validate_dex_jar(&checked))
+        .await
+        .context("helper validation worker failed")??;
+    if std::env::var_os("NL2SH_JADX_ANDROID_HELPER_SHA256").is_some() {
+        let expected = parse_sha(std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")?)?;
         let checked = path.clone();
-        tokio::task::spawn_blocking(move || validate_dex_jar(&checked))
-            .await
-            .context("helper validation worker failed")??;
-        if std::env::var_os("NL2SH_JADX_ANDROID_HELPER_SHA256").is_some() {
-            let expected = parse_sha(std::env::var("NL2SH_JADX_ANDROID_HELPER_SHA256")?)?;
-            let checked = path.clone();
-            if !tokio::task::spawn_blocking(move || {
-                digest_file(&checked).is_ok_and(|digest| digest == expected)
-            })
-            .await
-            .context("helper hash worker failed")?
-            {
-                bail!("Android JADX helper SHA-256 mismatch")
-            }
+        if !tokio::task::spawn_blocking(move || {
+            digest_file(&checked).is_ok_and(|digest| digest == expected)
+        })
+        .await
+        .context("helper hash worker failed")?
+        {
+            bail!("Android JADX helper SHA-256 mismatch")
         }
-        return fs::canonicalize(path).context("cannot resolve Android helper path");
+    }
+    fs::canonicalize(path).context("cannot resolve Android helper path")
+}
+
+/// Resolve an installed helper without downloading, executing, or mutating anything.
+pub async fn installed_helper() -> Result<PathBuf> {
+    if let Some(path) = offline_path() {
+        return validated_offline(path).await;
+    }
+    let expected = download_source()?.sha;
+    let dest = cache_dir()?.join("jadx-helper.jar");
+    let cached = dest.clone();
+    let sha = expected.clone();
+    let ready = tokio::task::spawn_blocking(move || verified(&cached, &sha))
+        .await
+        .context("helper cache worker failed")?;
+    if !ready {
+        bail!(
+            "Android JADX helper is not installed; use jadx_install after approval, then retry decompilation"
+        )
+    }
+    fs::canonicalize(dest).context("cannot resolve cached Android helper")
+}
+
+async fn acquire(config: &Config) -> Result<PathBuf> {
+    if let Some(path) = offline_path() {
+        return validated_offline(path).await;
     }
     let source = download_source()?;
     let url = source.url;
     let sha = source.sha;
+    let signed = source.signed;
     let dir = cache_dir()?;
     let dest = dir.join("jadx-helper.jar");
     let _guard = DOWNLOAD_LOCK.lock().await;
@@ -356,7 +469,7 @@ async fn ensure_helper(config: &Config) -> Result<PathBuf> {
     if format!("{:x}", hash.finalize()) != sha {
         bail!("Android JADX helper SHA-256 mismatch")
     }
-    if let Some(artifact) = source.signed {
+    if let Some(artifact) = signed {
         if bytes != artifact.size_bytes {
             bail!("Android JADX helper size mismatch")
         }
@@ -435,12 +548,115 @@ async fn probe_info(jar: &Path, work: &Path) -> Result<JadxInfo> {
     serde_json::from_slice(&bytes).context("invalid Android JADX protocol information")
 }
 
-/// Decompiles one APK class using an Android DEX helper and `app_process`.
-pub async fn decompile_class(config: &Config, apk_path: &str, class_name: &str) -> Result<String> {
+/// Report acquisition state without downloading or executing the helper.
+///
+/// This is the read-only half of the explicit acquisition flow: it names the source that
+/// `jadx_install` would use, its authentication, and whether a validated helper is already
+/// present.
+pub async fn check(executor: &dyn crate::shell::CommandExecutor) -> Result<String> {
+    let offline = offline_path();
+    let source = if offline.is_some() {
+        None
+    } else {
+        download_source().ok()
+    };
+    let trust = if offline.is_some() {
+        Some(HelperTrust::Explicit)
+    } else {
+        source.as_ref().map(|item| item.trust)
+    };
+    let path = if offline.is_some() {
+        offline
+    } else {
+        cache_dir()
+            .ok()
+            .map(|dir| dir.join("jadx-helper.jar"))
+            .filter(|path| path.is_file())
+    };
+    let installed = match path.clone() {
+        Some(candidate) => {
+            // Hashing and ZIP inspection read up to the 64 MiB helper ceiling, so keep it off the
+            // async runtime just like `installed_info` does.
+            tokio::task::spawn_blocking(move || validate_dex_jar(&candidate).is_ok())
+                .await
+                .context("helper validation worker failed")?
+        }
+        None => false,
+    };
+    let info = if installed {
+        installed_info(executor).await.ok().flatten()
+    } else {
+        None
+    };
+    Ok(serde_json::json!({
+        "status": "ok",
+        "supported_platform": cfg!(target_os = "android"),
+        "provisionable": provisionable(),
+        "trust": trust,
+        "source_url": source.as_ref().map(|item| item.url.clone()),
+        "source_sha256": source.as_ref().map(|item| item.sha.clone()),
+        "pinned_version": match trust {
+            Some(HelperTrust::ReleasePin) => Some(RELEASE_PIN_VERSION.to_string()),
+            Some(HelperTrust::SignedPolicy) => source
+                .as_ref()
+                .and_then(|item| item.signed.as_ref())
+                .map(|artifact| artifact.version.clone()),
+            _ => None,
+        },
+        "installed": installed,
+        "installed_path": path.map(|path| path.to_string_lossy().into_owned()),
+        "installed_info": info,
+    })
+    .to_string())
+}
+
+/// Human-readable confirmation preview for the explicit acquisition step.
+///
+/// The preview names the exact bytes that approval would authorize, mirroring the pinned
+/// Tailcat install preview so the digest is visible before any request is made.
+pub fn install_preview() -> Result<String> {
+    if let Some(path) = offline_path() {
+        return Ok(format!(
+            "Use the offline Android DEX helper at {} after verifying it is the intended file",
+            path.to_string_lossy()
+        ));
+    }
+    let source = download_source()?;
+    Ok(format!(
+        "Download the Android DEX helper from {}, verify SHA-256 {}, and cache it privately for decompilation",
+        source.url, source.sha
+    ))
+}
+
+/// Download, verify, and publish the helper after explicit approval.
+///
+/// This is the only path that reaches the network. An already valid cache is reused without a
+/// request, and the signed policy additionally verifies the detached signature.
+pub async fn install(config: &Config) -> Result<String> {
+    let trust = if offline_path().is_some() {
+        HelperTrust::Explicit
+    } else {
+        download_source()?.trust
+    };
+    let path = acquire(config).await?;
+    Ok(serde_json::json!({
+        "status": "ok",
+        "trust": trust,
+        "path": path.to_string_lossy(),
+        "next_step": "decompile_apk_class",
+    })
+    .to_string())
+}
+
+/// Decompiles one APK class using an installed Android DEX helper and `app_process`.
+///
+/// This never reaches the network. Acquisition is a separate, explicitly approved step so the
+/// dangerous call runs only code the operator has already installed and verified.
+pub async fn decompile_class(apk_path: &str, class_name: &str) -> Result<String> {
     if !cfg!(target_os = "android") {
         bail!("{{\"error\":\"jadx_android_only\",\"detail\":\"DEX helper decompilation requires the Android app_process runtime\"}}")
     }
-    let jar = ensure_helper(config).await.map_err(|error| {
+    let jar = installed_helper().await.map_err(|error| {
         anyhow::anyhow!(
             "{}",
             serde_json::json!({
@@ -573,5 +789,101 @@ mod tests {
         assert!(validate_info(&info, Some("0.1.0")).is_err());
         info.protocol = 2;
         assert!(validate_info(&info, None).is_err());
+    }
+
+    fn policy_artifact() -> super::super::manifest::RuntimeArtifact {
+        super::super::manifest::RuntimeArtifact {
+            version: "9.9.9".into(),
+            protocol: 1,
+            url: "https://example.invalid/signed.jar".into(),
+            signature_url: "https://example.invalid/signed.jar.sig".into(),
+            sha256: "AA".repeat(32),
+            size_bytes: 1,
+            min_android_api: 26,
+            package_name: None,
+            certificate_sha256: None,
+            features: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn source_precedence_prefers_explicit_then_signed_policy_then_pin() -> Result<()> {
+        let signed = choose_source(None, Some(policy_artifact()))?;
+        assert_eq!(signed.trust, HelperTrust::SignedPolicy);
+        assert_eq!(signed.url, "https://example.invalid/signed.jar");
+        assert_eq!(
+            signed.signed.map(|artifact| artifact.version),
+            Some("9.9.9".into())
+        );
+
+        let pinned = choose_source(None, None)?;
+        assert_eq!(pinned.trust, HelperTrust::ReleasePin);
+        assert_eq!(pinned.url, RELEASE_PIN_URL);
+        assert_eq!(pinned.sha, RELEASE_PIN_SHA256);
+        assert!(pinned.signed.is_none());
+
+        let explicit = choose_source(
+            Some(("https://example.invalid/mine.jar".into(), "BB".repeat(32))),
+            Some(policy_artifact()),
+        )?;
+        assert_eq!(explicit.trust, HelperTrust::Explicit);
+        assert_eq!(explicit.url, "https://example.invalid/mine.jar");
+        assert_eq!(explicit.sha, "bb".repeat(32));
+        assert!(explicit.signed.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_source_requires_a_well_formed_digest() {
+        for bad in ["short".to_string(), "ZZ".repeat(32), String::new()] {
+            assert!(
+                choose_source(Some(("https://example.invalid/a.jar".into(), bad)), None).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn compiled_release_pin_is_a_valid_https_digest_pair() -> Result<()> {
+        assert_eq!(RELEASE_PIN_SHA256.len(), 64);
+        assert!(RELEASE_PIN_SHA256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit()));
+        let source = choose_source(None, None)?;
+        validate_source_url(&source.url)?;
+        assert!(source.url.contains("/releases/download/v"));
+        Ok(())
+    }
+
+    #[test]
+    fn source_urls_reject_plaintext_and_embedded_credentials() {
+        for bad in [
+            "http://example.invalid/a.jar",
+            "https://user:pass@example.invalid/a.jar",
+            "https://example.invalid/a.jar#fragment",
+        ] {
+            assert!(validate_source_url(bad).is_err(), "{bad}");
+        }
+        assert!(validate_source_url("https://example.invalid/a.jar").is_ok());
+    }
+
+    #[test]
+    fn install_preview_names_the_digest_before_any_request() -> Result<()> {
+        let preview = install_preview()?;
+        assert!(preview.contains(RELEASE_PIN_SHA256), "{preview}");
+        Ok(())
+    }
+
+    #[test]
+    fn advisory_hint_distinguishes_absent_from_unprovisionable() {
+        // The compiled-in release pin always resolves, so an uninstalled helper is "absent"
+        // (recoverable through jadx_install) rather than "unprovisionable".
+        let hint = installed_hint();
+        assert!(
+            matches!(hint, "installed" | "absent"),
+            "unexpected hint {hint}"
+        );
+        if !std::env::var_os("NL2SH_JADX_ANDROID_HELPER_PATH").is_some() {
+            assert_ne!(hint, "unprovisionable");
+        }
     }
 }

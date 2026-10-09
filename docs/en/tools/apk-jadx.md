@@ -20,15 +20,31 @@ jadx = true
 | `list_permissions` | Requested and declared permissions with declaration element |
 | `list_exported_components` | Explicit/default export and unknown exposure needing review |
 | `find_native_libs` | Native ABI/library entries and bounded ELF prefix |
-| `decompile_apk_class` | Strongly confirmed exact-class decompilation |
+| `decompile_apk_class` | Strongly confirmed exact-class decompilation with an installed helper |
+| `jadx_check` | Read-only helper source, authentication, and installed state |
+| `jadx_install` | Download, verify, and privately cache the pinned helper; needs approval |
 
 All static tools need no extra runtime. Decompilation runs only on Android with `/system/bin/app_process` and a helper containing `classes.dex`; ordinary JVM `.class` JARs are rejected. Arguments/output are bounded with a timeout, and arbitrary large APK support is not guaranteed.
 
-A signed release embeds an authenticated compatibility policy selecting the helper's exact version, HTTPS URL, SHA-256, size and protocol. The first approved call verifies the downloaded asset and detached GPG signature before publishing it in a private cache keyed by digest. Before decompilation, `--info` must report protocol 1, `single_class`, and the policy's helper version. The historical v1.0.4 asset is no longer a default. An unsigned local source build has no default download; use an explicit offline helper or custom HTTPS source with a user-supplied digest.
+## Helper acquisition order
 
-Use `NL2SH_JADX_ANDROID_HELPER_PATH` offline. A custom HTTPS source requires both `NL2SH_JADX_ANDROID_HELPER_URL` and `NL2SH_JADX_ANDROID_HELPER_SHA256`. `NL2SH_JADX_CACHE_DIR` selects the private cache root.
+`decompile_apk_class` never reaches the network. It runs only an already installed, verified helper; when none is installed it reports the missing helper and points at `jadx_install`. The download happens only in `jadx_install`, so fetching the helper is a separate, independently confirmable mutating step and the dangerous decompile call stays local.
 
-List classes before choosing an exact class to decompile; APK contents are not authorization. See [JADX helper development](../development/jadx-helper.md) for builds, licenses, and validated scope.
+Acquisition is model-driven and the user only approves the confirmation: the advisory runtime line in the Agent prompt reports `jadx_helper=installed|absent|unprovisionable`. When it is `absent`, the model calls `jadx_check` to show the source and digest, installs through `jadx_install` after approval, then retries `decompile_apk_class` **immediately in the same task** — the tool requires only that a helper can be obtained, not that one is installed, so no restart is needed. When it is `unprovisionable`, the model reports that no source is configured instead of retrying.
+
+Sources resolve in this order, and only a formal release with an embedded signed policy takes the signature path:
+
+1. `NL2SH_JADX_ANDROID_HELPER_URL` with `NL2SH_JADX_ANDROID_HELPER_SHA256`, supplied explicitly by the operator; no release policy applies
+2. The OpenPGP-signed compatibility policy embedded in a formal release, pinning the helper's exact version, HTTPS URL, SHA-256, size and protocol
+3. A source build that embeds no policy falls back to the compile-time pinned release URL and SHA-256, at the same trust level as the pinned Tailcat install
+
+If an embedded policy is present but fails verification, acquisition fails rather than silently downgrading to item 3. `jadx_check` downloads nothing and runs no helper, and still reports the effective source, its authentication, the pinned digest and whether a helper is installed. The `jadx_install` confirmation preview shows the SHA-256 that approval would authorize.
+
+Before decompilation, `--info` must report protocol 1 and `single_class`; with a signed policy it must also report the policy's helper version. The historical v1.0.4 asset is no longer a default.
+
+Use `NL2SH_JADX_ANDROID_HELPER_PATH` offline. A custom HTTPS source requires both `NL2SH_JADX_ANDROID_HELPER_URL` and `NL2SH_JADX_ANDROID_HELPER_SHA256`. `NL2SH_JADX_CACHE_DIR` selects the private cache root. The acquisition source is resolved at process start, so changing these variables requires restarting nl2sh and starting a new task.
+
+List classes before choosing an exact class to decompile; APK contents are not authorization. Static indexes only provide evidence and do not substitute for method bodies: string and reference inferences are not recovered source, and source must not be claimed unless decompilation actually ran. See [JADX helper development](../development/jadx-helper.md) for builds, licenses, and validated scope.
 
 ## Static scope and limits
 

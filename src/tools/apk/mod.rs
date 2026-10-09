@@ -67,7 +67,7 @@ const CLASSES_META: ToolMetadata = ToolMetadata {
 };
 const DECOMPILE_META: ToolMetadata = ToolMetadata {
     name: "decompile_apk_class",
-    description: "Decompile one exact APK class using a verified Android DEX helper through app_process. Strong confirmation required.",
+    description: "Decompile one exact APK class using an already installed Android DEX helper through app_process. Strong confirmation required. Does not download; if no helper is installed, use jadx_install after approval, then retry.",
     category: ToolCategory::File,
     risk: ToolRisk::Dangerous,
     requires: &[],
@@ -75,6 +75,28 @@ const DECOMPILE_META: ToolMetadata = ToolMetadata {
             platform: crate::tools::ToolPlatform::Android, runtime: crate::tools::RuntimeRequirement::Jadx,
             concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Call,
             schema: crate::tools::descriptor_schema::<DecompileClassArgs>,
+};
+const JADX_CHECK_META: ToolMetadata = ToolMetadata {
+    name: "jadx_check",
+    description: "Report the Android DEX helper source, its authentication, and whether a validated helper is installed. Read-only; downloads nothing and runs no helper.",
+    category: ToolCategory::File,
+    risk: ToolRisk::ReadOnly,
+    requires: &[],
+    group: Some(crate::tools::ToolGroup::Jadx), default_enabled: false,
+            platform: crate::tools::ToolPlatform::Android, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Parallel, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<JadxHelperArgs>,
+};
+const JADX_INSTALL_META: ToolMetadata = ToolMetadata {
+    name: "jadx_install",
+    description: "Download, verify, and cache the pinned Android DEX helper so decompile_apk_class can run. Mutating and Android-only. Use jadx_check first to see the exact source and digest.",
+    category: ToolCategory::Network,
+    risk: ToolRisk::Mutating,
+    requires: &[],
+    group: Some(crate::tools::ToolGroup::Jadx), default_enabled: false,
+            platform: crate::tools::ToolPlatform::Android, runtime: crate::tools::RuntimeRequirement::None,
+            concurrency: crate::tools::ToolConcurrency::Sequential, lifetime: crate::tools::ToolLifetime::Call,
+            schema: crate::tools::descriptor_schema::<JadxHelperArgs>,
 };
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -118,6 +140,10 @@ pub struct DecompileClassArgs {
     /// Exact dotted class name, such as com.example.MainActivity.
     pub class_name: String,
 }
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct JadxHelperArgs {}
 
 fn default_limit() -> usize {
     50
@@ -414,16 +440,56 @@ struct DecompileOperation(DecompileClassArgs);
 
 #[async_trait]
 impl PreparedExecution for DecompileOperation {
-    async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput> {
-        let config = ctx.config.context("tool config unavailable")?;
-        let content = crate::runtime_dependencies::jadx::decompile_class(
-            config,
-            &self.0.path,
-            &self.0.class_name,
-        )
-        .await?;
+    async fn execute(self: Box<Self>, _: &mut ToolContext<'_>) -> Result<ToolOutput> {
+        let content =
+            crate::runtime_dependencies::jadx::decompile_class(&self.0.path, &self.0.class_name)
+                .await?;
         Ok(ToolOutput::success(content))
     }
+}
+
+struct JadxCheckOperation;
+
+#[async_trait]
+impl PreparedExecution for JadxCheckOperation {
+    async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput> {
+        let executor = ctx.executor.context("shell executor unavailable")?;
+        let content = crate::runtime_dependencies::jadx::check(executor).await?;
+        Ok(ToolOutput::success(content))
+    }
+}
+
+struct JadxInstallOperation;
+
+#[async_trait]
+impl PreparedExecution for JadxInstallOperation {
+    async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput> {
+        let config = ctx.config.context("tool config unavailable")?;
+        let content = crate::runtime_dependencies::jadx::install(config).await?;
+        Ok(ToolOutput::success(content))
+    }
+}
+
+async fn prepare_jadx_check(_: &ToolContext<'_>, _: JadxHelperArgs) -> Result<PreparedToolCall> {
+    if !cfg!(target_os = "android") {
+        bail!("jadx_check reports helper state for the Android app_process runtime only")
+    }
+    Ok(PreparedToolCall::operation(
+        "Report the DEX helper source, authentication, and installed state without downloading it"
+            .to_string(),
+        Box::new(JadxCheckOperation),
+    ))
+}
+
+async fn prepare_jadx_install(_: &ToolContext<'_>, _: JadxHelperArgs) -> Result<PreparedToolCall> {
+    if !cfg!(target_os = "android") {
+        bail!("jadx_install installs the DEX helper for Android app_process only")
+    }
+    let source = crate::runtime_dependencies::jadx::install_preview()?;
+    Ok(PreparedToolCall::operation(
+        source,
+        Box::new(JadxInstallOperation),
+    ))
 }
 
 async fn prepare_decompile(
@@ -435,7 +501,10 @@ async fn prepare_decompile(
     }
     validate_path(&args.path)?;
     validate_class_name(&args.class_name)?;
-    let preview = format!("Decompile {} from {} using an Android DEX helper. This may download and cache a SHA-256-verified helper and run it through app_process.", args.class_name, args.path);
+    let preview = format!(
+        "Decompile {} from {} with the installed Android DEX helper. This runs the helper through app_process and does not download anything; if no helper is installed, use jadx_install after approval, then retry.",
+        args.class_name, args.path
+    );
     Ok(PreparedToolCall::operation(
         preview,
         Box::new(DecompileOperation(args)),
@@ -460,6 +529,18 @@ define_tool!(
     DecompileClassArgs,
     DECOMPILE_META,
     prepare_decompile
+);
+define_tool!(
+    JadxCheckTool,
+    JadxHelperArgs,
+    JADX_CHECK_META,
+    prepare_jadx_check
+);
+define_tool!(
+    JadxInstallTool,
+    JadxHelperArgs,
+    JADX_INSTALL_META,
+    prepare_jadx_install
 );
 
 #[cfg(test)]
@@ -538,5 +619,45 @@ mod tests {
         }
         let assessment = DECOMPILE_META.assessment();
         assert!(assessment.is_some_and(|value| value.requires_double_confirmation));
+    }
+
+    #[test]
+    fn helper_acquisition_tools_are_always_available_and_decompile_stays_dangerous() {
+        use crate::tools::{RuntimeRequirement, ToolPlatform, ToolRisk as Risk};
+
+        // Recovery must stay registered even where the helper cannot run, so the model can
+        // diagnose and install instead of repeating static-index guesses.
+        for (metadata, risk) in [
+            (&JADX_CHECK_META, Risk::ReadOnly),
+            (&JADX_INSTALL_META, Risk::Mutating),
+        ] {
+            assert_eq!(metadata.risk, risk, "{}", metadata.name);
+            assert_eq!(
+                metadata.runtime,
+                RuntimeRequirement::None,
+                "{}",
+                metadata.name
+            );
+            assert_eq!(
+                metadata.platform,
+                ToolPlatform::Android,
+                "{}",
+                metadata.name
+            );
+            assert_eq!(metadata.group.map(|group| group.id()), Some("jadx"));
+        }
+
+        // Only the decompile call may execute helper code, and it requires strong confirmation.
+        assert_eq!(DECOMPILE_META.risk, Risk::Dangerous);
+        assert_eq!(DECOMPILE_META.runtime, RuntimeRequirement::Jadx);
+        assert!(!JADX_CHECK_META
+            .description
+            .contains("jadx_install after approval"));
+
+        // The dangerous call must disclose that it does not fetch anything and name recovery.
+        assert!(DECOMPILE_META.description.contains("Does not download"));
+        assert!(DECOMPILE_META
+            .description
+            .contains("jadx_install after approval"));
     }
 }

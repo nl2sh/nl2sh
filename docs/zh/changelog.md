@@ -6,6 +6,8 @@
 
 - 新增 `start_system_trace`、`stop_system_trace`、`analyze_system_trace`：确认后以设备 Perfetto 有界采集并停止，Rust 只读解析受支持的 protobuf 调度、渲染、帧、Binder 与唤醒事件，报告证据覆盖和限制。
 
+- 反编译 helper 改为显式按需获取：新增只读 `jadx_check` 与需确认的 `jadx_install`，`decompile_apk_class` 不再联网，只运行已安装并校验的 helper，缺失时指向安装步骤。获取由模型驱动，advisory 运行时会报告 `jadx_helper=installed|absent|unprovisionable`，为 `absent` 时模型直接检查来源、经批准安装并在同一任务内立即重试，无需重启。未内嵌签名策略的源码构建回退到编译期固定的发布 URL 与 SHA-256，签名策略仍优先；内嵌策略验签失败时报错而不降级。Agent 被要求在只读静态索引阶段不得声称已取得源码。
+
 ## [1.1.0] - 2026-10-08
 
 - 运行时发布资产及兼容清单使用固定信任根验证 GPG 签名、大小和摘要，内嵌签名扩展策略；Helper 管理支持健康重连、更新归属、失败回滚和扩展安装。

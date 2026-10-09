@@ -1598,7 +1598,7 @@ Present existing numeric evidence as a bar, line, or pie chart. Copy values from
 
 ## `decompile_apk_class`
 
-Decompile one exact APK class using a verified Android DEX helper through app_process. Strong confirmation required.
+Decompile one exact APK class using an already installed Android DEX helper through app_process. Strong confirmation required. Does not download; if no helper is installed, use jadx_install after approval, then retry.
 
 | Descriptor | Value |
 | --- | --- |
@@ -2306,6 +2306,50 @@ Inspect and validate the TLS certificate chain of a public host.
   "required": [
     "host"
   ],
+  "type": "object"
+}
+```
+
+## `jadx_check`
+
+Report the Android DEX helper source, its authentication, and whether a validated helper is installed. Read-only; downloads nothing and runs no helper.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `android` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "type": "object"
+}
+```
+
+## `jadx_install`
+
+Download, verify, and cache the pinned Android DEX helper so decompile_apk_class can run. Mutating and Android-only. Use jadx_check first to see the exact source and digest.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `jadx` |
+| Enabled by default | `false` |
+| Platform | `android` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `mutating` |
+| Declared scheduling policy | `sequential` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
   "type": "object"
 }
 ```

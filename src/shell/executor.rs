@@ -289,6 +289,10 @@ impl CommandExecutor for ShellExecutor {
                 format!("uid={uid}"),
                 format!("root={}", uid == 0),
                 format!("su_available={su_available}"),
+                format!(
+                    "jadx_helper={}",
+                    crate::runtime_dependencies::jadx::installed_hint()
+                ),
             ];
             if let Some(api_level) = api_level {
                 fields.insert(1, format!("api={api_level}"));

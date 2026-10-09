@@ -499,6 +499,8 @@ fn all_adapters() -> Vec<Box<dyn Tool>> {
         Box::new(apk::ListApkEntriesTool),
         Box::new(apk::ListDexClassesTool),
         Box::new(apk::DecompileApkClassTool),
+        Box::new(apk::JadxCheckTool),
+        Box::new(apk::JadxInstallTool),
         Box::new(apk::ListDexMethodsTool),
         Box::new(apk::SearchDexStringsTool),
         Box::new(apk::FindClassReferencesTool),
