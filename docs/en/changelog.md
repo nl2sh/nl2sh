@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix startup with old configurations: ignore the retired `bridge_auto_approve` setting without transferring approval permissions. Configuration wizards and Web editors apply the same handling; saving removes the old field while retaining validation of other unknown settings.
+
 - Simplify `nl2sh protocol serve`: default all IPv4 interfaces and HTTP, automatic advertised IP/actual port, and a system-random token per startup when no environment override exists. Print external Agent connection details/client configuration; generated tokens appear only in startup output and are redacted from task snapshots. Retain fixed-token, bind-address and advertised-origin overrides.
 
 - Add MCP/A2A connection guidance to TUI startup, human/JSON `service status`, and the Web left vertical menu. Shared private process discovery shows actual advertised URLs, HTTP/stdio client configuration and local approval guidance, distinguishes default examples from running endpoints, and omits token values.

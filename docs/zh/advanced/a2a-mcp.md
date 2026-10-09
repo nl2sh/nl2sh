@@ -1,5 +1,7 @@
 # 设备端 MCP / A2A
 
+升级时自动忽略已移除的顶层 `bridge_auto_approve`，旧值不会启用 `protocol_auto_approve`，后者仍默认关闭。加载不改写原文件；通过配置编辑器保存时移除废弃字段。配置向导和 Web 校验/保存采用同一规则，其他未知字段与 TOML 语法错误仍拒绝。
+
 MCP 与 A2A 已内置在 nl2sh 的 Rust 可执行文件中。外部 Agent 直接连接设备，不需要 Python、Docker、主机网关或运行时 ADB。MCP 直接调用 Tool Runtime，A2A 向内置 Agent 委派任务。直接工具调用不需要模型；Agent 委派需要配置设备模型。协议和限制见 [协议参考](../reference/a2a-mcp.md)。
 
 ## 查看连接方式

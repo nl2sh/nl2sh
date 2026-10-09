@@ -38,6 +38,42 @@ fn protocol_auto_approve_round_trips() -> anyhow::Result<()> {
 }
 
 #[test]
+fn retired_bridge_setting_does_not_block_loading_or_enable_protocol_approval() -> anyhow::Result<()>
+{
+    let dir = tempdir()?;
+    let path = dir.path().join("config.toml");
+    for value in ["true", "false", "'obsolete'"] {
+        let stored = format!("# existing provider\nmodel='local'\nendpoint='http://localhost/v1'\nbridge_auto_approve={value}\nagent_mode='fast'\nmax_agent_steps=37\n");
+        fs::write(&path, &stored)?;
+        let cfg = load_from(&path)?;
+        assert_eq!(cfg.model, "local");
+        assert_eq!(cfg.max_agent_steps, 37);
+        assert!(!cfg.protocol_auto_approve);
+        assert_eq!(
+            fs::read_to_string(&path)?,
+            stored,
+            "loading must not rewrite the source"
+        );
+        nl2sh::config::save_config(&path, &cfg)?;
+        assert!(!fs::read_to_string(&path)?.contains("bridge_auto_approve"));
+    }
+    fs::write(
+        &path,
+        "bridge_auto_approve=true\nprotocol_auto_approve=true\n",
+    )?;
+    assert!(load_unvalidated(Some(&path))?.protocol_auto_approve);
+    for stored in [
+        "bridge_auto_approve=false\nunknown_setting=true\n",
+        "bridge_auto_approve=\n",
+        "[security_rules]\nbridge_auto_approve=true\n",
+    ] {
+        fs::write(&path, stored)?;
+        assert!(load_unvalidated(Some(&path)).is_err(), "{stored}");
+    }
+    Ok(())
+}
+
+#[test]
 fn optional_tool_switches_round_trip_and_reject_unknown_names() -> anyhow::Result<()> {
     let mut cfg: Config =
         toml::from_str("[tool_groups]\njadx = true\n[tool_overrides]\ntailcat_check = true\n")?;

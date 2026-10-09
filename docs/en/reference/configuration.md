@@ -1,5 +1,7 @@
 # config.toml reference
 
+On upgrade, the retired top-level `bridge_auto_approve` setting is ignored. Its old value never enables `protocol_auto_approve`, which remains off by default. Loading leaves the source file intact; saving through a configuration editor removes the retired field. Configuration wizards and Web validation/saving follow the same rule. Other unknown fields and invalid TOML are still rejected.
+
 `src/config/model.rs` defines fields and validation; `src/config/loader.rs` defines loading. Unknown fields are rejected. Saves use private permissions and atomic replacement.
 
 Path priority: `--config` → nonempty `NL2SH_CONFIG` → default path. Direct Android uses `config.toml` beside the resolved executable; Termux uses XDG config `nl2sh/config.toml`. Field priority: CLI overrides → applicable environment variables → file → defaults.
@@ -8,7 +10,7 @@ Models can also inspect, change, or reset the active configuration using [nl2sh_
 
 ## Common settings
 
-`api_type` accepts `auto/responses/chat_completions`; auto is omitted on serialization but remains the default. `security_level` accepts `strict/balanced/unsafe`; `execute_confirm_policy` accepts `always/risk_only/never`. Permissive preferences still retain mandatory mutation and dangerous-action approval. Bridge auto-approval is a separate explicit default-off setting; see [safety approvals](../guide/security-confirmation.md).
+`api_type` accepts `auto/responses/chat_completions`; auto is omitted on serialization but remains the default. `security_level` accepts `strict/balanced/unsafe`; `execute_confirm_policy` accepts `always/risk_only/never`. Permissive preferences still retain mandatory mutation and dangerous-action approval. Protocol auto-approval is a separate explicit default-off setting; see [safety approvals](../guide/security-confirmation.md).
 
 `execute_user_mode` is `auto/normal/root`; `ui_language` is `zh_cn/en`, with Chinese terminal default. Website language selection is independent. Budget presets and explicit overrides are documented under [Agent](../advanced/agent-mode.md).
 

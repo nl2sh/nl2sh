@@ -138,8 +138,7 @@ fn load_from_unvalidated(path: &Path) -> Result<Config> {
 
 /// Parses a snapshot with the same presets and environment overlays as file loading.
 pub(crate) fn parse_unvalidated(text: &str, path: &Path) -> Result<Config> {
-    let mut config: Config =
-        toml::from_str(text).with_context(|| format!("invalid config {}", path.display()))?;
+    let mut config = parse_stored(text, path)?;
     let document: toml::Value =
         toml::from_str(text).with_context(|| format!("invalid config {}", path.display()))?;
     if document.get("agent_mode").is_some() {
@@ -165,6 +164,20 @@ pub(crate) fn parse_unvalidated(text: &str, path: &Path) -> Result<Config> {
     apply_jev_environment(&mut config);
     config.source = Some(path.to_path_buf());
     Ok(config)
+}
+
+/// Reads stored settings without environment overlays, discarding retired settings.
+/// The old approval switch must never enable native protocol auto-approval.
+pub(crate) fn parse_stored(text: &str, path: &Path) -> Result<Config> {
+    let mut document: toml_edit::DocumentMut = text
+        .parse()
+        .with_context(|| format!("invalid config {}", path.display()))?;
+    if document.remove("bridge_auto_approve").is_some() {
+        toml::from_str(&document.to_string())
+            .with_context(|| format!("invalid config {}", path.display()))
+    } else {
+        toml::from_str(text).with_context(|| format!("invalid config {}", path.display()))
+    }
 }
 
 fn apply_ima_environment(config: &mut Config) {

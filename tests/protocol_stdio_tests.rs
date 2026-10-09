@@ -8,7 +8,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 async fn native_stdio_process_handles_shell_output_and_eof() -> Result<()> {
     let root = tempfile::tempdir()?;
     let config = root.path().join("config.toml");
-    std::fs::write(&config, "")?;
+    std::fs::write(&config, "bridge_auto_approve = true\n")?;
     let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_nl2sh"))
         .arg("--config")
         .arg(&config)

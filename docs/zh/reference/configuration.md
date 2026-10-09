@@ -1,5 +1,7 @@
 # config.toml 参考
 
+升级时自动忽略已移除的顶层 `bridge_auto_approve`，旧值不会启用 `protocol_auto_approve`，后者仍默认关闭。加载不改写原文件；通过配置编辑器保存时移除废弃字段。配置向导和 Web 校验/保存采用同一规则，其他未知字段与 TOML 语法错误仍拒绝。
+
 源码 `src/config/model.rs` 定义字段与验证，`src/config/loader.rs` 定义加载。未知字段拒绝，保存使用私有权限与原子替换。
 
 路径优先级：`--config` → 非空 `NL2SH_CONFIG` → 默认路径。直接 Android 默认解析后的可执行文件旁 `config.toml`；Termux 默认 XDG config 的 `nl2sh/config.toml`。字段优先级：CLI 覆盖 → 对应环境变量 → 文件 → 默认值。

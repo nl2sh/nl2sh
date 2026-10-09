@@ -178,8 +178,7 @@ pub fn run_configure(path: &Path) -> Result<()> {
     // must never be copied into config.toml merely by opening `/config`.
     let stored = fs::read_to_string(path)
         .with_context(|| format!("cannot read config {}", path.display()))?;
-    let mut cfg: Config =
-        toml::from_str(&stored).with_context(|| format!("invalid config {}", path.display()))?;
+    let mut cfg = super::loader::parse_stored(&stored, path)?;
     cfg.validate_runtime()?;
     let default_language = match cfg.ui_language {
         UiLanguage::ZhCn => "zh_cn",
@@ -458,8 +457,7 @@ fn load_stored_or_default(path: &Path) -> Result<Config> {
     }
     let stored = fs::read_to_string(path)
         .with_context(|| format!("cannot read config {}", path.display()))?;
-    let cfg: Config =
-        toml::from_str(&stored).with_context(|| format!("invalid config {}", path.display()))?;
+    let cfg = super::loader::parse_stored(&stored, path)?;
     cfg.validate_runtime()?;
     Ok(cfg)
 }

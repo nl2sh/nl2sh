@@ -1,5 +1,7 @@
 # Device-native MCP / A2A
 
+On upgrade, the retired top-level `bridge_auto_approve` setting is ignored. Its old value never enables `protocol_auto_approve`, which remains off by default. Loading leaves the source file intact; saving through a configuration editor removes the retired field. Configuration wizards and Web validation/saving follow the same rule. Other unknown fields and invalid TOML are still rejected.
+
 MCP and A2A are built into the nl2sh Rust executable. External agents connect directly to the device, without Python, Docker, a host gateway, or runtime ADB. MCP calls Tool Runtime directly; A2A delegates tasks to the built-in Agent. Direct tools need no model; Agent delegation requires device model configuration. See the [protocol reference](../reference/a2a-mcp.md) for contracts and limits.
 
 ## Find connection methods

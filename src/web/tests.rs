@@ -13,6 +13,32 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn config_editor_accepts_and_removes_retired_bridge_setting() -> Result<()> {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        let body = "model='existing-model'\nbridge_auto_approve=true\n";
+        let Json(preview) = validate_config(body.into()).await;
+        assert!(preview.valid);
+        assert!(
+            !preview
+                .config
+                .context("missing preview")?
+                .protocol_auto_approve
+        );
+        save_config(State(state(path.clone())), body.into())
+            .await
+            .map_err(|error| error.error)?;
+        let stored = std::fs::read_to_string(&path)?;
+        assert!(!stored.contains("bridge_auto_approve"));
+        let cfg: Config = toml::from_str(&stored)?;
+        assert_eq!(cfg.model, "existing-model");
+        assert!(!cfg.protocol_auto_approve);
+        let Json(preview) = validate_config("unknown_setting=true\n".into()).await;
+        assert!(!preview.valid);
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn update_status_survives_browser_reconnect_and_rejects_untrusted_requests() -> Result<()>
     {
         let directory = tempdir()?;

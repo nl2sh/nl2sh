@@ -38,7 +38,7 @@ pub(in crate::web) async fn save_config(
 ) -> ApiResult<String> {
     let path = state.path.clone();
     tokio::task::spawn_blocking(move || -> Result<()> {
-        let cfg: Config = toml::from_str(&body).context("invalid TOML configuration")?;
+        let cfg = config::parse_stored(&body, &path)?;
         config::save_config(&path, &cfg)
     })
     .await??;
@@ -54,7 +54,7 @@ pub(in crate::web) struct ConfigPreview {
 
 pub(in crate::web) async fn validate_config(body: String) -> Json<ConfigPreview> {
     let result = tokio::task::spawn_blocking(move || -> Result<Config> {
-        let cfg: Config = toml::from_str(&body).context("invalid TOML configuration")?;
+        let cfg = config::parse_stored(&body, std::path::Path::new("config.toml"))?;
         cfg.validate_runtime()?;
         Ok(cfg)
     })
