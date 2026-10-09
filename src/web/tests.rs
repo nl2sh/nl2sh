@@ -13,6 +13,50 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn update_status_survives_browser_reconnect_and_rejects_untrusted_requests() -> Result<()>
+    {
+        let directory = tempdir()?;
+        let current = state(directory.path().join("config.toml"));
+        {
+            let mut job = current.update.lock().map_err(|_| anyhow!("poisoned"))?;
+            job.busy = true;
+            job.version = Some("1.2.0".into());
+            job.progress = Some(crate::update::UpdateProgress {
+                stage: "downloading",
+                downloaded: 25,
+                total: 100,
+            });
+        }
+        let Json(job) = update_progress(State(current.clone()))
+            .await
+            .map_err(|error| error.error)?;
+        assert!(job.busy);
+        assert_eq!(job.progress.context("missing progress")?.downloaded, 25);
+        assert!(serde_json::from_value::<UpdateStart>(serde_json::json!({
+            "version": "1.2.0", "url": "https://example.com/untrusted"
+        }))
+        .is_err());
+        assert!(start_update(
+            State(current.clone()),
+            Json(UpdateStart {
+                version: "../untrusted".into()
+            })
+        )
+        .await
+        .is_err());
+        #[cfg(not(target_os = "android"))]
+        assert!(start_update(
+            State(current),
+            Json(UpdateStart {
+                version: "1.2.0".into()
+            })
+        )
+        .await
+        .is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn browser_files_expose_metadata_and_bounded_inline_preview() -> Result<()> {
         let directory = tempdir()?;
         let text_path = directory.path().join("example.rs");
@@ -437,6 +481,7 @@ mod tests {
         inner.id = "web-test".into();
         let current = web_session(inner);
         Arc::new(Shared {
+            update: Mutex::new(UpdateJob::default()),
             started: Instant::now(),
             port: 0,
             path,
@@ -1278,6 +1323,7 @@ mod http_tests {
     async fn refuses_to_delete_running_sessions() -> Result<()> {
         let dir = tempdir()?;
         let state = Arc::new(Shared {
+            update: Mutex::new(UpdateJob::default()),
             started: Instant::now(),
             port: 0,
             path: dir.path().join("config.toml"),
@@ -1540,6 +1586,7 @@ mod http_tests {
         let mut initial = SessionState::empty();
         initial.id = "web-test".into();
         let original = Arc::new(Shared {
+            update: Mutex::new(UpdateJob::default()),
             started: Instant::now(),
             port: 0,
             path: path.clone(),
@@ -1575,6 +1622,7 @@ mod http_tests {
         }
         persist_web_session(&original, &current).await?;
         let restarted = Arc::new(Shared {
+            update: Mutex::new(UpdateJob::default()),
             started: Instant::now(),
             port: 0,
             path: path.clone(),

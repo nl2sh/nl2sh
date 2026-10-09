@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add a Web update badge and Update now / Not now / Skip dialog. Standalone Android installations update directly with actual download progress and verification/installation phases, preserving ownership and signature checks and prompting for a restart on completion. Local image, audio, and video links in conversation answers reuse file manager previews, including WAV/PCM parameter playback.
+
 - Move `android-run-windows.bat` Web mode onto native `service start --json`, matching the Linux and build launchers. Stopping now closes only the managed service owned by this configuration instead of ending every nl2sh process on the device by name. All Web-only launchers reuse an already healthy service, so a newly pushed binary needs an explicit `service restart --json`. Add launcher regression tests that keep `nohup`, `kill -9`, and `/proc` process scans out.
 
 - Add a bounded task-owned Agent continuation queue: system traces trigger read-only analysis at their deadline before the final model response; TUI/Web display the wait, cancellation and budgets stop continuation, security checks and audits remain enforced, and restart does not replay jobs.

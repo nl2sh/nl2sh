@@ -5,6 +5,7 @@ pub(in crate::web) struct Shared {
     pub(in crate::web) started: Instant,
     pub(in crate::web) port: u16,
     pub(in crate::web) sessions: Mutex<BTreeMap<String, Arc<WebSession>>>,
+    pub(in crate::web) update: Mutex<UpdateJob>,
 }
 
 pub(in crate::web) struct WebSession {

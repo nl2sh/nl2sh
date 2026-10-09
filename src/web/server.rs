@@ -140,6 +140,7 @@ pub(in crate::web) async fn start_with_listener(
     let mut sessions = BTreeMap::new();
     sessions.insert(first_id, first);
     let shared = Arc::new(Shared {
+        update: Mutex::new(UpdateJob::default()),
         started: Instant::now(),
         port,
         path,
@@ -218,6 +219,8 @@ pub(in crate::web) fn router(state: Arc<Shared>) -> Router {
     Router::new()
         .route("/healthz", get(|| async { Json(serde_json::json!({"status":"ok"})) }))
         .route("/api/info", get(get_info))
+        .route("/api/update", get(get_update).post(start_update))
+        .route("/api/update/progress", get(update_progress))
         .route("/api/version", get(|| async { env!("CARGO_PKG_VERSION") }))
         .route("/api/state", get(get_state))
         .route("/api/config", get(get_config).post(save_config))

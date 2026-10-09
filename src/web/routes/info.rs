@@ -23,3 +23,22 @@ pub(in crate::web) async fn get_info(
         "capabilities": capabilities,
     })))
 }
+
+// Read-only discovery; installation remains with its existing owner.
+pub(in crate::web) async fn get_update(
+    State(state): State<Arc<Shared>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let cfg = load_config(state.path.clone()).await?;
+    let latest = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        crate::update::available_version(&cfg),
+    )
+    .await
+    .map_err(|_| ApiError::bad(anyhow!("update check timed out")))??;
+    let owner = crate::update::ownership().await;
+    Ok(Json(
+        serde_json::json!({"current": env!("CARGO_PKG_VERSION"), "latest": latest,
+        "can_install": owner.self_update_allowed && cfg!(target_os = "android"),
+        "ownership": owner}),
+    ))
+}

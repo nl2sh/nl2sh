@@ -1,3 +1,4 @@
+import {localMedia} from './media.ts';
 import MarkdownIt from 'markdown-it';
 import {highlightCode} from './codeHighlight.ts';
 const parser = new MarkdownIt({
@@ -20,6 +21,20 @@ parser.renderer.rules.fence = (tokens, index, options, env, renderer) => {
     ? fenceRenderer(tokens, index, options, env, renderer)
     : renderer.renderToken(tokens, index, options);
   return `<div class="code-block">${copyButton}${code}</div>`;
+};
+
+const imageRenderer=parser.renderer.rules.image;
+parser.renderer.rules.image=(tokens,index,options,env,renderer)=>{
+  const media=localMedia(String(tokens[index].attrGet('src')||''));
+  if(media)return `<span data-media-path="${parser.utils.escapeHtml('/api/file-preview?path='+encodeURIComponent(media.path))}"></span>`;
+  return imageRenderer?imageRenderer(tokens,index,options,env,renderer):renderer.renderToken(tokens,index,options);
+};
+const linkRenderer=parser.renderer.rules.link_open;
+parser.renderer.rules.link_open=(tokens,index,options,env,renderer)=>{
+  const target=String(tokens[index].attrGet('href')||'');
+  const media=localMedia(target);
+  const preview=media?`<span data-media-path="${parser.utils.escapeHtml('/api/file-preview?path='+encodeURIComponent(media.path))}"></span>`:'';
+  return preview+(linkRenderer?linkRenderer(tokens,index,options,env,renderer):renderer.renderToken(tokens,index,options));
 };
 
 export function markdown(source: string): string {

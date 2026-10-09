@@ -131,6 +131,16 @@ pub async fn download_bounded(
     url: &str,
     maximum: usize,
 ) -> Result<Vec<u8>> {
+    download_bounded_with_progress(client, url, maximum, |_, _| {}).await
+}
+
+/// Fetch bounded HTTPS bytes and report the actual received byte count.
+pub async fn download_bounded_with_progress(
+    client: &reqwest::Client,
+    url: &str,
+    maximum: usize,
+    progress: impl Fn(u64, Option<u64>),
+) -> Result<Vec<u8>> {
     use futures_util::StreamExt;
     let response = client
         .get(url)
@@ -145,6 +155,8 @@ pub async fn download_bounded(
     {
         bail!("release download violates HTTPS or size boundary");
     }
+    let total = response.content_length();
+    progress(0, total);
     let mut bytes = Vec::new();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
@@ -157,6 +169,7 @@ pub async fn download_bounded(
             bail!("release download exceeds size boundary");
         }
         bytes.extend_from_slice(&chunk);
+        progress(bytes.len() as u64, total);
     }
     Ok(bytes)
 }
@@ -282,6 +295,25 @@ mod tests {
     const PUBLIC: &[u8] = include_bytes!("../../tests/fixtures/signatures/public.gpg");
     const MESSAGE: &[u8] = include_bytes!("../../tests/fixtures/signatures/message.txt");
     const SIGNATURE: &[u8] = include_bytes!("../../tests/fixtures/signatures/message.sig");
+
+    #[tokio::test]
+    async fn download_progress_cannot_bypass_https_boundary() -> Result<()> {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_bytes(b"untrusted bytes"))
+            .mount(&server)
+            .await;
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let called = std::sync::atomic::AtomicBool::new(false);
+        let result = download_bounded_with_progress(&client, &server.uri(), 100, |_, _| {
+            called.store(true, std::sync::atomic::Ordering::Relaxed);
+        })
+        .await;
+        assert!(result.is_err());
+        assert!(!called.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(download_bounded(&client, &server.uri(), 100).await.is_err());
+        Ok(())
+    }
 
     #[test]
     fn detached_signature_authenticates_exact_bytes() {

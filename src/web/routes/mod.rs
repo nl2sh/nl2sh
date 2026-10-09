@@ -16,3 +16,6 @@ pub(super) use terminal::*;
 
 mod tailcat;
 pub(super) use tailcat::*;
+
+mod update;
+pub(super) use update::*;

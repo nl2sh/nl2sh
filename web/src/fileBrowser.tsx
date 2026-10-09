@@ -3,7 +3,7 @@ import {fileUrl,listFiles} from './api';
 import type {BrowserFile} from './api';
 import {useModalFocus} from './modalFocus';
 import {highlightCode,fileLanguage} from './codeHighlight';
-import {AudioPreview} from './audioPreview';
+import {MediaPreview} from './mediaPreview';
 
 const dateFormat=new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 function formatSize(bytes:number|null){
@@ -43,9 +43,7 @@ function FilePreview({file,close}:{file:BrowserFile;close:()=>void}){
     <div ref={dialog} class="modal file-preview" role="dialog" aria-modal="true" aria-label={`预览 ${file.name}`} tabIndex={-1}>
       <div class="modal-heading"><h2 title={file.path}>{file.name}</h2><button type="button" onClick={close} aria-label="关闭文件预览">×</button></div>
       <p class="file-preview-meta">{formatSize(file.size)} · {file.modified_ms===null?'修改时间未知':dateFormat.format(file.modified_ms)}</p>
-      {file.preview_kind==='image'&&<img src={fileUrl(file.path)} alt={file.name} onError={()=>setError('图片加载失败')}/>}
-      {file.preview_kind==='video'&&<video src={fileUrl(file.path)} controls preload="metadata" onError={()=>setError('视频无法播放或浏览器不支持该格式')}/>}
-      {file.preview_kind==='audio'&&<AudioPreview file={file}/>}
+      {['image','video','audio'].includes(file.preview_kind||'')&&<MediaPreview file={file}/>}
       {file.preview_kind==='text'&&<label class="file-wrap"><input type="checkbox" checked={wrap} onChange={e=>setWrap(e.currentTarget.checked)}/> 自动换行</label>}
       {file.preview_kind==='text'&&text!==null&&text.length>200_000&&<p class="file-preview-meta">文件较长，已使用纯文本显示以保持页面流畅。</p>}
       {file.preview_kind==='text'&&!error&&<pre class={wrap?'wrap':''}><code dangerouslySetInnerHTML={{__html:text===null?'正在读取文本…':highlightCode(text,text.length>200_000?'':fileLanguage(file.name))}}/></pre>}

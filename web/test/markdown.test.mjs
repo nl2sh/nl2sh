@@ -25,3 +25,13 @@ test('treats model HTML as text and rejects script links', () => {
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.doesNotMatch(html, /<img|href="javascript:/);
 });
+
+test('renders local media placeholders without trusting HTML or remote schemes',()=>{
+  for(const target of ['/sdcard/photo.png','./clip.mp4','~/record.wav','/sdcard/raw.pcm']){
+    const html=markdown(`[预览](${target})`);
+    assert.match(html,/data-media-path="\/api\/file-preview\?path=/);
+  }
+  assert.match(markdown('![截图](/sdcard/a%20b.png)'),/path=%2Fsdcard%2Fa%20b.png/);
+  assert.doesNotMatch(markdown('[remote](https://example.com/a.mp4)'),/data-media-path/);
+  assert.doesNotMatch(markdown('`![code](/sdcard/a.png)`'),/data-media-path/);
+});

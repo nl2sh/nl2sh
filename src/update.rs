@@ -135,6 +135,18 @@ struct GithubAsset {
     browser_download_url: String,
 }
 
+/// Discover a newer release without changing the installation or requiring self-update ownership.
+pub async fn available_version(config: &Config) -> Result<Option<String>> {
+    let client = crate::network::build_http_client(config)?;
+    let metadata =
+        manifest::download_bounded(&client, LATEST_RELEASE_URL, manifest::MAX_MANIFEST_BYTES)
+            .await?;
+    let release: GithubRelease =
+        serde_json::from_slice(&metadata).context("invalid update metadata")?;
+    let version = release.tag_name.trim_start_matches('v').to_owned();
+    Ok(is_newer(&version, env!("CARGO_PKG_VERSION"))?.then_some(version))
+}
+
 /// Checks GitHub's latest non-draft release and returns a newer compatible build.
 pub async fn check(config: &Config) -> Result<Option<UpdateRelease>> {
     if !self_update_enabled() {
@@ -180,29 +192,83 @@ pub async fn check(config: &Config) -> Result<Option<UpdateRelease>> {
     }))
 }
 
+/// Actual installation phase and binary download counters.
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateProgress {
+    /// `downloading`, `signature`, `verifying`, `installing`, or `complete`.
+    pub stage: &'static str,
+    /// Actual executable bytes received.
+    pub downloaded: u64,
+    /// Expected executable size from the signed manifest.
+    pub total: u64,
+}
+
 /// Downloads, verifies, and atomically replaces the running executable.
 pub async fn install(config: &Config, release: &UpdateRelease) -> Result<()> {
+    install_with_progress(config, release, |_| {}).await
+}
+
+/// Install a signed Android release, reporting download bytes and verification phases.
+/// The running process keeps its current executable until the user restarts it.
+pub async fn install_with_progress(
+    config: &Config,
+    release: &UpdateRelease,
+    progress: impl Fn(UpdateProgress) + Send + Sync + 'static,
+) -> Result<()> {
+    static INSTALL_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _guard = INSTALL_LOCK
+        .try_lock()
+        .context("an update is already running")?;
     if !self_update_enabled() {
         bail!(package_update_message())
     }
     require_self_update_owner().await?;
+    let abi = android_abi()?;
     let client = crate::network::build_http_client(config)?;
-    let binary = manifest::download_bounded(&client, &release.artifact.url, 32_000_000).await?;
+    let total = release.artifact.size_bytes;
+    let report = |stage, downloaded| {
+        progress(UpdateProgress {
+            stage,
+            downloaded,
+            total,
+        })
+    };
+    let binary = manifest::download_bounded_with_progress(
+        &client,
+        &release.artifact.url,
+        32_000_000,
+        |downloaded, _| report("downloading", downloaded),
+    )
+    .await?;
+    let downloaded = binary.len() as u64;
+    report("signature", downloaded);
     let signature = manifest::download_bounded(
         &client,
         &release.artifact.signature_url,
         manifest::MAX_SIGNATURE_BYTES,
     )
     .await?;
-    if binary.len() as u64 != release.artifact.size_bytes
-        || !sha256_hex(&binary).eq_ignore_ascii_case(&release.artifact.sha256)
-    {
-        bail!("update asset size or checksum mismatch")
-    }
-    manifest::verify_signature(&binary, &signature)?;
-    validate_binary_abi(&binary, android_abi()?)?;
+    report("verifying", downloaded);
+    let expected_sha256 = release.artifact.sha256.clone();
+    let binary = tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
+        if binary.len() as u64 != total
+            || !sha256_hex(&binary).eq_ignore_ascii_case(&expected_sha256)
+        {
+            bail!("update asset size or checksum mismatch")
+        }
+        manifest::verify_signature(&binary, &signature)?;
+        validate_binary_abi(&binary, abi)?;
+        Ok(binary)
+    })
+    .await
+    .context("update verification worker failed")??;
     require_self_update_owner().await?;
-    replace_current_executable(&binary)
+    report("installing", downloaded);
+    tokio::task::spawn_blocking(move || replace_current_executable(&binary))
+        .await
+        .context("update installation worker failed")??;
+    report("complete", downloaded);
+    Ok(())
 }
 
 fn validate_binary_abi(binary: &[u8], abi: &str) -> Result<()> {
