@@ -138,8 +138,10 @@ if defined NL2SH_CONFIG_SOURCE (
 )
 
 if "!ADB_IS_ROOT!"=="true" (
-  call :stop_existing_nl2sh false
-  if errorlevel 1 goto :adb_fail
+  if not "!WEB_ONLY!"=="true" (
+    call :stop_existing_nl2sh false
+    if errorlevel 1 goto :adb_fail
+  )
   echo Starting %REMOTE_BINARY% through root adbd.
   if "!WEB_ONLY!"=="true" (
     call :start_web_only false
@@ -155,8 +157,10 @@ if "!ADB_IS_ROOT!"=="true" (
 echo Trying Android su as a fallback...
 adb -s "!SERIAL!" shell su -c id >nul 2>&1
 if not errorlevel 1 (
-  call :stop_existing_nl2sh true
-  if errorlevel 1 goto :adb_fail
+  if not "!WEB_ONLY!"=="true" (
+    call :stop_existing_nl2sh true
+    if errorlevel 1 goto :adb_fail
+  )
   echo su access granted; starting %REMOTE_BINARY% as root.
   if "!WEB_ONLY!"=="true" (
     call :start_web_only true
@@ -180,8 +184,10 @@ if not errorlevel 1 (
 )
 
 echo WARNING: adb root and su are unavailable; starting as adb shell user.
-call :stop_existing_nl2sh false
-if errorlevel 1 goto :adb_fail
+if not "!WEB_ONLY!"=="true" (
+  call :stop_existing_nl2sh false
+  if errorlevel 1 goto :adb_fail
+)
 if "!WEB_ONLY!"=="true" (
   call :start_web_only false
   set "RUN_EXIT=!ERRORLEVEL!"
@@ -193,20 +199,24 @@ set "RUN_EXIT=!ERRORLEVEL!"
 goto :done
 
 :start_web_only
-set "WEB_LOG=%ANDROID_DIR%/nl2sh-web.log"
-set "WEB_COMMAND=cd '%ANDROID_DIR%' && nohup '%REMOTE_BINARY%' --web-only ^>'%WEB_LOG%' 2^>^&1 ^</dev/null ^&"
+set "WEB_COMMAND='%REMOTE_BINARY%' --config '%REMOTE_CONFIG%' service start --json"
 if /i "%~1"=="true" (
   adb -s "!SERIAL!" shell su -c "!WEB_COMMAND!"
 ) else (
   adb -s "!SERIAL!" shell "!WEB_COMMAND!"
 )
-if errorlevel 1 exit /b 1
-echo Web-only service started. Log: !WEB_LOG!
+if errorlevel 1 (
+  echo ERROR: the native background service did not start.
+  echo Inspect the config.service directory next to %REMOTE_CONFIG% on the device.
+  exit /b 1
+)
+echo Forward the reported port to open the Web UI: adb -s "!SERIAL!" forward tcp:9999 tcp:PORT
+echo Stop the owned service with: %REMOTE_BINARY% --config %REMOTE_CONFIG% service stop --json
 exit /b 0
 
 :stop_existing_nl2sh
-set "STOP_COMMAND=for process in /proc/[0-9]*; do [ -r \"$process/comm\" ] ^|^| continue; IFS= read -r name ^< \"$process/comm\" ^|^| continue; [ \"$name\" = nl2sh ] ^|^| continue; kill \"${process##*/}\" 2^>/dev/null ^|^| true; done; sleep 1; for process in /proc/[0-9]*; do [ -r \"$process/comm\" ] ^|^| continue; IFS= read -r name ^< \"$process/comm\" ^|^| continue; [ \"$name\" = nl2sh ] ^|^| continue; kill -9 \"${process##*/}\" 2^>/dev/null ^|^| true; done; exit 0"
-echo Stopping existing nl2sh processes on the device...
+set "STOP_COMMAND='%REMOTE_BINARY%' --config '%REMOTE_CONFIG%' service stop --json"
+echo Stopping the owned native service for this configuration...
 if /i "%~1"=="true" (
   adb -s "!SERIAL!" shell su -c "!STOP_COMMAND!"
 ) else (

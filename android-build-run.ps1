@@ -134,7 +134,7 @@ if ($LASTEXITCODE -ne 0) { throw "failed to push nl2sh" }
 if ($LASTEXITCODE -ne 0) { throw "failed to make nl2sh executable" }
 
 if ($AdbIsRoot) {
-    Stop-ExistingNl2sh $false
+    if (-not $WebOnly) { Stop-ExistingNl2sh $false }
     Write-Host "Starting $RemoteBinary through root adbd."
     if ($WebOnly) { Start-WebOnly $false; exit 0 }
     Write-Host "Press Ctrl+Q in nl2sh to exit."
@@ -145,7 +145,7 @@ if ($AdbIsRoot) {
 Write-Host "Trying Android su as a fallback..."
 & adb @AdbArgs shell su -c id *> $null
 if ($LASTEXITCODE -eq 0) {
-    Stop-ExistingNl2sh $true
+    if (-not $WebOnly) { Stop-ExistingNl2sh $true }
     Write-Host "su access granted; starting $RemoteBinary as root."
     if ($WebOnly) { Start-WebOnly $true; exit 0 }
     Write-Host "Press Ctrl+Q in nl2sh to exit."
@@ -161,7 +161,7 @@ if ($ConfigExists) {
     if ($LASTEXITCODE -ne 0) { throw "adb root and su are unavailable, and $RemoteConfig is not readable; permissions were left unchanged to protect the API key" }
 }
 Write-Warning "adb root and su are unavailable; starting as adb shell user."
-Stop-ExistingNl2sh $false
+if (-not $WebOnly) { Stop-ExistingNl2sh $false }
 if ($WebOnly) { Start-WebOnly $false; exit 0 }
 Write-Host "Press Ctrl+Q in nl2sh to exit."
 & adb @AdbArgs shell -t env NL2SH_WINDOWS_SCROLL=1 $RemoteBinary

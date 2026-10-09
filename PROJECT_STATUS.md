@@ -1,8 +1,11 @@
 # Project Status
 
-Last Updated: 2026-10-08
+Last Updated: 2026-10-09
 
 ## Recent Changes
+
+- 消除启动器在后台服务管理上的不一致：`android-run-windows.bat` 的 Web-only 路径此前仍是 `nohup '%REMOTE_BINARY%' --web-only >nl2sh-web.log` 加按 `/proc/*/comm` 扫进程名 `kill`/`kill -9`，而 `android-build-run.ps1`、`android-build-run.sh`、`android-run-linux.sh` 已改用原生 `service start/stop --json`；`install-android.ps1` 与 `install-android.bat` 走的正是该 bat，因此 Windows 安装链仍落到旧的未受管路径。现改为 `'%REMOTE_BINARY%' --config '%REMOTE_CONFIG%' service start --json` 与对应的 `service stop --json`，沿用同一配置的私有服务目录、实际端口回读、就绪核验和令牌授权优雅退出；启动失败时提示检查 `config.service` 目录，并打印按实际端口做 `adb forward` 的方法。停止不再按进程名批量结束设备上其他配置的 nl2sh 进程，也不再写 `nl2sh-web.log`（日志改由私有 `config.service/service.log` 承担）。同时统一 Web-only 语义：`service start` 幂等，因此 root adbd / Android su / adb shell 三条权限路径在 Web-only 下都不再先执行 stop（此前仅 `android-run-linux.sh` 跳过，`android-build-run.sh` 与 `.ps1` 仍会先停再起，造成无谓中断），TUI 前台路径保持先停后起。
+  验证：`cargo fmt --all -- --check`、`cargo check --workspace` 通过；`cargo test --workspace` 库套件 318 项通过、5 项需 root 的 Android UI/ADB 用例为改动前既有失败（`git stash` 对照确认基线同样失败），`tests/service_tests.rs` 通过；`python3 -m unittest discover -s scripts/tests` 18 项通过（新增 `scripts/tests/test_launcher_service.py` 三项回归，断言四个 Web-only 启动器都调用 `service start/stop --json` 且带 `--config`、源码不含 `nohup`/`kill -9`/`/proc/[0-9]*`/`nl2sh-web.log`、三条权限路径的 stop 调用均被 Web-only 条件包裹）；`python3 scripts/check-docs.py`、`python3 scripts/update-docs-reference.py --check`、`mkdocs build --strict` 与 `python3 scripts/check-docs.py --site site` 通过。双语 `guide/web.md` 与 `changelog.md` 同步：启动器只关闭本配置拥有的受管服务，Web-only 复用已健康服务，推送新二进制后需显式 `service restart --json`。
 
 - 修复 `service` 就绪探测预算过短：`healthy()` 对 `/api/info` 只给 2 秒，而该端点会执行运行时能力发现，helper 已安装时其中包含 `app_process --info` 探测（真机实测单次 1.64 秒，端点整体约 3.5 秒）。结果是健康服务被报成 `starting`，进而 `service start` 对已在运行的实例直接报 "owned service is running but unhealthy"。探测预算提高到 15 秒，就绪循环改用真实 60 秒墙钟截止（原先 150×100ms 睡眠并非 15 秒截止，错误信息与实际不符）。同时真机复核发现并修复上述 JADX 改动触发的既有缺陷。
 

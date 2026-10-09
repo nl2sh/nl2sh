@@ -13,7 +13,7 @@ adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service st
 
 服务按配置路径管理相邻的私有 `config.service/` 目录，包含运行锁、操作锁、`state.json`、`service.log`。启动返回前核验健康；记录进程启动标识、可执行文件设备/inode、UID、版本与实际端口。停止仅向核验过的服务发送私有关闭令牌，不按进程名批量终止进程；服务会取消任务、拒绝待决审批并退出。状态 JSON 不包含令牌。更新二进制后，`status` 仍显示实际运行版本；采用 `restart` 才启动新版本。配置和会话文件保持原位。
 
-后台模式不初始化 TUI/PTY，断开 ADB 后继续运行。启动器的 `--web-only`（PowerShell 安装器 `-WebOnly`）调用原生服务接口。`nl2sh --web-only` 仍可用于由其他进程管理器托管的前台进程；它不自动注册为受管服务。无响应但身份匹配的服务不会被 `start` 自动替换，应查看日志并显式 `restart`。旧启动器或 Helper 的 `nohup` 服务未注册，须先通过其原管理入口停止，不能用新接口接管。
+后台模式不初始化 TUI/PTY，断开 ADB 后继续运行。启动器的 `--web-only`（PowerShell 安装器 `-WebOnly`）调用原生服务接口。启动器只停止本配置拥有的受管服务，不再按进程名结束设备上的其他 nl2sh 进程；`--web-only` 复用已健康的服务，推送新二进制后需显式 `service restart --json` 才会运行新版本。`nl2sh --web-only` 仍可用于由其他进程管理器托管的前台进程；它不自动注册为受管服务。无响应但身份匹配的服务不会被 `start` 自动替换，应查看日志并显式 `restart`。旧启动器或 Helper 的 `nohup` 服务未注册，须先通过其原管理入口停止，不能用新接口接管。
 
 ## 界面与会话
 

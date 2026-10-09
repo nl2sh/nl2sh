@@ -183,7 +183,7 @@ echo "Pushing: ${LOCAL_BINARY} -> ${REMOTE_BINARY}"
 "${ADB[@]}" shell chmod 755 "${REMOTE_BINARY}"
 
 if [[ "${ADB_IS_ROOT}" == true ]]; then
-  stop_existing_nl2sh root
+  if [[ "${WEB_ONLY}" == false ]]; then stop_existing_nl2sh root; fi
   echo "Starting ${REMOTE_BINARY} through root adbd."
   if [[ "${WEB_ONLY}" == true ]]; then
     run_web_only root
@@ -196,7 +196,7 @@ fi
 
 echo "Trying Android su as a fallback..."
 if "${ADB[@]}" shell su -c id >/dev/null 2>&1; then
-  stop_existing_nl2sh su
+  if [[ "${WEB_ONLY}" == false ]]; then stop_existing_nl2sh su; fi
   echo "su access granted; starting ${REMOTE_BINARY} as root."
   if [[ "${WEB_ONLY}" == true ]]; then
     run_web_only su
@@ -216,7 +216,7 @@ if "${ADB[@]}" shell test -e "${REMOTE_CONFIG}" \
 fi
 
 echo "warning: adb root and su are unavailable; starting as adb shell user." >&2
-stop_existing_nl2sh shell
+if [[ "${WEB_ONLY}" == false ]]; then stop_existing_nl2sh shell; fi
 if [[ "${WEB_ONLY}" == true ]]; then
   run_web_only shell
   exit $?

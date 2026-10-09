@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `android-run-windows.bat` 的 Web 模式改用原生 `service start --json`，与 Linux/构建启动器一致；停止不再按进程名批量结束设备上的其他 nl2sh 进程，只关闭本配置拥有的受管服务。所有 Web-only 启动器复用已健康的服务，推送新二进制后需显式 `service restart --json`。新增启动器回归测试，禁止 `nohup`、`kill -9` 与 `/proc` 进程扫描回流。
+
 - Agent 增加任务绑定的有界后台续跑队列：系统 Trace 到期自动调用只读分析，再请求模型总结；TUI/Web 显示等待状态，取消与预算撤销续跑，安全审批和审计保持，重启不重放。
 
 - 新增 `start_system_trace`、`stop_system_trace`、`analyze_system_trace`：确认后以设备 Perfetto 有界采集并停止，Rust 只读解析受支持的 protobuf 调度、渲染、帧、Binder 与唤醒事件，报告证据覆盖和限制。
