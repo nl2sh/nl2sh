@@ -128,7 +128,7 @@ pub(in crate::web) async fn start_with_listener(
         .local_addr()
         .context("cannot identify web port")?
         .port();
-    let ip = local_ipv4().unwrap_or(Ipv4Addr::LOCALHOST);
+    let ip = crate::network::local_ipv4().unwrap_or(Ipv4Addr::LOCALHOST);
     let url = format!("http://{ip}:{port}/");
     let first = web_session(SessionState::empty());
     let first_id = first
@@ -161,54 +161,6 @@ pub(in crate::web) async fn start_with_listener(
         shutdown,
         shared,
     })
-}
-
-pub(in crate::web) fn local_ipv4() -> Option<Ipv4Addr> {
-    if let Ok(socket) = std::net::UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)) {
-        if socket.connect((Ipv4Addr::new(1, 1, 1, 1), 80)).is_ok() {
-            if let Ok(address) = socket.local_addr() {
-                if let IpAddr::V4(ip) = address.ip() {
-                    if !ip.is_loopback() && !ip.is_unspecified() {
-                        return Some(ip);
-                    }
-                }
-            }
-        }
-    }
-    interface_ipv4()
-}
-
-#[cfg(unix)]
-pub(in crate::web) fn interface_ipv4() -> Option<Ipv4Addr> {
-    let mut list: *mut libc::ifaddrs = std::ptr::null_mut();
-    // getifaddrs owns the returned linked list until freeifaddrs is called.
-    if unsafe { libc::getifaddrs(&mut list) } != 0 {
-        return None;
-    }
-    let mut current = list;
-    let mut selected = None;
-    while !current.is_null() {
-        // Each address pointer comes from the getifaddrs-owned list.
-        let entry = unsafe { &*current };
-        if !entry.ifa_addr.is_null()
-            && unsafe { (*entry.ifa_addr).sa_family } == libc::AF_INET as u16
-        {
-            let raw = unsafe { &*(entry.ifa_addr as *const libc::sockaddr_in) };
-            let ip = Ipv4Addr::from(u32::from_be(raw.sin_addr.s_addr));
-            if !ip.is_loopback() && !ip.is_unspecified() && !ip.is_link_local() {
-                selected = Some(ip);
-                break;
-            }
-        }
-        current = entry.ifa_next;
-    }
-    unsafe { libc::freeifaddrs(list) };
-    selected
-}
-
-#[cfg(not(unix))]
-pub(in crate::web) fn interface_ipv4() -> Option<Ipv4Addr> {
-    None
 }
 
 #[derive(RustEmbed)]

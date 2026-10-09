@@ -31,13 +31,13 @@ pub struct ConnectionInfo {
     pub a2a_url: Option<String>,
     /// Actual public Agent Card endpoint, only for an active HTTP process.
     pub agent_card_url: Option<String>,
-    /// Default loopback example; this is not an assertion that a listener exists.
+    /// Local loopback example; actual advertisement is determined at server startup.
     pub default_http_origin: &'static str,
     /// Environment variable name, never its value.
     pub token_env: &'static str,
-    /// Device command to start a separate loopback HTTP server.
+    /// Device command to start the default network HTTP server with automatic advertisement.
     pub http_command: String,
-    /// Device command for explicitly exposing the HTTP listener to a trusted network.
+    /// Optional manual advertised-address override for VPN or multiple interfaces.
     pub network_command: String,
     /// Local MCP process command; the client must execute it on the same device.
     pub stdio_command: String,
@@ -60,11 +60,15 @@ impl ConnectionInfo {
         );
         Self {
             config_path: path.to_string_lossy().into_owned(),
-            state: "stopped".into(), transport: None,
-            mcp_url: None, a2a_url: None, agent_card_url: None,
-            default_http_origin: DEFAULT_ORIGIN, token_env: "NL2SH_PROTOCOL_TOKEN",
+            state: "stopped".into(),
+            transport: None,
+            mcp_url: None,
+            a2a_url: None,
+            agent_card_url: None,
+            default_http_origin: DEFAULT_ORIGIN,
+            token_env: "NL2SH_PROTOCOL_TOKEN",
             http_command: format!("{base} serve"),
-            network_command: format!("{base} serve --host 0.0.0.0 --port 8765 --advertised-url http://DEVICE_IP:8765 --allow-insecure-http"),
+            network_command: format!("{base} serve --advertised-url http://DEVICE_IP:8765"),
             stdio_command: format!("{base} stdio"),
             approvals_command: format!("{base} approvals"),
         }
@@ -99,9 +103,9 @@ impl ConnectionInfo {
         } else {
             lines.push(
                 if zh {
-                    "HTTP 尚无已确认的运行地址；默认启动后的本机地址："
+                    "HTTP 尚无已确认的运行地址；以下仅本机示例，启动后显示自动获取的设备地址："
                 } else {
-                    "No confirmed HTTP endpoint; local examples after default startup:"
+                    "No confirmed HTTP endpoint; local examples only; startup reports the detected device address:"
                 }
                 .into(),
             );
@@ -111,7 +115,7 @@ impl ConnectionInfo {
                 format!("Agent Card: {DEFAULT_ORIGIN}/.well-known/agent-card.json"),
             ]);
         }
-        lines.push(if zh { "HTTP 鉴权：Authorization: Bearer <token>；令牌变量 NL2SH_PROTOCOL_TOKEN（32–256 ASCII 字符）。" } else { "HTTP auth: Authorization: Bearer <token>; NL2SH_PROTOCOL_TOKEN (32–256 ASCII characters)." }.into());
+        lines.push(if zh { "HTTP 鉴权：Authorization: Bearer <token>；未设 NL2SH_PROTOCOL_TOKEN 时启动自动生成并打印，设置该变量可复用固定令牌。" } else { "HTTP auth: Authorization: Bearer <token>; generated and printed at startup unless NL2SH_PROTOCOL_TOKEN is set." }.into());
         lines.push(format!(
             "{}{}",
             if zh {
@@ -124,9 +128,9 @@ impl ConnectionInfo {
         lines.push(format!(
             "{}{}",
             if zh {
-                "可信网络 HTTP 模板（替换 DEVICE_IP）："
+                "可选：覆盖公告地址（多网卡/VPN，替换 DEVICE_IP）："
             } else {
-                "Trusted-network HTTP template (replace DEVICE_IP): "
+                "Optional advertised-address override (multiple interfaces/VPN; replace DEVICE_IP): "
             },
             self.network_command
         ));
@@ -148,7 +152,7 @@ impl ConnectionInfo {
             },
             self.approvals_command
         ));
-        lines.push(if zh { "TUI/Web 不自动启动协议服务。127.0.0.1 仅本机可用；跨设备需显式开放监听与公告地址，推荐 HTTPS。" } else { "TUI/Web does not start protocols. 127.0.0.1 is local only; remote access requires explicit binding and advertised URL, preferably HTTPS." }.into());
+        lines.push(if zh { "默认监听 0.0.0.0:8765 并允许 HTTP；自动获取设备 IPv4。仅本机使用可加 --host 127.0.0.1。HTTP 明文传输令牌，远程推荐 HTTPS。TUI/Web 不自动启动协议服务。" } else { "Defaults: 0.0.0.0:8765, HTTP allowed, device IPv4 detected automatically. Use --host 127.0.0.1 for local only. HTTP sends tokens in plaintext; prefer HTTPS remotely. TUI/Web does not start protocols." }.into());
         lines.join("\n")
     }
 }

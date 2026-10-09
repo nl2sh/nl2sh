@@ -32,7 +32,7 @@ Root / su Layer
 Android Runtime
 ```
 
-`src/protocol/` 在设备单文件程序内提供独立的 MCP Streamable HTTP `/mcp`、A2A 1.0 JSON-RPC `/a2a` 和本地 stdio MCP。`protocol serve` 默认监听 loopback 8765；网络监听、远程 HTTP 与公告 origin 均需显式配置。HTTP 要求独立的 `NL2SH_PROTOCOL_TOKEN`，校验 Host/Origin；Web 不继承协议令牌。MCP 工具直接调用 Tool Runtime，不经过 A2A 或 ADB；A2A 委派普通文本给内置 Agent。主机 Python 网关、ADB 传输、旧 bridge CLI、候选部署工作流和旧配置字段全部移除，没有兼容路径。
+`src/protocol/` 在设备单文件程序内提供独立的 MCP Streamable HTTP `/mcp`、A2A 1.0 JSON-RPC `/a2a` 和本地 stdio MCP。`protocol serve` 默认监听 `0.0.0.0:8765` 且允许 HTTP，公告 origin 使用自动检测的设备 IPv4 与实际绑定端口，可显式覆盖给代理/VPN 使用；仅本机可指定 loopback，允许 HTTP 可显式设为 false。未设 `NL2SH_PROTOCOL_TOKEN` 时用系统随机源生成 256 bit 令牌，并在启动输出显示连接信息与客户端配置，进程持有原始令牌用于任务脱敏，鉴权比较 SHA-256；显式固定令牌不打印值。HTTP 校验 Host/Origin；Web 不继承协议令牌。MCP 工具直接调用 Tool Runtime，不经过 A2A 或 ADB；A2A 委派普通文本给内置 Agent。主机 Python 网关、ADB 传输、旧 bridge CLI、候选部署工作流和旧配置字段全部移除，没有兼容路径。
 
 协议启动在持有独占状态锁期间以私有 `protocol/connection.json` 公告 PID、启动身份、配置路径、传输和 HTTP origin，不保存令牌。TUI 启动页、CLI service status 与 Web `/api/connections`、`/api/info.connections` 共享只读发现；校验私有目录/文件、持锁、UID、启动身份和配置，不探测网络。记录遗留但锁已释放时报告 stopped；权限/身份无法确认时报告 unknown，不提供活动 HTTP 地址。Web 左侧垂直菜单的连接窗口提供复制与手动刷新，TUI 为启动快照；展示不启动服务或提供远程审批。
 

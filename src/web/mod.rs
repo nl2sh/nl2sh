@@ -51,7 +51,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     io::{Cursor, Write},
-    net::{IpAddr, Ipv4Addr},
+    net::Ipv4Addr,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},

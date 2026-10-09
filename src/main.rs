@@ -637,4 +637,43 @@ mod tests {
             Cli::try_parse_from(["nl2sh", "--web-only", "update"]).expect("CLI shape should parse");
         assert!(validate_cli(&subcommand).is_err());
     }
+    #[test]
+    fn protocol_defaults_to_network_http_and_supports_explicit_restriction() {
+        for (args, expected) in [
+            (vec!["nl2sh", "protocol", "serve"], true),
+            (
+                vec!["nl2sh", "protocol", "serve", "--allow-insecure-http"],
+                true,
+            ),
+            (
+                vec![
+                    "nl2sh",
+                    "protocol",
+                    "serve",
+                    "--host",
+                    "127.0.0.1",
+                    "--allow-insecure-http=false",
+                ],
+                false,
+            ),
+        ] {
+            let cli = Cli::try_parse_from(args).expect("protocol CLI");
+            if let Some(crate::cli::Command::Protocol {
+                command:
+                    crate::cli::ProtocolCommand::Serve {
+                        host,
+                        advertised_url,
+                        allow_insecure_http,
+                        ..
+                    },
+            }) = cli.command
+            {
+                assert_eq!(allow_insecure_http, expected);
+                assert_eq!(host.is_unspecified(), expected);
+                assert!(advertised_url.is_none());
+            } else {
+                panic!("expected protocol serve");
+            }
+        }
+    }
 }

@@ -21,7 +21,7 @@
 | `ANDROID_HOME / ANDROID_SDK_ROOT / JAVA_HOME` | 可选 Android 模块的 SDK / JDK |
 | `NL2SH_PACKAGE_MANAGER_BUILD` | 构建期 1 表示禁用应用内自更新 |
 | `ANDROID_TMP_DIR / TERMUX_SSH_LOCAL_PORT / TERMUX_SSH_REMOTE_PORT / TERMUX_TMUX_SESSION` | Termux SSH/tmux 开发部署脚本 |
-| `NL2SH_PROTOCOL_TOKEN` | 设备 HTTP MCP/A2A 服务令牌，32–256 个可打印 ASCII 字符 |
+| `NL2SH_PROTOCOL_TOKEN` | 可选固定 HTTP MCP/A2A 令牌，32–256 个可打印 ASCII 字符；未设置时每次启动自动生成并打印 |
 | `NL2SH_APT_GPG_KEY_ID / TERMUX_APT_GPG_PRIVATE_KEY` | APT 签名 key ID / CI Secret，私钥不进入源码 |
 | `NL2SH_WEB_DIST` | Cargo build.rs 生成的嵌入资源目录，非用户设置 |
 | `NL2SH_TAILCAT_TEST_BINARY / NL2SH_TAILCAT_TEST_PROXY` | 显式 Tailcat live 测试 |

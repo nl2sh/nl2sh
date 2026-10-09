@@ -9,6 +9,7 @@
 - [x] 删除 Python/ADB 网关、Docker 配置、bridge CLI、部署工作流及旧配置兼容。
 - [x] 同步双语部署、协议、安全与派生 CLI/config/tool 参考。
 - [x] TUI 启动页、service status 和 WebUI 展示共享协议连接信息与启动/客户端配置。
+- [x] 一条命令启动协议：默认网络 HTTP、自动公告 IP、自动随机令牌及外部 Agent 连接输出。
 
 状态以 2026-10-09 的代码与验证记录为准；当前 Cargo 版本为 1.1.0，公开发布状态以实际 Release 为准。未完成项不会机械勾选。
 

@@ -69,15 +69,15 @@ pub enum ServiceCommand {
 pub enum ProtocolCommand {
     /// Serve authenticated HTTP MCP and A2A on the device.
     Serve {
-        #[arg(long, default_value = "127.0.0.1")]
+        #[arg(long, default_value = "0.0.0.0")]
         host: std::net::IpAddr,
         #[arg(long, default_value_t = 8765)]
         port: u16,
-        /// Public HTTP(S) origin used in the Agent Card.
+        /// Override the advertised origin; defaults to the detected device IPv4 and bound port.
         #[arg(long)]
         advertised_url: Option<String>,
-        /// Explicitly allow a non-loopback plaintext HTTP listener.
-        #[arg(long)]
+        /// Allow plaintext HTTP (default); use =false to require a loopback listener.
+        #[arg(long, action = clap::ArgAction::Set, default_value_t = true, num_args = 0..=1, default_missing_value = "true", require_equals = true)]
         allow_insecure_http: bool,
     },
     /// Serve MCP over local stdin/stdout; never starts the TUI or Web UI.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Simplify `nl2sh protocol serve`: default all IPv4 interfaces and HTTP, automatic advertised IP/actual port, and a system-random token per startup when no environment override exists. Print external Agent connection details/client configuration; generated tokens appear only in startup output and are redacted from task snapshots. Retain fixed-token, bind-address and advertised-origin overrides.
+
 - Add MCP/A2A connection guidance to TUI startup, human/JSON `service status`, and the Web left vertical menu. Shared private process discovery shows actual advertised URLs, HTTP/stdio client configuration and local approval guidance, distinguishes default examples from running endpoints, and omits token values.
 
 - Move MCP/A2A into the single device Rust executable: authenticated HTTP, local stdio MCP, A2A Agent delegation, persisted device tasks/query/cancellation, and serialized contexts. Tool and Agent mutations default to local `protocol approvals/approve`; configuration is now `protocol_auto_approve`. Remove the Python/ADB gateway, Docker, bridge command, deployment workflow, and legacy configuration compatibility; clients connect directly to the device.

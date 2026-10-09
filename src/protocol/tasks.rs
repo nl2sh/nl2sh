@@ -51,9 +51,13 @@ pub(super) struct Tasks {
     contexts: Mutex<HashMap<String, Weak<Mutex<()>>>>,
     capacity: Arc<Semaphore>,
     stopping: AtomicBool,
+    protocol_token: Option<String>,
 }
 impl Tasks {
     pub fn open(path: PathBuf) -> Result<Arc<Self>> {
+        Self::open_with_token(path, std::env::var("NL2SH_PROTOCOL_TOKEN").ok())
+    }
+    pub fn open_with_token(path: PathBuf, protocol_token: Option<String>) -> Result<Arc<Self>> {
         execution::load(&path)?;
         let store = Store::open(&path)?;
         Ok(Arc::new(Self {
@@ -63,6 +67,7 @@ impl Tasks {
             contexts: Mutex::new(HashMap::new()),
             capacity: Arc::new(Semaphore::new(16)),
             stopping: AtomicBool::new(false),
+            protocol_token,
         }))
     }
     pub async fn submit(
@@ -87,8 +92,8 @@ impl Tasks {
             cfg.ima_api_key,
             cfg.jev_api_key,
         ];
-        if let Ok(token) = std::env::var("NL2SH_PROTOCOL_TOKEN") {
-            secrets.push(token);
+        if let Some(token) = &self.protocol_token {
+            secrets.push(token.clone());
         }
         redact(&mut task, &secrets);
         let (cancel, rx) = watch::channel(false);

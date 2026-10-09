@@ -26,14 +26,14 @@ export function ProtocolConnectionsDialog({close}:{close:()=>void}){
     {error&&<p class="bad" role="alert">连接信息读取失败：{error}</p>}
     {info&&<>
       <p class="muted">TUI、Web 与协议服务分别启动。这里显示同 UID、同配置的协议进程状态，客户端还需确认网络可达。</p>
-      <section><h3>HTTP MCP / A2A</h3><p>{active?'以下为当前服务的公告地址。':'当前没有已确认的 HTTP 地址；以下地址是默认启动后的本机示例。'}</p>
+      <section><h3>HTTP MCP / A2A</h3><p>{active?'以下为当前服务的公告地址。':'当前没有已确认的 HTTP 地址；以下仅为本机回环示例。默认启动后，刷新查看自动获取的设备 IP 地址。'}</p>
         <CopyValue label={active?'MCP · Streamable HTTP':'MCP · 默认示例'} value={active?info.mcp_url!:`${info.default_http_origin}/mcp`}/>
         <CopyValue label={active?'A2A · JSON-RPC 1.0':'A2A · 默认示例'} value={active?info.a2a_url!:`${info.default_http_origin}/a2a`}/>
         <CopyValue label={active?'Agent Card · 公开发现':'Agent Card · 默认示例'} value={active?info.agent_card_url!:`${info.default_http_origin}/.well-known/agent-card.json`}/>
-        <p>HTTP 请求使用 <code>Authorization: Bearer &lt;token&gt;</code>。在设备服务和客户端设置同一个随机令牌：<code>{info.token_env}</code>，32–256 个可打印 ASCII 字符。令牌不会在此展示。</p>
-        <CopyValue label="设备另一个终端 · 本机 HTTP 启动命令" value={info.http_command}/>
-        <p>127.0.0.1 仅用于同设备客户端。跨设备访问时，将 DEVICE_IP 替换为设备可达 IP，显式开放监听和公告地址。HTTP 明文传输令牌；远程推荐 HTTPS 反向代理及 HTTPS 公告地址。</p>
-        <CopyValue label="可信 LAN / VPN · HTTP 启动命令模板" value={info.network_command}/>
+        <p>HTTP 请求使用 <code>Authorization: Bearer &lt;token&gt;</code>。未设置 <code>{info.token_env}</code> 时，设备启动命令自动生成令牌并在启动终端打印。把该值交给外部 Agent 或写入客户端同名环境变量。设置设备端变量可复用固定令牌（32–256 个可打印 ASCII 字符）。本窗口不展示令牌。</p>
+        <CopyValue label="设备另一个终端 · 默认 HTTP 启动命令（自动 IP）" value={info.http_command}/>
+        <p>默认监听 0.0.0.0:8765、允许 HTTP，并自动获取设备 IPv4，通常无需设置 advertised-url。127.0.0.1 仅用于同设备客户端；仅本机使用时可加 --host 127.0.0.1。多网卡、VPN 或 HTTPS 代理可用 advertised-url 覆盖公告地址。HTTP 明文传输令牌，远程推荐 HTTPS。</p>
+        <CopyValue label="可选：多网卡 / VPN 公告地址覆盖模板（替换 DEVICE_IP）" value={info.network_command}/>
         <details><summary>MCP 客户端配置{active?'':'（默认本机示例）'}</summary><CopyValue label="支持此格式的 MCP 客户端 · TOML" value={httpMcpConfig(info)}/><p>路径为 /mcp，传输为 Streamable HTTP；客户端令牌变量与设备服务一致。运行 stdio 前先停止同状态目录的 HTTP 服务。</p></details>
         <details><summary>A2A 调用示例</summary><p>向 A2A 地址 POST JSON，携带 Content-Type: application/json、A2A-Version: 1.0 和 Bearer 鉴权。每次发送更换 messageId；保存 task.id，使用 GetTask 查询异步结果。</p><CopyValue label="SendMessage 请求体" value={a2aMessage}/></details>
       </section>

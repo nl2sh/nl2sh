@@ -44,7 +44,7 @@ async fn rpc(client: &reqwest::Client, url: &str, method: &str, params: Value) -
         .await?)
 }
 #[test]
-fn listener_settings_require_explicit_network_exposure() -> Result<()> {
+fn listener_settings_validate_overrides_and_restricted_http() -> Result<()> {
     let token = "t".repeat(32);
     assert!(settings(
         "0.0.0.0".parse()?,
@@ -54,7 +54,8 @@ fn listener_settings_require_explicit_network_exposure() -> Result<()> {
         &token
     )
     .is_err());
-    assert!(settings("0.0.0.0".parse()?, 8765, None, true, &token).is_err());
+    let automatic = settings("0.0.0.0".parse()?, 8765, None, true, &token)?;
+    assert!(!automatic.origin.contains("0.0.0.0"));
     assert!(settings(
         "127.0.0.1".parse()?,
         8765,
@@ -68,6 +69,8 @@ fn listener_settings_require_explicit_network_exposure() -> Result<()> {
         "https://device/path",
         "https://device?key=secret",
         "https://device#fragment",
+        "http://0.0.0.0:8765",
+        "http://[::]:8765",
     ] {
         assert!(settings("127.0.0.1".parse()?, 8765, Some(origin), false, &token).is_err());
     }
@@ -80,6 +83,52 @@ fn listener_settings_require_explicit_network_exposure() -> Result<()> {
         &token
     )
     .is_ok());
+    Ok(())
+}
+#[test]
+fn auto_origin_uses_device_ip_actual_port_or_loopback_fallback() -> Result<()> {
+    let wildcard = "0.0.0.0".parse()?;
+    let ip = "192.168.1.23".parse()?;
+    assert_eq!(
+        default_origin(wildcard, 9123, Some(ip)),
+        "http://192.168.1.23:9123"
+    );
+    assert_eq!(
+        default_origin(wildcard, 8765, None),
+        "http://127.0.0.1:8765"
+    );
+    assert_eq!(
+        default_origin(wildcard, 8765, Some(Ipv4Addr::UNSPECIFIED)),
+        "http://127.0.0.1:8765"
+    );
+    assert_eq!(
+        default_origin("127.0.0.1".parse()?, 8765, Some(ip)),
+        "http://127.0.0.1:8765"
+    );
+    assert_eq!(
+        default_origin("::".parse()?, 8765, Some(ip)),
+        "http://[::1]:8765"
+    );
+    Ok(())
+}
+#[test]
+fn generated_tokens_are_unique_and_only_generated_values_appear_in_startup() -> Result<()> {
+    let (first, generated) = protocol_token(Err(std::env::VarError::NotPresent))?;
+    let (second, _) = protocol_token(Err(std::env::VarError::NotPresent))?;
+    assert!(generated);
+    assert_eq!(first.len(), 64);
+    assert!(first.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    assert_ne!(first, second);
+    let host = "127.0.0.1".parse()?;
+    let access = settings(host, 8765, Some("https://agent.example"), true, &first)?;
+    let generated = startup_info(&access, host, 8765, &first, true)?;
+    assert!(generated.contains(&first));
+    assert!(generated.contains("https://agent.example/mcp"));
+    assert!(generated.contains("/.well-known/agent-card.json"));
+    assert!(generated.contains("[mcp_servers.nl2sh]"));
+    let configured = startup_info(&access, host, 8765, &first, false)?;
+    assert!(!configured.contains(&first));
+    assert_eq!(protocol_token(Ok(first.clone()))?, (first, false));
     Ok(())
 }
 #[tokio::test]

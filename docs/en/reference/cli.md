@@ -18,6 +18,9 @@ nl2sh protocol approvals
 
 `nl2sh --config <config-path> service status` reports independent Web and MCP/A2A states and connection methods. JSON adds `connections`, including actual HTTP endpoints only when verified running and startup/stdio commands. Stopped endpoints are null; default addresses are examples, not active listeners. See [device MCP/A2A](../advanced/a2a-mcp.md).
 
+`nl2sh protocol serve` starts with the default configuration: `0.0.0.0:8765`, HTTP allowed, automatically detected advertised IPv4, and a generated token/connection output when the environment token is absent. Use `--host 127.0.0.1` for local only, `--allow-insecure-http=false` to refuse network HTTP, or `--advertised-url` for a proxy/VPN override.
+
+
 ## Help exported from clap
 
 This includes the root command and every protocol subcommand; argument lists are not maintained manually.
@@ -200,16 +203,19 @@ Usage: serve [OPTIONS]
 
 Options:
       --host <HOST>
-          [default: 127.0.0.1]
+          [default: 0.0.0.0]
 
       --port <PORT>
           [default: 8765]
 
       --advertised-url <ADVERTISED_URL>
-          Public HTTP(S) origin used in the Agent Card
+          Override the advertised origin; defaults to the detected device IPv4 and bound port
 
-      --allow-insecure-http
-          Explicitly allow a non-loopback plaintext HTTP listener
+      --allow-insecure-http[=<ALLOW_INSECURE_HTTP>]
+          Allow plaintext HTTP (default); use =false to require a loopback listener
+
+          [default: true]
+          [possible values: true, false]
 
   -h, --help
           Print help

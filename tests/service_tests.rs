@@ -76,7 +76,13 @@ async fn status_and_web_discover_separate_protocol_listener_without_disclosing_t
     assert_eq!(status["state"], "stopped", "Web status is independent");
     let connections = &status["connections"];
     let mcp = connections["mcp_url"].as_str().expect("MCP URL");
-    assert!(mcp.starts_with("http://127.0.0.1:"));
+    let address = reqwest::Url::parse(mcp).expect("valid advertised URL");
+    let ip = address
+        .host_str()
+        .expect("device IPv4")
+        .parse::<std::net::Ipv4Addr>()
+        .expect("IPv4 origin");
+    assert!(!ip.is_unspecified());
     assert!(!mcp.contains(":8765/"), "actual ephemeral port is shown");
     assert_eq!(connections["transport"], "http");
     assert!(!status.to_string().contains(token));

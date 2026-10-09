@@ -8,36 +8,43 @@ The TUI startup page, `nl2sh --config <config-path> service status` (including J
 
 Discovery uses private `protocol/connection.json`, process start identity, and the exclusive lock. It reads no token and makes no requests to the advertised URL. Stale records do not report a stopped process as running. Discovery verifies only a process with the same UID and configuration, not remote reachability. TUI shows a startup snapshot; Web and CLI refresh the current state. None of these display entry points starts protocols automatically.
 
-## Start the device HTTP service
+## Start device HTTP with one command
 
-Set a random token containing at least 32 characters in a device shell/root terminal, then start:
-
-```sh
-export NL2SH_PROTOCOL_TOKEN='replace-with-a-random-token-of-32-to-256-characters'
-nl2sh --config /data/local/tmp/config.toml protocol serve
-```
-
-The separate listener defaults to `127.0.0.1:8765`, without starting TUI or Web. Discovery at `/.well-known/agent-card.json` is public; `/mcp` and `/a2a` require `Authorization: Bearer <token>`. Web has a separate port and access policy; protocol tokens do not change Web access. Only one protocol process may use a configuration's state directory; do not run HTTP and stdio against the same state directory simultaneously.
-
-Explicitly expose HTTP on a reachable trusted LAN/VPN:
+In a device shell/root terminal:
 
 ```sh
-nl2sh --config /data/local/tmp/config.toml protocol serve \
-  --host 0.0.0.0 --port 8765 \
-  --advertised-url http://DEVICE_IP:8765 --allow-insecure-http
+nl2sh protocol serve
 ```
 
-Replace `DEVICE_IP` with the device address clients can reach. HTTP transmits tokens in plaintext; public access should use an HTTPS reverse proxy with the actual HTTPS origin in `--advertised-url`. Non-loopback binding still requires `--allow-insecure-http` because the native listener serves HTTP. Advertised URLs cannot contain path prefixes, credentials, queries, or fragments. Preserve the advertised Host at the proxy; the server validates Host and any supplied Origin.
+This uses the default configuration path; add `--config /data/local/tmp/config.toml` for another configuration. Defaults are `0.0.0.0:8765` with HTTP allowed; TUI and Web are not started. Without `NL2SH_PROTOCOL_TOKEN`, the system secure random source generates a 64-character token. Startup prints MCP, A2A and public Agent Card URLs, the token, and MCP client configuration. Give this connection block to an external Agent, or set its Bearer credential/client `NL2SH_PROTOCOL_TOKEN`. Generated tokens change on every startup and are not saved in configuration or protocol connection records, or exposed through TUI, Web or status discovery. Startup output contains credentials; share it only with trusted callers.
 
-You can start in the background from the device terminal where the token was set:
+The default advertised IPv4 comes from local route source selection, without sending probe packets or querying DNS. If that fails, active non-loopback IPv4 interfaces are enumerated. With no usable address, advertisement falls back to `127.0.0.1`, usable only locally. The actual bound port is used, including `--port 0`. IP selection occurs at startup; restart and update clients after network/IP changes.
+
+`--host` controls binding: `0.0.0.0` means all IPv4 interfaces and is not a client destination. `--advertised-url` sets the client-facing HTTP(S) origin. The Agent Card derives its A2A URL from it; MCP guidance uses the same origin and Host/Origin validation restricts requests accordingly. Ordinary device networking needs no manual value. Override it for a different reachable interface, VPN, NAT mapping or HTTPS proxy:
 
 ```sh
-nohup nl2sh --config /data/local/tmp/config.toml protocol serve \
-  --host 0.0.0.0 --advertised-url http://DEVICE_IP:8765 --allow-insecure-http \
-  </dev/null > /data/local/tmp/nl2sh-protocol.log 2>&1 &
+nl2sh protocol serve --advertised-url https://agent.example.com
 ```
 
-Protect logs and configuration directories; keep tokens out of public scripts and version control. The device must remain reachable and the process alive; startup does not establish automatic background keepalive. SIGINT/SIGTERM requests cancellation and waits for current operations to settle before shutdown. Cancellation does not roll back completed actions.
+Detection does not guarantee remote reachability or configure port forwarding, NAT or HTTPS. HTTP sends tokens in plaintext; use an HTTPS reverse proxy for public access and preserve the advertised Host. Advertised URLs cannot contain path prefixes, credentials, queries or fragments, or use `0.0.0.0`/`::`. For local-only use, select `--host 127.0.0.1`. `--allow-insecure-http` defaults to true; `--allow-insecure-http=false` requires a loopback listener.
+
+For a stable token across restarts, explicitly override it with 32–256 printable ASCII characters. Configured values are hidden in startup output; empty or invalid values reject startup:
+
+```sh
+export NL2SH_PROTOCOL_TOKEN='replace-with-a-fixed-random-token-of-32-to-256-characters'
+nl2sh protocol serve
+```
+
+Discovery at `/.well-known/agent-card.json` is public; `/mcp` and `/a2a` require `Authorization: Bearer <token>`. Web has an independent port and access policy. Only one protocol process may use a state directory; HTTP and stdio cannot share it concurrently.
+
+For background startup, keep output private and read the generated token and URLs from its log:
+
+```sh
+umask 077
+nohup nl2sh protocol serve </dev/null >nl2sh-protocol.log 2>&1 &
+```
+
+Protect logs/configuration; never put tokens in public scripts or version control. Keep the device network and process available; startup does not establish background keepalive. SIGINT/SIGTERM cancels and waits for current operations to settle before shutdown. Cancellation does not undo existing effects.
 
 ## Connect an MCP client
 

@@ -8,33 +8,40 @@ TUI 启动页、`nl2sh --config <配置路径> service status`（含 `--json` �
 
 查询使用私有 `protocol/connection.json`、进程启动身份和独占锁，不读取令牌或向公告地址发出请求。停止后的遗留记录不会报告运行中。它只确认同 UID、同配置进程，不保证远端网络可达；TUI 为启动时快照，Web 与 CLI 查询刷新当前状态。三个展示入口不自动启动协议服务。
 
-## 启动设备 HTTP 服务
+## 一条命令启动设备 HTTP 服务
 
-在设备 shell/root 终端设置一个随机、至少 32 字符的令牌，然后启动：
+在设备 shell/root 终端运行：
 
 ```sh
-export NL2SH_PROTOCOL_TOKEN='替换为32到256字符的随机令牌'
-nl2sh --config /data/local/tmp/config.toml protocol serve
+nl2sh protocol serve
 ```
 
-默认独立监听 `127.0.0.1:8765`，不启动 TUI 或 Web。公开发现地址为 `/.well-known/agent-card.json`；`/mcp` 与 `/a2a` 均需 `Authorization: Bearer <token>`。Web 服务有独立端口和访问策略，协议令牌不改变 Web 的访问行为。每个配置的状态目录仅允许一个协议服务进程；HTTP 与 stdio 不应同时使用同一状态目录。
+使用默认配置路径；需要其他配置时加 `--config /data/local/tmp/config.toml`。默认监听 `0.0.0.0:8765` 并允许 HTTP，不启动 TUI 或 Web。未设置 `NL2SH_PROTOCOL_TOKEN` 时，从系统安全随机源生成 64 字符令牌，并在启动终端打印 MCP、A2A、公开 Agent Card 地址、令牌和 MCP 客户端配置。将整段连接信息交给外部 Agent，或把令牌填入客户端的 Bearer 鉴权/`NL2SH_PROTOCOL_TOKEN`。自动令牌每次启动变化，不写入配置或协议连接记录，也不通过 TUI、Web 或状态查询展示。启动输出包含凭据，应只交给可信调用者。
 
-设备可达的可信 LAN/VPN 中，显式开放 HTTP：
+默认自动选取 IPv4 路由的源地址，不发送探测数据包、不查询 DNS；失败时枚举活动网卡的非回环 IPv4，再无可用地址时公告 `127.0.0.1`，此时公告地址仅本机可用。使用绑定后的实际端口，包括 `--port 0`。IP 在启动时获取；网络/IP 改变后重启协议服务并更新客户端。
+
+`--host` 决定绑定范围，`0.0.0.0` 表示所有 IPv4 接口，不能作为客户端目标。`--advertised-url` 决定向客户端公告的 HTTP(S) origin：Agent Card 据此生成 A2A 接口地址，MCP 与连接说明使用同一地址，Host/Origin 校验也据此限制调用。正常设备网络无需填写；多网卡、VPN、NAT 或 HTTPS 代理需要另一个可达地址时可覆盖：
 
 ```sh
-nl2sh --config /data/local/tmp/config.toml protocol serve \
-  --host 0.0.0.0 --port 8765 \
-  --advertised-url http://设备IP:8765 --allow-insecure-http
+nl2sh protocol serve --advertised-url https://agent.example.com
 ```
 
-将 `设备IP` 替换为客户端可达的设备地址。普通 HTTP 明文传输令牌；公网接入使用 HTTPS 反向代理，并将 `--advertised-url` 设置为实际 HTTPS origin。监听非 loopback 地址仍需 `--allow-insecure-http`，因为原生监听器提供 HTTP。公告 URL 不允许路径前缀、凭据、query 或 fragment。代理需保留公告 Host；服务校验 Host 和携带的 Origin。
+自动获取不保证远端可达，也不会自动配置端口映射、NAT 或 HTTPS。普通 HTTP 明文传输令牌；公网接入使用 HTTPS 反向代理，代理需保留公告 Host。公告 URL 不允许路径前缀、凭据、query 或 fragment，也不能为 `0.0.0.0`/`::`。只需本机访问时用 `--host 127.0.0.1`；`--allow-insecure-http` 默认为 true，`--allow-insecure-http=false` 要求本机监听。
 
-服务可以在设置令牌的设备终端后台启动：
+需要固定令牌以便重启后继续连接，可显式覆盖（32–256 个可打印 ASCII 字符）；配置的令牌不会在启动输出中显示，空值或不合法值会拒绝启动：
 
 ```sh
-nohup nl2sh --config /data/local/tmp/config.toml protocol serve \
-  --host 0.0.0.0 --advertised-url http://设备IP:8765 --allow-insecure-http \
-  </dev/null > /data/local/tmp/nl2sh-protocol.log 2>&1 &
+export NL2SH_PROTOCOL_TOKEN='替换为32到256字符的固定随机令牌'
+nl2sh protocol serve
+```
+
+公开发现为 `/.well-known/agent-card.json`；`/mcp` 与 `/a2a` 均需 `Authorization: Bearer <token>`。Web 服务有独立端口和访问策略，协议令牌不改变 Web 的访问行为。每个状态目录仅允许一个协议进程；HTTP 与 stdio 不应同时使用同一目录。
+
+后台启动时让输出日志保持私有，并从日志读取自动令牌和连接信息：
+
+```sh
+umask 077
+nohup nl2sh protocol serve </dev/null >nl2sh-protocol.log 2>&1 &
 ```
 
 保护日志和配置目录，不把令牌放入公共脚本或版本控制。设备需维持网络可达和进程存活；启动命令不会自动建立后台保活。SIGINT/SIGTERM 请求取消并等待当前操作安全结束，随后关闭服务；取消不回滚已经发生的动作。

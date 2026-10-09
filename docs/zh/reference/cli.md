@@ -18,6 +18,9 @@ nl2sh protocol approvals
 
 `nl2sh --config <配置路径> service status` 显示 Web 与 MCP/A2A 的独立状态及连接方式；`--json` 新增 `connections`，包含实际 HTTP 端点（仅确认运行时）和启动/stdio 命令。未启动时端点为 null，默认地址只是示例，不代表已监听。详见 [设备 MCP/A2A](../advanced/a2a-mcp.md)。
 
+`nl2sh protocol serve` 使用默认配置，一条命令启动：默认 `0.0.0.0:8765`、允许 HTTP、自动获取公告 IPv4，缺少环境令牌时自动生成并打印连接信息。可用 `--host 127.0.0.1` 限制本机、`--allow-insecure-http=false` 禁止网络 HTTP、`--advertised-url` 覆盖代理/VPN 地址。
+
+
 ## 从 clap 导出的帮助
 
 以下含根命令与全部 protocol 子命令，不手工维护参数列表。
@@ -200,16 +203,19 @@ Usage: serve [OPTIONS]
 
 Options:
       --host <HOST>
-          [default: 127.0.0.1]
+          [default: 0.0.0.0]
 
       --port <PORT>
           [default: 8765]
 
       --advertised-url <ADVERTISED_URL>
-          Public HTTP(S) origin used in the Agent Card
+          Override the advertised origin; defaults to the detected device IPv4 and bound port
 
-      --allow-insecure-http
-          Explicitly allow a non-loopback plaintext HTTP listener
+      --allow-insecure-http[=<ALLOW_INSECURE_HTTP>]
+          Allow plaintext HTTP (default); use =false to require a loopback listener
+
+          [default: true]
+          [possible values: true, false]
 
   -h, --help
           Print help

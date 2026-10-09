@@ -6,7 +6,7 @@
 
 左侧垂直菜单“MCP / A2A”打开连接窗口，可刷新协议进程状态，复制实际 MCP Streamable HTTP、A2A JSON-RPC 与公开 Agent Card 地址，以及 HTTP/stdio 客户端配置、设备启动命令与 A2A 请求示例。查询无需模型，不启动服务，也不展示令牌或提供协议审批按钮。修改仍需设备同 UID、同配置的交互终端批准。
 
-Web 与协议服务分别启动；Web 的 `ready` 不代表 MCP/A2A 已启动。`service status` 文本及 JSON 的 `connections` 字段也提供同一连接信息，`/api/connections` 提供轻量只读查询，`/api/info` 包含 `connections`。状态为 `running/stopped/unknown`；运行中只确认本地协议进程身份与独占锁，不保证客户端网络可达。未启动或无法确认 HTTP 时显示明确标记的默认本机示例。127.0.0.1 仅同设备可用；跨设备需显式设置监听与公告地址，远程推荐 HTTPS。令牌变量仅显示名称 `NL2SH_PROTOCOL_TOKEN`。详见 [设备 MCP/A2A](../advanced/a2a-mcp.md)。
+Web 与协议服务分别启动；Web 的 `ready` 不代表 MCP/A2A 已启动。`service status` 文本及 JSON 的 `connections` 字段也提供同一连接信息，`/api/connections` 提供轻量只读查询，`/api/info` 包含 `connections`。状态为 `running/stopped/unknown`；运行中只确认本地协议进程身份与独占锁，不保证客户端网络可达。未启动或无法确认 HTTP 时显示明确标记的默认本机示例。127.0.0.1 仅同设备可用；默认开放 HTTP 并自动获取设备 IPv4；多网卡/VPN/代理可覆盖公告地址，远程推荐 HTTPS。未设 `NL2SH_PROTOCOL_TOKEN` 时启动自动生成并打印令牌，窗口仅显示变量名称。详见 [设备 MCP/A2A](../advanced/a2a-mcp.md)。
 
 ## 无终端后台启动
 

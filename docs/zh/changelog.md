@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 简化 `nl2sh protocol serve`：默认所有 IPv4 接口与 HTTP，自动获取公告 IP 和实际端口；无环境令牌时生成每次启动独立的系统随机令牌，打印外部 Agent 连接信息与客户端配置，令牌仅在启动输出显示并从任务快照脱敏。保留固定令牌、监听与公告地址覆盖。
+
 - TUI 启动页、`service status` 文本/JSON 和 Web 左侧垂直菜单新增 MCP/A2A 连接说明；共享私有协议进程发现，显示实际公告地址、HTTP/stdio 客户端配置与本地审批方式，默认示例和运行状态区分，令牌不展示。
 
 - 将 MCP/A2A 内置到设备单个 Rust 程序，提供独立鉴权 HTTP 和本地 stdio MCP、A2A Agent 委派、设备任务持久化/查询/取消与上下文串行。工具与 Agent 写入默认等待 `protocol approvals/approve` 本地审批；配置改为 `protocol_auto_approve`。删除 Python/ADB 网关、Docker、bridge 命令、部署工作流及旧配置兼容，客户端改为直接连接设备。
