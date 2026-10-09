@@ -6,7 +6,9 @@ mod execution;
 mod mcp;
 mod store;
 mod tasks;
-pub use connections::{connection_info, set_welcome_connections, ConnectionInfo};
+pub use connections::{
+    connection_details, connection_info, set_welcome_connections, ConnectionInfo,
+};
 #[cfg(test)]
 mod tests;
 
@@ -307,7 +309,8 @@ pub(crate) async fn start_http(
     let port = listener.local_addr()?.port();
     let access = settings(host, port, advertised, insecure, &token)?;
     let tasks = Tasks::open_with_token(path, Some(token.clone()))?;
-    let connection = connections::Registration::publish(&tasks.path, Some(&access.origin))?;
+    let connection =
+        connections::Registration::publish(&tasks.path, Some(&access.origin), Some(&token))?;
     let cancellation = CancellationToken::new();
     let app = router(tasks.clone(), access.clone(), cancellation.clone());
     {
@@ -355,7 +358,7 @@ async fn shutdown_signal() {
 /// Serve MCP on stdin/stdout in the same process as device execution; stdout is protocol-only.
 pub async fn stdio(path: PathBuf) -> Result<()> {
     let tasks = Tasks::open(path)?;
-    let _connection = connections::Registration::publish(&tasks.path, None)?;
+    let _connection = connections::Registration::publish(&tasks.path, None, None)?;
     let service = mcp::Mcp {
         tasks: tasks.clone(),
     }

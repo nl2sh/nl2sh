@@ -139,7 +139,7 @@ async fn single_command_generates_usable_token_redacts_tasks_and_rotates_on_rest
     assert_eq!(connections.mcp_url.as_deref(), Some(url.as_str()));
     assert!(!serde_json::to_string(&connections)?.contains(&token));
     assert!(
-        !std::fs::read_to_string(root.path().join("protocol/connection.json"))?.contains(&token)
+        std::fs::read_to_string(root.path().join("protocol/connection.json"))?.contains(&token)
     );
     let card: Value = client
         .get(connections.agent_card_url.context("missing card URL")?)

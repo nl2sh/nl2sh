@@ -13,6 +13,48 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn ui_server_starts_configured_protocol_and_shares_owner_connection_details() -> Result<()>
+    {
+        let directory = tempdir()?;
+        let path = directory.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "protocol_start_with_service=true\nprotocol_service_port=0\n",
+        )?;
+        let server = start_on_port(path.clone(), 0, true).await?;
+        let details = crate::protocol::connection_details(&path).await;
+        assert_eq!(details.state, "running");
+        assert_eq!(details.version.as_deref(), Some(env!("CARGO_PKG_VERSION")));
+        assert!(details.token.is_some());
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let response = client
+            .get(format!(
+                "http://127.0.0.1:{}/api/connections",
+                server.port()
+            ))
+            .send()
+            .await?;
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|value| value.to_str().ok()),
+            Some("no-store")
+        );
+        let json: serde_json::Value = response.json().await?;
+        assert_eq!(json["token"].as_str(), details.token.as_deref());
+        assert!(crate::protocol::connection_info(&path)
+            .await
+            .token
+            .is_none());
+        server.shutdown().await?;
+        let stopped = crate::protocol::connection_details(&path).await;
+        assert_eq!(stopped.state, "stopped");
+        assert!(stopped.token.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn config_editor_accepts_and_removes_retired_bridge_setting() -> Result<()> {
         let directory = tempdir()?;
         let path = directory.path().join("config.toml");

@@ -25,12 +25,14 @@ export function ProtocolConnectionsDialog({close}:{close:()=>void}){
     <div class="overview-heading"><strong>{info?connectionStatus(info):busy?'正在读取连接信息…':'连接信息不可用'}</strong><button disabled={busy} onClick={refresh}>刷新状态</button></div>
     {error&&<p class="bad" role="alert">连接信息读取失败：{error}</p>}
     {info&&<>
-      <p class="muted">默认分别启动；在配置页开启“随后台服务启动 MCP / A2A”后，service restart 一并启动。这里显示同 UID、同配置的协议进程状态，客户端还需确认网络可达。</p>
+      {info.version&&<p>nl2sh v{info.version} · MCP 2025-11-25 · A2A 1.0</p>}
+      <p class="muted">在配置页开启“随 Web / TUI 服务启动 MCP / A2A”后，重启当前入口即可一并启动。这里显示同 UID、同配置的协议进程状态，客户端还需确认网络可达。</p>
       <section><h3>HTTP MCP / A2A</h3><p>{active?'以下为当前服务的公告地址。':'当前没有已确认的 HTTP 地址；以下仅为本机回环示例。默认启动后，刷新查看自动获取的设备 IP 地址。'}</p>
         <CopyValue label={active?'MCP · Streamable HTTP':'MCP · 默认示例'} value={active?info.mcp_url!:`${info.default_http_origin}/mcp`}/>
         <CopyValue label={active?'A2A · JSON-RPC 1.0':'A2A · 默认示例'} value={active?info.a2a_url!:`${info.default_http_origin}/a2a`}/>
         <CopyValue label={active?'Agent Card · 公开发现':'Agent Card · 默认示例'} value={active?info.agent_card_url!:`${info.default_http_origin}/.well-known/agent-card.json`}/>
-        <p>HTTP 请求使用 <code>Authorization: Bearer &lt;token&gt;</code>。未设置 <code>{info.token_env}</code> 时，设备启动命令自动生成令牌并在启动终端打印；随后台服务启动时写入配置相邻的私有 config.service/service.log。把该值交给外部 Agent 或写入客户端同名环境变量。设置设备端变量可复用固定令牌（32–256 个可打印 ASCII 字符）。本窗口不展示令牌。</p>
+        <p>HTTP 请求使用 <code>Authorization: Bearer &lt;token&gt;</code>。未设置 <code>{info.token_env}</code> 时，设备启动命令自动生成令牌并在启动终端打印；随后台服务启动时写入配置相邻的私有 config.service/service.log。把该值交给外部 Agent 或写入客户端同名环境变量。设置设备端变量可复用固定令牌（32–256 个可打印 ASCII 字符）。当前运行令牌可在下方复制，连接配置包含鉴权信息。</p>
+        {active&&info.token&&<CopyValue label="Authorization · Bearer 令牌" value={`Bearer ${info.token}`}/>}
         <CopyValue label="设备另一个终端 · 默认 HTTP 启动命令（自动 IP）" value={info.http_command}/>
         <p>默认监听 0.0.0.0:8765、允许 HTTP，并自动获取设备 IPv4，通常无需设置 advertised-url。127.0.0.1 仅用于同设备客户端；仅本机使用时可加 --host 127.0.0.1。多网卡、VPN 或 HTTPS 代理可用 advertised-url 覆盖公告地址。HTTP 明文传输令牌，远程推荐 HTTPS。</p>
         <CopyValue label="可选：多网卡 / VPN 公告地址覆盖模板（替换 DEVICE_IP）" value={info.network_command}/>

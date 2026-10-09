@@ -2,13 +2,15 @@
 
 ## [Unreleased]
 
+- Fix TUI/foreground Web ignoring the MCP/A2A startup switch. UIs manage protocols they start and reuse existing processes. TUI/Web show the running version, actual endpoints, complete Bearer token and authenticated client configuration, using verified private live announcements. Ordinary status and Agent Cards omit credentials; Web details disable caching.
+
 - Add default-off `protocol_start_with_service`, `protocol_service_port`, and Web settings. Managed services can start and stop Web and MCP/A2A in one process, clean up failed starts, preserve standalone processes, and rotate generated tokens on restart.
 
 - Fix startup with old configurations: ignore the retired `bridge_auto_approve` setting without transferring approval permissions. Configuration wizards and Web editors apply the same handling; saving removes the old field while retaining validation of other unknown settings.
 
-- Simplify `nl2sh protocol serve`: default all IPv4 interfaces and HTTP, automatic advertised IP/actual port, and a system-random token per startup when no environment override exists. Print external Agent connection details/client configuration; generated tokens appear only in startup output and are redacted from task snapshots. Retain fixed-token, bind-address and advertised-origin overrides.
+- Simplify `nl2sh protocol serve`: default all IPv4 interfaces and HTTP, automatic advertised IP/actual port, and a system-random token per startup when no environment override exists. Print external Agent connection details/client configuration; generated tokens appear in startup output and owner TUI/Web and are redacted from task snapshots. Retain fixed-token, bind-address and advertised-origin overrides.
 
-- Add MCP/A2A connection guidance to TUI startup, human/JSON `service status`, and the Web left vertical menu. Shared private process discovery shows actual advertised URLs, HTTP/stdio client configuration and local approval guidance, distinguishes default examples from running endpoints, and omits token values.
+- Add MCP/A2A connection guidance to TUI startup, human/JSON `service status`, and the Web left vertical menu. Shared private process discovery shows actual advertised URLs, HTTP/stdio client configuration and local approval guidance, distinguishes default examples from running endpoints, and omits token values from ordinary CLI status.
 
 - Move MCP/A2A into the single device Rust executable: authenticated HTTP, local stdio MCP, A2A Agent delegation, persisted device tasks/query/cancellation, and serialized contexts. Tool and Agent mutations default to local `protocol approvals/approve`; configuration is now `protocol_auto_approve`. Remove the Python/ADB gateway, Docker, bridge command, deployment workflow, and legacy configuration compatibility; clients connect directly to the device.
 

@@ -1,6 +1,6 @@
 # config.toml reference
 
-`protocol_start_with_service` defaults to `false`; enabling it lets managed `service start/restart/stop` control Web and MCP/A2A together. `protocol_service_port` defaults to `8765` (zero requests an available port). Apply changes with `service restart`. This does not enable automatic approvals. Connection details and generated tokens go to the private `config.service/service.log`. See [starting with the service](../advanced/a2a-mcp.md).
+`protocol_start_with_service` defaults to `false`; enabling it lets managed `service start/restart/stop` control Web and MCP/A2A together; direct TUI and `--web-only` startup honor it as well. `protocol_service_port` defaults to `8765` (zero requests an available port). Apply changes with `service restart`. This does not enable automatic approvals. Connection details and generated tokens go to the private `config.service/service.log`. See [starting with the service](../advanced/a2a-mcp.md).
 
 On upgrade, the retired top-level `bridge_auto_approve` setting is ignored. Its old value never enables `protocol_auto_approve`, which remains off by default. Loading leaves the source file intact; saving through a configuration editor removes the retired field. Configuration wizards and Web validation/saving follow the same rule. Other unknown fields and invalid TOML are still rejected.
 
@@ -65,8 +65,8 @@ This section is updated from code. Credentials default to empty; never add real 
 | `interactive_execute_timeout_secs` | `0` | Interactive timeout; zero disables it. |
 | `execute_confirm_policy` | `"risk_only"` | General confirmation preference. |
 | `security_level` | `"balanced"` | Safety posture. |
-| `protocol_start_with_service` | `false` | Start device HTTP MCP/A2A together with the managed background Web service. |
-| `protocol_service_port` | `8765` | MCP/A2A port for the managed service; zero requests an available ephemeral port. |
+| `protocol_start_with_service` | `false` | Start device HTTP MCP/A2A with Web/TUI services, including the managed background service. |
+| `protocol_service_port` | `8765` | MCP/A2A port when starting with Web/TUI; zero requests an available ephemeral port. |
 | `protocol_auto_approve` | `false` | Automatically approve operations received through the device MCP/A2A service. |
 | `tool_groups` | `{}` | Enabled state of optional tool groups. `jadx` and `tailcat` default off. |
 | `tool_overrides` | `{}` | Per-tool enabled state, overriding its group. |

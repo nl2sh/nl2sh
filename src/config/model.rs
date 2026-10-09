@@ -175,9 +175,9 @@ pub struct Config {
     pub execute_confirm_policy: ConfirmPolicy,
     /// Safety posture.
     pub security_level: SecurityLevel,
-    /// Start device HTTP MCP/A2A together with the managed background Web service.
+    /// Start device HTTP MCP/A2A with Web/TUI services, including the managed background service.
     pub protocol_start_with_service: bool,
-    /// MCP/A2A port for the managed service; zero requests an available ephemeral port.
+    /// MCP/A2A port when starting with Web/TUI; zero requests an available ephemeral port.
     pub protocol_service_port: u16,
     /// Automatically approve operations received through the device MCP/A2A service.
     pub protocol_auto_approve: bool,

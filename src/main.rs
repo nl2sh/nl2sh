@@ -89,12 +89,12 @@ async fn main() -> Result<()> {
         let mut web = nl2sh::web_ui::start(path).await?;
         println!("Web UI: {}", web.url());
         tokio::select! {
-            result = web.wait() => result?,
+            result = web.wait() => return result,
             result = tokio::signal::ctrl_c() => {
                 result.context("cannot listen for Ctrl+C")?;
             }
         }
-        return Ok(());
+        return web.shutdown().await;
     }
     let mut cfg = load_runtime_config(&path, &cli)?;
     if matches!(cli.command, Some(Command::Update)) {
@@ -130,7 +130,8 @@ async fn main() -> Result<()> {
     }
     let web = nl2sh::web_ui::start(path.clone()).await?;
     nl2sh::web_ui::set_welcome_url(web.url().to_owned());
-    nl2sh::protocol::set_welcome_connections(nl2sh::protocol::connection_info(&path).await);
+    nl2sh::protocol::set_welcome_connections(nl2sh::protocol::connection_details(&path).await);
+    let result: Result<()> = async {
     if matches!(cli.mode, Mode::Agent) {
         loop {
             match tui::run_agent_session(
@@ -297,6 +298,8 @@ async fn main() -> Result<()> {
                 )),
         }
     }
+    }.await;
+    result.and(web.shutdown().await)
 }
 
 fn unreachable_service_operation() -> Result<(nl2sh::service::Operation, bool)> {

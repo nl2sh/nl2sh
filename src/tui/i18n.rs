@@ -85,8 +85,8 @@ pub(crate) fn startup_history(
     let connections = crate::protocol::connections::welcome_connections()
         .map(|info| info.terminal_text(language))
         .unwrap_or_else(|| match language {
-            UiLanguage::ZhCn => "MCP / A2A：另一个设备终端设置 NL2SH_PROTOCOL_TOKEN 后运行 nl2sh protocol serve；本地 MCP 使用 nl2sh protocol stdio。TUI/Web 不自动启动协议服务。".into(),
-            UiLanguage::En => "MCP / A2A: set NL2SH_PROTOCOL_TOKEN in another device terminal, then run nl2sh protocol serve; local MCP uses nl2sh protocol stdio. TUI/Web does not start protocols.".into(),
+            UiLanguage::ZhCn => "MCP / A2A：运行 nl2sh protocol serve 自动生成令牌；本地 MCP 使用 nl2sh protocol stdio。protocol_start_with_service=true 可随 TUI/Web 启动协议。".into(),
+            UiLanguage::En => "MCP / A2A: run nl2sh protocol serve to generate a token; local MCP uses nl2sh protocol stdio. protocol_start_with_service=true starts protocols with TUI/Web.".into(),
         });
     history.push(format!("{PROTOCOL_WELCOME_PREFIX}{connections}"));
     history

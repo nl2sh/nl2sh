@@ -15,6 +15,7 @@ pub fn welcome_url() -> Option<&'static str> {
 /// Handle of the embedded server; its task lives until the runtime exits.
 
 pub struct WebServer {
+    pub(in crate::web) protocol: Option<crate::protocol::HttpServer>,
     pub(in crate::web) url: String,
     pub(in crate::web) task: tokio::task::JoinHandle<std::io::Result<()>>,
     pub(in crate::web) shutdown: tokio::sync::oneshot::Sender<()>,
@@ -28,7 +29,11 @@ impl WebServer {
     }
 
     /// Cancel active tasks and pending approvals, then drain HTTP connections.
-    pub async fn shutdown(self) -> Result<()> {
+    pub async fn shutdown(mut self) -> Result<()> {
+        let protocol_result = match self.protocol.as_mut() {
+            Some(server) => server.shutdown().await,
+            None => Ok(()),
+        };
         if let Ok(sessions) = self.shared.sessions.lock() {
             for session in sessions.values() {
                 session.cancel.send_replace(true);
@@ -63,7 +68,8 @@ impl WebServer {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
         let mut task = self.task;
-        match tokio::time::timeout(std::time::Duration::from_secs(5), &mut task).await {
+        let result = match tokio::time::timeout(std::time::Duration::from_secs(5), &mut task).await
+        {
             Ok(result) => result
                 .context("web shutdown task failed")?
                 .context("web shutdown failed"),
@@ -72,7 +78,8 @@ impl WebServer {
                 let _ = task.await;
                 Ok(())
             }
-        }
+        };
+        result.and(protocol_result)
     }
     /// Address shown in the terminal welcome message.
     pub fn url(&self) -> &str {
@@ -124,6 +131,25 @@ pub(in crate::web) async fn start_with_listener(
     path: PathBuf,
     listener: TcpListener,
 ) -> Result<WebServer> {
+    let config = crate::config::load_or_default_unvalidated(&path)?;
+    config.validate_runtime()?;
+    let protocol = if config.protocol_start_with_service
+        && crate::protocol::connection_info(&path).await.state != "running"
+    {
+        Some(
+            crate::protocol::start_http(
+                path.clone(),
+                Ipv4Addr::UNSPECIFIED.into(),
+                config.protocol_service_port,
+                None,
+                true,
+            )
+            .await
+            .context("cannot start MCP/A2A with the UI service")?,
+        )
+    } else {
+        None
+    };
     let port = listener
         .local_addr()
         .context("cannot identify web port")?
@@ -156,6 +182,7 @@ pub(in crate::web) async fn start_with_listener(
             .await
     });
     Ok(WebServer {
+        protocol,
         url,
         task,
         shutdown,

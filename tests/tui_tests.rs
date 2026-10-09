@@ -623,3 +623,54 @@ async fn tailcat_user_selected_ports_share_after_one_enter_without_model_or_safe
     assert!(!log.contains("llm_request"));
     Ok(())
 }
+
+#[tokio::test]
+async fn tui_startup_honors_protocol_switch_and_displays_owner_connections() -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    std::fs::write(&config, "endpoint='http://127.0.0.1:9/v1'\napi_key=''\nshow_buddha_ascii_art=false\nshow_train_ascii_art=false\nprotocol_start_with_service=true\nprotocol_service_port=0\n")?;
+    let mut process = spawn_tui(&config)?;
+    let captured =
+        wait_for_text_capture(&mut process.master, "Ctrl+Q", Duration::from_secs(10)).await?;
+    let details = nl2sh::protocol::connection_details(&config).await;
+    let token = details
+        .token
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("TUI protocol token missing"))?;
+    process.master.write_all(&[0x11])?;
+    let status = timeout(Duration::from_secs(10), process.child.wait()).await??;
+    anyhow::ensure!(status.success(), "TUI exit failed");
+    anyhow::ensure!(
+        details.state == "running",
+        "protocol did not start with TUI"
+    );
+    anyhow::ensure!(
+        details.version.as_deref() == Some(env!("CARGO_PKG_VERSION")),
+        "runtime version missing"
+    );
+    // Only inspect the alternate-screen contents, excluding startup stdout.
+    let screen = captured.rsplit("\x1b[?1049h").next().unwrap_or("");
+    anyhow::ensure!(
+        screen.contains("Bearer"),
+        "TUI does not show authentication"
+    );
+    anyhow::ensure!(
+        screen.contains(&token[..24]),
+        "TUI does not show active token"
+    );
+    anyhow::ensure!(
+        screen.contains(env!("CARGO_PKG_VERSION")),
+        "TUI does not show runtime version"
+    );
+    let stopped = nl2sh::protocol::connection_details(&config).await;
+    anyhow::ensure!(
+        stopped.state == "stopped" && stopped.token.is_none(),
+        "TUI protocol remained active after exit"
+    );
+    let log = std::fs::read_to_string(directory.path().join("nl2sh.log")).unwrap_or_default();
+    anyhow::ensure!(
+        !log.contains(&token),
+        "welcome token was written to audit log"
+    );
+    Ok(())
+}

@@ -20,3 +20,10 @@ test('HTTP client configuration preserves the advertised custom HTTPS endpoint',
   assert.match(httpMcpConfig(info),/bearer_token_env_var = "NL2SH_PROTOCOL_TOKEN"/);
   assert.equal(hasHttpEndpoint({...info,state:'unknown'}),false);
 });
+
+test('active owner configuration includes the token while stale states exclude it',()=>{
+  const info={...stopped,state:'running',transport:'http',mcp_url:'http://device:1234/mcp',a2a_url:'http://device:1234/a2a',agent_card_url:'http://device:1234/.well-known/agent-card.json',token:'owner-test-token',version:'1.1.0'};
+  assert.match(httpMcpConfig(info),/http_headers = \{ Authorization = "Bearer owner-test-token" \}/);
+  assert.doesNotMatch(httpMcpConfig({...info,state:'stopped'}),/owner-test-token/);
+  assert.doesNotMatch(httpMcpConfig({...info,state:'unknown'}),/owner-test-token/);
+});

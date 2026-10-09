@@ -25,11 +25,14 @@ pub(in crate::web) async fn get_info(
     })))
 }
 
-// Lightweight read-only discovery; no provider, device probe, credentials or server start.
+// Owner connection dialog includes credentials and must never be cached.
 pub(in crate::web) async fn get_connections(
     State(state): State<Arc<Shared>>,
-) -> Json<crate::protocol::ConnectionInfo> {
-    Json(crate::protocol::connection_info(&state.path).await)
+) -> impl axum::response::IntoResponse {
+    (
+        [("cache-control", "no-store")],
+        Json(crate::protocol::connection_details(&state.path).await),
+    )
 }
 
 // Read-only discovery; installation remains with its existing owner.

@@ -10,7 +10,7 @@ export function hasHttpEndpoint(info:ProtocolConnections):boolean{
 }
 export function httpMcpConfig(info:ProtocolConnections):string{
   const url=hasHttpEndpoint(info)?info.mcp_url:`${info.default_http_origin}/mcp`;
-  return `[mcp_servers.nl2sh]\nurl = ${JSON.stringify(url)}\nbearer_token_env_var = ${JSON.stringify(info.token_env)}\ntool_timeout_sec = 210`;
+  return `[mcp_servers.nl2sh]\nurl = ${JSON.stringify(url)}\n${info.token&&hasHttpEndpoint(info)?`http_headers = { Authorization = ${JSON.stringify(`Bearer ${info.token}`)} }`:`bearer_token_env_var = ${JSON.stringify(info.token_env)}`}\ntool_timeout_sec = 210`;
 }
 export function stdioMcpConfig(info:ProtocolConnections):string{
   return `[mcp_servers.nl2sh]\ncommand = "nl2sh"\nargs = ${JSON.stringify(['--config',info.config_path,'protocol','stdio'])}`;

@@ -49,7 +49,7 @@ impl Drop for Fixture {
 }
 
 #[tokio::test]
-async fn status_and_web_discover_separate_protocol_listener_without_disclosing_token() {
+async fn status_omits_token_and_web_displays_verified_connection_credentials() {
     let fixture = Fixture::new();
     let token = "connection-discovery-secret-token-0123456789";
     let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_nl2sh"))
@@ -104,8 +104,9 @@ async fn status_and_web_discover_separate_protocol_listener_without_disclosing_t
         .expect("connection API");
     assert!(response.status().is_success());
     let api: Value = response.json().await.expect("connection JSON");
-    assert_eq!(&api, connections);
-    assert!(!api.to_string().contains(token));
+    assert_eq!(api["mcp_url"], connections["mcp_url"]);
+    assert_eq!(api["token"], token);
+    assert_eq!(api["version"], env!("CARGO_PKG_VERSION"));
     let info: Value = client
         .get(format!("{base}/api/info"))
         .send()

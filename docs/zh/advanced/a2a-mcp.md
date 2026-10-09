@@ -8,7 +8,7 @@ MCP 与 A2A 已内置在 nl2sh 的 Rust 可执行文件中。外部 Agent 直接
 
 TUI 启动页、`nl2sh --config <配置路径> service status`（含 `--json` 的 `connections` 字段）、Web 左侧垂直菜单“MCP / A2A”均提供连接方式。HTTP 运行时显示实际公告 origin，即使端口或 HTTPS 地址不同于默认值；stdio 运行只显示本地进程，不宣称 HTTP 可用。未启动或未知时，默认 loopback 地址仅作为明确标记的示例。Web 窗口可以刷新并复制客户端配置、启动命令与 A2A 请求体。
 
-查询使用私有 `protocol/connection.json`、进程启动身份和独占锁，不读取令牌或向公告地址发出请求。停止后的遗留记录不会报告运行中。它只确认同 UID、同配置进程，不保证远端网络可达；TUI 为启动时快照，Web 与 CLI 查询刷新当前状态。三个展示入口不自动启动协议服务。
+查询使用私有 `protocol/connection.json`、进程启动身份和独占锁，只有 TUI/Web 所有者界面读取已验证运行进程的令牌，不向公告地址发出请求。停止后的遗留记录不会报告运行中。它只确认同 UID、同配置进程，不保证远端网络可达；TUI 为启动时快照，Web 与 CLI 查询刷新当前状态。状态查询不启动服务；`protocol_start_with_service=true` 时 TUI/Web 启动路径也一并启动协议。
 
 ## 随后台服务启动
 
@@ -19,9 +19,9 @@ protocol_start_with_service = true
 protocol_service_port = 8765
 ```
 
-默认 `false`，也可在 Web 配置页“服务”分组切换。执行 `nl2sh service start` 或 `service restart` 时，后台进程一并启动 Web 和 MCP/A2A；`service stop` 一并取消任务并关闭两个监听器。开关在启动时读取，修改后需 `service restart`，重复 `start` 保持当前进程。只影响受管后台服务，不会让 TUI 或单独的 `protocol serve/stdio` 自动启动其他服务。
+默认 `false`，也可在 Web 配置页“服务”分组切换。执行 `nl2sh service start` 或 `service restart` 时，后台进程一并启动 Web 和 MCP/A2A；`service stop` 一并取消任务并关闭两个监听器。开关在启动时读取，修改后需 `service restart`，重复 `start` 保持当前进程。同一开关也作用于直接 TUI 和 `--web-only` 启动；UI 退出时关闭自己启动的协议。已有同配置协议时 UI 复用连接信息，不停止独立进程。单独 `protocol serve/stdio` 不启动 UI。
 
-协议监听 `0.0.0.0`，使用自动设备 IP 和独立 Bearer 令牌。`protocol_service_port` 默认 `8765`；可改用其他端口避免占用，或设为 `0` 自动分配端口。自动令牌和完整连接信息写入配置相邻私有 `config.service/service.log`；日志含凭据，仅给可信调用者读取。`service status` 与 Web 连接窗口可查看实际地址，但不显示令牌。设置 `NL2SH_PROTOCOL_TOKEN` 可在启动时提供固定令牌；未设置时服务重启会更换令牌。此开关不启用 `protocol_auto_approve`。
+协议监听 `0.0.0.0`，使用自动设备 IP 和独立 Bearer 令牌。`protocol_service_port` 默认 `8765`；可改用其他端口避免占用，或设为 `0` 自动分配端口。自动令牌和完整连接信息写入配置相邻私有 `config.service/service.log`；日志含凭据，仅给可信调用者读取。TUI/Web 显示运行版本、实际地址和令牌，并可复制带鉴权的 MCP 配置；普通 `service status` 不输出令牌。设置 `NL2SH_PROTOCOL_TOKEN` 可在启动时提供固定令牌；未设置时服务重启会更换令牌。此开关不启用 `protocol_auto_approve`。
 
 协议端口占用或同一配置已有独立协议进程时，后台启动报错并清理本次启动的资源，不接管或停止独立进程；Web 启动失败也会关闭本次新建的协议监听器。需自定义公告地址/监听参数时，关闭此开关并单独运行 `protocol serve`。
 
@@ -33,7 +33,7 @@ protocol_service_port = 8765
 nl2sh protocol serve
 ```
 
-使用默认配置路径；需要其他配置时加 `--config /data/local/tmp/config.toml`。默认监听 `0.0.0.0:8765` 并允许 HTTP，不启动 TUI 或 Web。未设置 `NL2SH_PROTOCOL_TOKEN` 时，从系统安全随机源生成 64 字符令牌，并在启动终端打印 MCP、A2A、公开 Agent Card 地址、令牌和 MCP 客户端配置。将整段连接信息交给外部 Agent，或把令牌填入客户端的 Bearer 鉴权/`NL2SH_PROTOCOL_TOKEN`。自动令牌每次启动变化，不写入配置或协议连接记录，也不通过 TUI、Web 或状态查询展示。启动输出包含凭据，应只交给可信调用者。
+使用默认配置路径；需要其他配置时加 `--config /data/local/tmp/config.toml`。默认监听 `0.0.0.0:8765` 并允许 HTTP，不启动 TUI 或 Web。未设置 `NL2SH_PROTOCOL_TOKEN` 时，从系统安全随机源生成 64 字符令牌，并在启动终端打印 MCP、A2A、公开 Agent Card 地址、令牌和 MCP 客户端配置。将整段连接信息交给外部 Agent，或把令牌填入客户端的 Bearer 鉴权/`NL2SH_PROTOCOL_TOKEN`。自动令牌每次启动变化，不写入配置；运行期间保存在私有 `protocol/connection.json`（0600），供 TUI/Web 显示连接凭据。停止或身份/权限无法确认时不展示旧令牌，普通状态查询和公开 Agent Card 不输出令牌。启动输出包含凭据，应只交给可信调用者。
 
 默认自动选取 IPv4 路由的源地址，不发送探测数据包、不查询 DNS；失败时枚举活动网卡的非回环 IPv4，再无可用地址时公告 `127.0.0.1`，此时公告地址仅本机可用。使用绑定后的实际端口，包括 `--port 0`。IP 在启动时获取；网络/IP 改变后重启协议服务并更新客户端。
 

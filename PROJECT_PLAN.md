@@ -2,6 +2,8 @@
 
 ## 设备端内置 MCP/A2A
 
+- [x] TUI/前台 Web 读取协议启动开关，所有者界面显示已验证运行版本/令牌与可复制鉴权配置。
+
 - [x] 默认关闭的 protocol_start_with_service、可选协议端口、Web 设置与受管服务共享启停/失败清理。
 
 - [x] 共享设备执行入口；MCP 直接调用 Tool Runtime，A2A 委派内置 Agent。

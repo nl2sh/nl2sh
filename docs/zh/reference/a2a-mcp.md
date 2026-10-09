@@ -21,7 +21,7 @@ flowchart LR
 | `/mcp` | Bearer 鉴权，Streamable HTTP；不是旧 SSE `/sse` |
 | `nl2sh protocol stdio` | 设备本地 stdin/stdout MCP，使用启动用户权限 |
 
-HTTP 服务与 Web 独立。默认监听 `0.0.0.0:8765`，`--allow-insecure-http=true`。公告 IP 从 IPv4 路由/活动网卡自动获取，找不到时回退本机；`--advertised-url` 可覆盖给 Agent Card 与 Host/Origin 校验使用的 origin。未设 `NL2SH_PROTOCOL_TOKEN` 时生成 64 字符、256 bit 系统随机令牌并打印启动连接信息；设置时要求 32–256 个可打印 ASCII 字符且不打印值。自动令牌重启即换，仅保存在进程内，并加入任务快照脱敏。所有持有同一令牌的调用者共享同一个可信所有者，不提供多租户任务隔离；task/context ID 不是访问凭据。Host 必须匹配公告 authority 或本地监听地址；有 Origin 时必须匹配公告 origin。缺少/错误令牌返回 401，错误 Host/Origin 返回 403。只需本机可用时设置 `--host 127.0.0.1`；`--allow-insecure-http=false` 拒绝非本机 HTTP 监听。
+HTTP 服务与 Web 独立。默认监听 `0.0.0.0:8765`，`--allow-insecure-http=true`。公告 IP 从 IPv4 路由/活动网卡自动获取，找不到时回退本机；`--advertised-url` 可覆盖给 Agent Card 与 Host/Origin 校验使用的 origin。未设 `NL2SH_PROTOCOL_TOKEN` 时生成 64 字符、256 bit 系统随机令牌并打印启动连接信息；设置时要求 32–256 个可打印 ASCII 字符且不打印值。自动令牌重启即换，在运行期间以 0600 权限保存到协议公告以供 TUI/Web 显示，并加入任务快照脱敏。所有持有同一令牌的调用者共享同一个可信所有者，不提供多租户任务隔离；task/context ID 不是访问凭据。Host 必须匹配公告 authority 或本地监听地址；有 Origin 时必须匹配公告 origin。缺少/错误令牌返回 401，错误 Host/Origin 返回 403。只需本机可用时设置 `--host 127.0.0.1`；`--allow-insecure-http=false` 拒绝非本机 HTTP 监听。
 
 MCP 使用官方 Rust SDK；支持 `2025-11-25`、`2025-06-18`、`2024-11-05` 协议版本。HTTP 使用无服务器会话模式，客户端仍按协议执行 initialize/initialized 生命周期；无须保存 `Mcp-Session-Id`。服务不提供 MCP resources/prompts、远程审批、采样或 MCP Tasks 扩展。
 

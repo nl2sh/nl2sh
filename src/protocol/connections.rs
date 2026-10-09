@@ -16,7 +16,7 @@ const DEFAULT_ORIGIN: &str = "http://127.0.0.1:8765";
 const RECORD_NAME: &str = "connection.json";
 static WELCOME: OnceLock<ConnectionInfo> = OnceLock::new();
 
-/// Connection methods contain no token values and do not start a protocol server.
+/// Verified connection methods; token is supplied only to the device owner interfaces.
 #[derive(Clone, Debug, Serialize)]
 pub struct ConnectionInfo {
     /// Absolute configuration path for a local MCP client to reuse.
@@ -25,6 +25,11 @@ pub struct ConnectionInfo {
     pub state: String,
     /// Active transport, if discovered: `http` or `stdio`.
     pub transport: Option<String>,
+    /// Version of the verified running nl2sh protocol process.
+    pub version: Option<String>,
+    /// Bearer credential, only in owner UI details for a verified live HTTP process.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
     /// Actual advertised MCP HTTP endpoint, only for an active HTTP process.
     pub mcp_url: Option<String>,
     /// Actual advertised A2A JSON-RPC endpoint, only for an active HTTP process.
@@ -62,6 +67,8 @@ impl ConnectionInfo {
             config_path: path.to_string_lossy().into_owned(),
             state: "stopped".into(),
             transport: None,
+            version: None,
+            token: None,
             mcp_url: None,
             a2a_url: None,
             agent_card_url: None,
@@ -92,6 +99,12 @@ impl ConnectionInfo {
                 .map(|value| format!(" ({value})"))
                 .unwrap_or_default()
         )];
+        if let Some(version) = &self.version {
+            lines.push(format!("nl2sh v{version} | MCP 2025-11-25 | A2A 1.0"));
+        }
+        if let Some(token) = &self.token {
+            lines.push(format!("Authorization: Bearer {token}"));
+        }
         if let (Some(mcp), Some(a2a), Some(card)) =
             (&self.mcp_url, &self.a2a_url, &self.agent_card_url)
         {
@@ -152,7 +165,7 @@ impl ConnectionInfo {
             },
             self.approvals_command
         ));
-        lines.push(if zh { "默认监听 0.0.0.0:8765 并允许 HTTP；自动获取设备 IPv4。仅本机使用可加 --host 127.0.0.1。HTTP 明文传输令牌，远程推荐 HTTPS。TUI 不自动启动协议；设 protocol_start_with_service=true 可随后台服务启停，令牌与连接信息在私有 config.service/service.log。" } else { "Defaults: 0.0.0.0:8765, HTTP allowed, device IPv4 detected automatically. Use --host 127.0.0.1 for local only. HTTP sends tokens in plaintext; prefer HTTPS remotely. TUI does not start protocols. Set protocol_start_with_service=true to manage protocols with the background service; token and connection details are in private config.service/service.log." }.into());
+        lines.push(if zh { "默认监听 0.0.0.0:8765 并允许 HTTP；自动获取设备 IPv4。仅本机使用可加 --host 127.0.0.1。HTTP 明文传输令牌，远程推荐 HTTPS。设 protocol_start_with_service=true 可随 TUI/Web 启停；后台令牌和连接信息也在私有 config.service/service.log。" } else { "Defaults: 0.0.0.0:8765, HTTP allowed, device IPv4 detected automatically. Use --host 127.0.0.1 for local only. HTTP sends tokens in plaintext; prefer HTTPS remotely. Set protocol_start_with_service=true to manage protocols with TUI/Web; background connection details are also in private config.service/service.log." }.into());
         lines.join("\n")
     }
 }
@@ -173,6 +186,10 @@ struct Record {
     config_path: String,
     transport: String,
     origin: Option<String>,
+    #[serde(default)]
+    version: Option<String>,
+    #[serde(default)]
+    token: Option<String>,
 }
 
 /// Lives inside the already exclusively locked protocol state directory.
@@ -180,7 +197,7 @@ pub(super) struct Registration {
     path: PathBuf,
 }
 impl Registration {
-    pub fn publish(config: &Path, origin: Option<&str>) -> Result<Self> {
+    pub fn publish(config: &Path, origin: Option<&str>, token: Option<&str>) -> Result<Self> {
         let root = crate::config::state_dir(config)?.join("protocol");
         let pid = std::process::id();
         let record = Record {
@@ -190,6 +207,8 @@ impl Registration {
             config_path: ConnectionInfo::new(config).config_path,
             transport: if origin.is_some() { "http" } else { "stdio" }.into(),
             origin: origin.map(str::to_owned),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            token: token.map(str::to_owned),
         };
         let path = root.join(RECORD_NAME);
         let mut file = tempfile::NamedTempFile::new_in(&root)?;
@@ -207,9 +226,18 @@ impl Drop for Registration {
 
 /// Discover a live protocol process without a network request, model or credential access.
 pub async fn connection_info(path: &Path) -> ConnectionInfo {
+    lookup(path, false).await
+}
+
+/// Owner UI connection details, including the active Bearer credential.
+pub async fn connection_details(path: &Path) -> ConnectionInfo {
+    lookup(path, true).await
+}
+
+async fn lookup(path: &Path, credentials: bool) -> ConnectionInfo {
     let fallback = ConnectionInfo::new(path);
     let path = path.to_owned();
-    match tokio::task::spawn_blocking(move || read(&path)).await {
+    match tokio::task::spawn_blocking(move || read(&path, credentials)).await {
         Ok(info) => info,
         Err(_) => ConnectionInfo {
             state: "unknown".into(),
@@ -217,9 +245,9 @@ pub async fn connection_info(path: &Path) -> ConnectionInfo {
         },
     }
 }
-fn read(path: &Path) -> ConnectionInfo {
+fn read(path: &Path, credentials: bool) -> ConnectionInfo {
     let mut info = ConnectionInfo::new(path);
-    if let Err(error) = discover(path, &mut info) {
+    if let Err(error) = discover(path, &mut info, credentials) {
         if !error
             .downcast_ref::<std::io::Error>()
             .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
@@ -243,7 +271,7 @@ fn private_file(path: &Path) -> Result<File> {
     }
     Ok(file)
 }
-fn discover(path: &Path, info: &mut ConnectionInfo) -> Result<()> {
+fn discover(path: &Path, info: &mut ConnectionInfo, credentials: bool) -> Result<()> {
     let root = crate::config::state_dir(path)?.join("protocol");
     let metadata = fs::symlink_metadata(&root)?;
     if !metadata.is_dir()
@@ -304,6 +332,10 @@ fn discover(path: &Path, info: &mut ConnectionInfo) -> Result<()> {
     }
     info.state = "running".into();
     info.transport = Some(record.transport);
+    info.version = record.version;
+    if credentials && info.transport.as_deref() == Some("http") {
+        info.token = record.token;
+    }
     Ok(())
 }
 
@@ -326,8 +358,22 @@ mod tests {
         );
         assert!(stopped.http_command.contains("'\\''"));
         let store = Store::open(&config)?;
-        let registration = Registration::publish(&config, Some("https://agent.example:9443"))?;
+        let registration = Registration::publish(
+            &config,
+            Some("https://agent.example:9443"),
+            Some("test-protocol-secret-0123456789012345"),
+        )?;
         let active = connection_info(&config).await;
+        assert!(active.token.is_none());
+        let details = connection_details(&config).await;
+        assert_eq!(details.version.as_deref(), Some(env!("CARGO_PKG_VERSION")));
+        assert_eq!(
+            details.token.as_deref(),
+            Some("test-protocol-secret-0123456789012345")
+        );
+        assert!(details
+            .terminal_text(crate::config::UiLanguage::ZhCn)
+            .contains("Bearer test-protocol-secret"));
         assert_eq!(active.state, "running");
         assert_eq!(
             active.mcp_url.as_deref(),
@@ -353,6 +399,7 @@ mod tests {
         let stale = connection_info(&config).await;
         assert_eq!(stale.state, "stopped");
         assert!(stale.mcp_url.is_none());
+        assert!(connection_details(&config).await.token.is_none());
         drop(registration);
         assert!(!root.path().join("protocol/connection.json").exists());
         Ok(())
@@ -363,7 +410,7 @@ mod tests {
         let root = tempfile::tempdir()?;
         let config = root.path().join("config.toml");
         let _store = Store::open(&config)?;
-        let registration = Registration::publish(&config, None)?;
+        let registration = Registration::publish(&config, None, None)?;
         let info = connection_info(&config).await;
         assert_eq!(info.state, "running");
         assert_eq!(info.transport.as_deref(), Some("stdio"));
@@ -377,6 +424,7 @@ mod tests {
         let invalid = connection_info(&config).await;
         assert_eq!(invalid.state, "unknown");
         assert!(invalid.mcp_url.is_none());
+        assert!(connection_details(&config).await.token.is_none());
         Ok(())
     }
 }

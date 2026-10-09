@@ -1,6 +1,6 @@
 # config.toml 参考
 
-`protocol_start_with_service` 默认 `false`；设为 `true` 时受管后台 `service start/restart/stop` 一并管理设备 MCP/A2A，保存修改后需重启服务。`protocol_service_port` 默认 `8765`，可换端口或设为 `0` 自动分配。该开关不启用自动审批，完整连接信息与自动令牌写入私有 `config.service/service.log`。详见 [随服务启动](../advanced/a2a-mcp.md)。
+`protocol_start_with_service` 默认 `false`；设为 `true` 时受管后台 `service start/restart/stop` 一并管理设备 MCP/A2A，直接 TUI 与 `--web-only` 启动也读取该开关，保存修改后需重启服务。`protocol_service_port` 默认 `8765`，可换端口或设为 `0` 自动分配。该开关不启用自动审批，完整连接信息与自动令牌写入私有 `config.service/service.log`。详见 [随服务启动](../advanced/a2a-mcp.md)。
 
 升级时自动忽略已移除的顶层 `bridge_auto_approve`，旧值不会启用 `protocol_auto_approve`，后者仍默认关闭。加载不改写原文件；通过配置编辑器保存时移除废弃字段。配置向导和 Web 校验/保存采用同一规则，其他未知字段与 TOML 语法错误仍拒绝。
 
@@ -65,8 +65,8 @@
 | `interactive_execute_timeout_secs` | `0` | 交互命令超时，0 不限制 |
 | `execute_confirm_policy` | `"risk_only"` | 一般确认偏好，服从强制策略 |
 | `security_level` | `"balanced"` | strict/balanced/unsafe 安全偏好 |
-| `protocol_start_with_service` | `false` | 默认关闭；后台 service 启停时一并管理 MCP/A2A，重启服务生效 |
-| `protocol_service_port` | `8765` | 后台服务 MCP/A2A 端口，默认 8765，0 自动分配 |
+| `protocol_start_with_service` | `false` | 默认关闭；Web/TUI 与后台 service 启停时管理 MCP/A2A，重启生效 |
+| `protocol_service_port` | `8765` | Web/TUI 随服务启动 MCP/A2A 的端口，默认 8765，0 自动分配 |
 | `protocol_auto_approve` | `false` | 默认关闭；显式自动批准设备 MCP/A2A 全部风险操作 |
 | `tool_groups` | `{}` | 可选组开关，jadx/tailcat 未设置时关闭 |
 | `tool_overrides` | `{}` | 按名覆盖组开关 |
