@@ -19,6 +19,8 @@ use tokio::{
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Wall-clock budget for a freshly started service to report itself ready.
+const READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// A local service controller operation. This interface never changes configuration.
 pub enum Operation {
@@ -203,9 +205,14 @@ impl Service {
     }
 
     async fn healthy(&self, record: &Record) -> bool {
+        // `/api/info` performs runtime capability discovery, which probes installed companions and
+        // the DEX helper through `app_process`. That costs several seconds on Android, so the
+        // budget must exceed it; a shorter one reported a healthy service as `starting` and made
+        // `service start` refuse an already-running instance.
+        const HEALTH_TIMEOUT: Duration = Duration::from_secs(15);
         let Ok(client) = reqwest::Client::builder()
             .no_proxy()
-            .timeout(Duration::from_secs(2))
+            .timeout(HEALTH_TIMEOUT)
             .build()
         else {
             return false;
@@ -273,6 +280,7 @@ impl Service {
             });
         }
         let mut child = command.spawn().context("cannot launch native service")?;
+        let started = tokio::time::Instant::now();
         for _ in 0..150 {
             if let Some(exit) = child.try_wait()? {
                 bail!(
@@ -288,12 +296,18 @@ impl Service {
                 });
                 return Ok(status);
             }
+            if tokio::time::Instant::now().duration_since(started) >= READY_TIMEOUT {
+                break;
+            }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         // This PID is our direct child, so killing it does not rely on stale state.
         let _ = child.kill();
         let _ = child.wait();
-        bail!("service did not become ready within 15 seconds; inspect service.log")
+        bail!(
+            "service did not become ready within {} seconds; inspect service.log",
+            READY_TIMEOUT.as_secs()
+        )
     }
 
     async fn stop(&self) -> Result<()> {
