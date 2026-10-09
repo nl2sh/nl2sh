@@ -73,9 +73,9 @@ impl TextDeltaSink for Silent {
 
 pub(super) async fn inspect(path: &Path) -> Result<Value> {
     let executor = ShellExecutor::new(load(path)?);
-    Ok(serde_json::from_str(
-        &inspect_environment(&executor).await?,
-    )?)
+    let mut environment: Value = serde_json::from_str(&inspect_environment(&executor).await?)?;
+    environment["build_identity"] = crate::build_identity::running_identity().await?;
+    Ok(environment)
 }
 pub(super) async fn tools(path: &Path) -> Result<Value> {
     let cfg = load(path)?;
@@ -157,6 +157,7 @@ pub(super) async fn ask(
     let outcome = runner
         .run_with_history_streaming_cancellable(message.into(), history.clone(), &Silent, cancel)
         .await?;
+    let evidence = tool_evidence(&outcome.transcript);
     let failed_tools: Vec<_> = outcome
         .transcript
         .iter()
@@ -183,6 +184,123 @@ pub(super) async fn ask(
         ],
     )?;
     Ok(
-        json!({"session": session, "answer": outcome.final_text, "steps": outcome.steps, "tool_calls": outcome.tool_calls, "failed_tools": failed_tools}),
+        json!({"session": session, "answer": outcome.final_text, "steps": outcome.steps, "tool_calls": outcome.tool_calls, "failed_tools": failed_tools, "evidence": evidence}),
     )
+}
+
+// Evidence is derived from actual ToolRounds, never parsed from model prose.
+fn tool_evidence(transcript: &[ConversationItem]) -> Value {
+    let mut observations = Vec::new();
+    let mut total = 0usize;
+    let mut missing = 0usize;
+    for item in transcript {
+        let ConversationItem::Tools(round) = item else {
+            continue;
+        };
+        for call in &round.calls {
+            total += 1;
+            let result = round
+                .results
+                .iter()
+                .find(|result| result.call_id == call.id);
+            if result.is_none() {
+                missing += 1;
+            }
+            if observations.len() == 64 {
+                continue;
+            }
+            observations.push(json!({
+                "id": observations.len(), "source": "device_tool",
+                "call_id": call.id, "tool": call.name,
+                "success": result.map(|result| result.success),
+                "execution_status": if result.is_none() { "missing" } else if result.is_some_and(|result| result.success) { "succeeded" } else { "failed" },
+                "output": result.map(|result| crate::limits::truncate_text(&result.output, 4096)),
+                "output_status": result.and_then(|result| serde_json::from_str::<Value>(&result.output).ok())
+                    .and_then(|output| output.get("status").and_then(Value::as_str).map(str::to_owned)),
+                "output_truncated": result.is_some_and(|result| result.output.len() > 4096 || result.output.contains(crate::limits::TRUNCATION_LABEL)),
+            }));
+        }
+    }
+    json!({"schema_version": 1, "observations": observations,
+        "total_calls": total, "missing_results": missing,
+        "observations_truncated": total > 64,
+        "limitations": ["Outputs are bounded model-visible tool results; success does not establish completeness or a root cause. Agent answer contains unverified analysis."]})
+}
+
+#[cfg(test)]
+mod evidence_tests {
+    use super::*;
+    use crate::llm::{ToolCall, ToolResult, ToolRound};
+
+    #[test]
+    fn actual_results_and_missing_calls_are_distinct_from_agent_success() {
+        let call = |id: &str| ToolCall {
+            id: id.into(),
+            name: "read_file".into(),
+            arguments: json!({}),
+        };
+        let evidence = tool_evidence(&[ConversationItem::Tools(ToolRound {
+            calls: vec![call("failed"), call("missing")],
+            results: vec![ToolResult {
+                call_id: "failed".into(),
+                output: "denied".into(),
+                success: false,
+                attachments: vec![],
+            }],
+        })]);
+        assert_eq!(evidence["observations"][0]["success"], false);
+        assert_eq!(evidence["observations"][1]["execution_status"], "missing");
+        assert_eq!(evidence["missing_results"], 1);
+    }
+
+    #[test]
+    fn evidence_limits_preserve_truncation_and_total_call_count() {
+        let calls = (0..65)
+            .map(|index| ToolCall {
+                id: index.to_string(),
+                name: "read_file".into(),
+                arguments: json!({}),
+            })
+            .collect::<Vec<_>>();
+        let results = calls
+            .iter()
+            .map(|call| ToolResult {
+                call_id: call.id.clone(),
+                output: "界".repeat(5000),
+                success: true,
+                attachments: vec![],
+            })
+            .collect();
+        let evidence = tool_evidence(&[ConversationItem::Tools(ToolRound { calls, results })]);
+        assert_eq!(evidence["total_calls"], 65);
+        assert_eq!(evidence["observations_truncated"], true);
+        assert_eq!(evidence["observations"].as_array().map(Vec::len), Some(64));
+        assert!(evidence["observations"]
+            .as_array()
+            .is_some_and(
+                |items| items.iter().all(|item| item["output_truncated"] == true
+                    && item["output"]
+                        .as_str()
+                        .is_some_and(|text| text.len() <= 4096))
+            ));
+    }
+
+    #[test]
+    fn successful_call_can_return_partial_evidence() {
+        let evidence = tool_evidence(&[ConversationItem::Tools(ToolRound {
+            calls: vec![ToolCall {
+                id: "partial".into(),
+                name: "inspect_android_environment".into(),
+                arguments: json!({}),
+            }],
+            results: vec![ToolResult {
+                call_id: "partial".into(),
+                output: json!({"status":"partial"}).to_string(),
+                success: true,
+                attachments: vec![],
+            }],
+        })]);
+        assert_eq!(evidence["observations"][0]["success"], true);
+        assert_eq!(evidence["observations"][0]["output_status"], "partial");
+    }
 }

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add a repository Codex device lab skill, build identity and running-image digest, actual Agent tool evidence, and host repeatable cases/comparison/independent ADB deployment recovery without changing safety approval or PTY behavior.
+
 - MCP/A2A selects an available port when the configured or default port `8765` is occupied, preserving the bind address and announcing the actual port. Other bind errors still fail; unrelated services remain running.
 
 - Fix TUI/foreground Web ignoring the MCP/A2A startup switch. UIs manage protocols they start and reuse existing processes. TUI/Web show the running version, actual endpoints, complete Bearer token and authenticated client configuration, using verified private live announcements. Ordinary status and Agent Cards omit credentials; Web details disable caching.

@@ -99,6 +99,7 @@ plugins:
         架构: Architecture
         构建与验证: Builds and validation
         Web 开发: Web development
+        实机开发闭环: Device development loop
         贡献与文档维护: Contributing and docs
         Release: Releases
         JADX helper: JADX helper
@@ -174,6 +175,7 @@ nav:
   - 架构: development/architecture.md
   - 构建与验证: development/build.md
   - Web 开发: development/web-development.md
+  - 实机开发闭环: development/device-lab.md
   - 贡献与文档维护: development/contributing.md
   - Release: development/release.md
   - JADX helper: development/jadx-helper.md

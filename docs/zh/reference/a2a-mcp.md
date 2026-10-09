@@ -43,6 +43,12 @@ MCP 使用官方 Rust SDK；支持 `2025-11-25`、`2025-06-18`、`2024-11-05` �
 
 ## A2A 消息、任务与分页
 
+`nl2sh_inspect` 新增 `build_identity`（编译 Git/dirty/build ID/target/profile、
+运行可执行文件 SHA-256、协议版本和 UID）。缺失 provenance 字段为 null；
+同版本号不证明同一代码。`nl2sh_ask` artifact 新增 `evidence`，从真实 Tool Round
+关联工具名、call ID、成功/失败/缺失与有界输出，最多 64 项、每项 4096 bytes，
+显式报告截断和总调用数。模型答案仍为未验证分析。详见[实机开发闭环](../development/device-lab.md)。
+
 仅接受 `ROLE_USER`、非空 `messageId`、text parts；各段用换行连接，总计 1–8192 UTF-8 bytes。所有用户文本都进入内置 Agent，不解析工具斜杠命令。`contextId` 可省略，由服务生成；复用相同 context 继续 Agent 历史。每次发送创建新 task，不接受携带旧 `taskId` 的任务续接。
 
 | JSON-RPC 方法 | 参数与行为 |

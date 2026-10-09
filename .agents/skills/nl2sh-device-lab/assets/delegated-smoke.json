@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "delegated-system-directory",
+  "preconditions": {
+    "android_min_api": 26,
+    "required_tools": [
+      "list_dir"
+    ]
+  },
+  "steps": [
+    {
+      "id": "ask",
+      "name": "nl2sh_ask",
+      "async": true,
+      "arguments": {
+        "message": "Call list_dir exactly once to read /system. Briefly describe the actual result. Do not modify the device or configuration, and do not execute shell commands."
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "step": "ask",
+      "pointer": "/structuredContent/status/state",
+      "equals": "TASK_STATE_COMPLETED"
+    },
+    {
+      "step": "ask",
+      "pointer": "/structuredContent/artifacts/0/parts/0/data/evidence/total_calls",
+      "equals": 1
+    }
+  ],
+  "cleanup": []
+}

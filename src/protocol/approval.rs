@@ -442,6 +442,38 @@ mod tests {
     use std::{fs, path::PathBuf, sync::Arc, time::Duration};
     use tokio::sync::Barrier;
 
+    #[tokio::test(start_paused = true)]
+    async fn production_approval_deadline_rejects_and_cleans_pending_request() -> Result<()> {
+        use crate::agent::{ConfirmationDecision, Confirmer};
+        let directory = tempfile::tempdir()?;
+        let config_path = directory.path().join("config.toml");
+        let confirmer = LocalApprovalConfirmer::new(&config_path)?;
+        let root = confirmer.root.clone();
+        let assessment = crate::security::assess("touch expiry-test", &Config::default());
+        let task =
+            tokio::spawn(async move { confirmer.confirm("touch expiry-test", &assessment).await });
+        // Yield without advancing the virtual clock until publication is complete.
+        for _ in 0..1000 {
+            if fs::read_dir(&root)?
+                .filter_map(std::result::Result::ok)
+                .any(|entry| entry.path().join(super::LIVE_FILE).exists())
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(!task.is_finished());
+        tokio::time::advance(super::APPROVAL_TIMEOUT - Duration::from_secs(1)).await;
+        tokio::task::yield_now().await;
+        assert!(!task.is_finished());
+        tokio::time::advance(Duration::from_secs(2)).await;
+        assert!(matches!(task.await??, ConfirmationDecision::Reject));
+        assert!(fs::read_dir(root)?
+            .filter_map(std::result::Result::ok)
+            .all(|entry| !entry.path().join(super::LIVE_FILE).exists()));
+        Ok(())
+    }
+
     async fn run_decision(approved: bool, stale_requests: usize) -> Result<()> {
         let directory = tempfile::tempdir()?;
         let config_path = directory.path().join("config.toml");

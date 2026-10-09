@@ -28,6 +28,46 @@ fn copy_web_sources(source: &Path, destination: &Path) -> io::Result<()> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rerun-if-env-changed=NL2SH_BUILD_ID");
+    for path in [
+        ".git/HEAD",
+        ".git/refs",
+        ".git/index",
+        "src",
+        "crates",
+        "Cargo.toml",
+        "Cargo.lock",
+    ] {
+        println!("cargo:rerun-if-changed={path}");
+    }
+    let git_value = |args: &[&str]| -> Option<String> {
+        let output = Command::new("git").args(args).output().ok()?;
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    };
+    let commit = git_value(&["rev-parse", "HEAD"]).unwrap_or_default();
+    let dirty = git_value(&["status", "--porcelain", "--untracked-files=normal"])
+        .map(|status| (!status.is_empty()).to_string())
+        .unwrap_or_default();
+    let build_id = env::var("NL2SH_BUILD_ID").unwrap_or_default();
+    if build_id.len() > 128
+        || !build_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+    {
+        return Err(io::Error::other("NL2SH_BUILD_ID must be at most 128 ASCII letters, digits, dots, underscores or hyphens").into());
+    }
+    for (name, value) in [
+        ("NL2SH_GIT_COMMIT", commit),
+        ("NL2SH_GIT_DIRTY", dirty),
+        ("NL2SH_BUILD_ID", build_id),
+        ("NL2SH_BUILD_TARGET", env::var("TARGET")?),
+        ("NL2SH_BUILD_PROFILE", env::var("PROFILE")?),
+    ] {
+        println!("cargo:rustc-env={name}={value}");
+    }
     for path in [
         "build.rs",
         "web/index.html",

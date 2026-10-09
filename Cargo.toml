@@ -62,6 +62,7 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 brush-parser = "0.4.0"
 
 [dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
 rmcp = { version = "=3.5.1", default-features = false, features = ["client"] }
 tokio-tungstenite = "0.29"
 wiremock = "0.6"

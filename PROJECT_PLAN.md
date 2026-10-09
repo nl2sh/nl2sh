@@ -1,5 +1,16 @@
 # Project Plan
 
+## Codex × Android device lab — 完成
+
+- [x] 核对原生 MCP HTTP/stdio、任务上下文、本地审批与现有构建/部署边界。
+- [x] 仓库级 `nl2sh-device-lab` skill，确定性与委派两种流程。
+- [x] inspect 增加运行可执行文件摘要和编译身份，Agent artifact 增加真实调用证据。
+- [x] 源码/构建 manifest 校验、可重复案例、私有证据收集及前后比较脚本。
+- [x] 独立 ADB 部署、恢复、重连与运行版本验证。
+- [x] 失败矩阵回归、Android 模拟器完整闭环及双语文档验收。
+
+P2 定期主动诊断与多设备对比保留为后续方向。
+
 ## 设备端内置 MCP/A2A
 
 - [x] TUI/前台 Web 读取协议启动开关，所有者界面显示已验证运行版本/令牌与可复制鉴权配置。

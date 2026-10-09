@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "android-environment-smoke",
+  "preconditions": {"android_min_api": 26, "required_tools": ["list_dir"]},
+  "steps": [
+    {"id": "system-directory", "name": "nl2sh_invoke", "arguments": {"tool": "list_dir", "arguments": {"path": "/system"}}}
+  ],
+  "assertions": [
+    {"step": "system-directory", "pointer": "/isError", "equals": false},
+    {"step": "system-directory", "pointer": "/structuredContent/success", "equals": true}
+  ],
+  "cleanup": []
+}

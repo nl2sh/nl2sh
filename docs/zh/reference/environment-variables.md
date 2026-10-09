@@ -4,6 +4,7 @@
 
 | 变量 | 用途 |
 | --- | --- |
+| `NL2SH_BUILD_ID` | 编译期可选构建身份，至多 128 个 ASCII 字母/数字/点/下划线/连字符；device lab 自动生成，不是运行期策略 |
 | `NL2SH_CONFIG` | 默认配置路径，CLI --config 优先 |
 | `NL2SH_API_KEY` | 覆盖主模型 Key |
 | `NL2SH_IMA_CLIENT_ID / NL2SH_IMA_API_KEY` | 独立 ima 凭据，齐全时启用 |

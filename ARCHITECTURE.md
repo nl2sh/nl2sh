@@ -12,6 +12,15 @@ Android API 26+ 原生发行支持 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`，�
 
 ## 系统整体架构
 
+Codex 实机开发闭环使用仓库级 `.agents/skills/nl2sh-device-lab` 和主机
+`scripts/device_lab.py` 客户端，不引入网关或守护进程。构建 manifest 绑定源码输入、
+Git、唯一 build ID 与最终 ELF 摘要；`nl2sh_inspect.build_identity` 在阻塞 worker
+读取 `/proc/self/exe`，防止磁盘替换后误认旧进程。Agent artifact 的 evidence 只从
+真实 Tool Round 关联调用/结果，保留缺失、失败和截断，不解析自然语言为事实。
+案例前后复核身份、结构化断言与环境，ADB 独立控制受管 service 并发现重连信息；
+脚本不调整安全策略或执行 UID，修改仍需设备审批，部署失败尝试回滚。
+该实验客户端不是运行时通信依赖；正式双语流程见 development/device-lab。
+
 MCP/A2A HTTP 监听优先绑定配置/CLI 端口（默认 8765），仅在 `AddrInUse` 时以相同监听地址绑定端口 0；鉴权 Host、自动公告 origin 与连接记录使用实际端口。其他绑定错误仍失败，不结束无关监听器，不放宽同配置协议状态独占锁。
 
 ```text

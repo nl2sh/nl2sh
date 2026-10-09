@@ -1,0 +1,4 @@
+interface:
+  display_name: "nl2sh Device Lab"
+  short_description: "Develop nl2sh with repeatable Android device evidence"
+  default_prompt: "Use $nl2sh-device-lab to investigate and verify this nl2sh change on Android."

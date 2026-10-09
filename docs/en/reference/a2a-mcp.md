@@ -43,6 +43,14 @@ Direct results contain `tool`, `success`, bounded string `output`, and optional 
 
 ## A2A messages, tasks, and pagination
 
+`nl2sh_inspect` adds `build_identity`: compile-time Git/dirty/build ID/target/profile,
+running executable SHA-256, protocol version and UID. Missing provenance is null;
+matching versions do not prove identical code. `nl2sh_ask` artifacts add `evidence`
+derived from actual ToolRounds, linking tool names and call IDs to success, failure,
+missing results and bounded output (64 entries, 4096 bytes each), with explicit
+truncation and total-call metadata. Model answers remain unverified analysis.
+See the [device development loop](../development/device-lab.md).
+
 Accepts `ROLE_USER`, a nonempty `messageId`, and text parts only. Parts join with newlines, totaling 1–8192 UTF-8 bytes. All user text enters the Agent; no slash tool commands are parsed. Omit `contextId` to generate one; reuse it to continue Agent history. Each send creates a new task; continuation with an old `taskId` is unsupported.
 
 | JSON-RPC method | Parameters and behavior |
