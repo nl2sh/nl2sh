@@ -2,6 +2,12 @@
 
 Interactive startup also listens on `0.0.0.0:9999`, choosing another available port if occupied. Use the actual URL in startup output. **There is no login: anyone reaching the page can view data, edit configuration, and submit tasks. Use a trusted network.** ADB forwarding does not disable LAN listening.
 
+## MCP / A2A connections
+
+The left vertical menu’s “MCP / A2A” button opens a connection dialog. Refresh the protocol-process status and copy actual MCP Streamable HTTP, A2A JSON-RPC, and public Agent Card URLs, HTTP/stdio client configuration, device startup commands, and an A2A request example. Discovery needs no model, starts no service, and exposes neither token values nor protocol approval buttons. Mutations still require an interactive device terminal using the same UID and configuration.
+
+Web and protocols start separately; Web `ready` does not mean MCP/A2A is running. Human-readable `service status` and its JSON `connections` field provide the same information. `/api/connections` is lightweight read-only discovery; `/api/info` also includes `connections`. States are `running/stopped/unknown`: running verifies local process identity and the exclusive lock, not remote reachability. Without confirmed HTTP endpoints, default local examples are clearly labeled. 127.0.0.1 works only on the same device; remote access requires explicit binding and advertisement, preferably HTTPS. Only the token variable name `NL2SH_PROTOCOL_TOKEN` is shown. See [device MCP/A2A](../advanced/a2a-mcp.md).
+
 ## Background startup without a terminal
 
 ```bash
@@ -58,7 +64,7 @@ a root flag never means an action has been approved. Discovery does not download
 system settings or prompt for su. Internal probes use ordinary-user pipe capture and a five-second timeout.
 
 In `/api/tools`, `enabled` is the configured switch and `available` means runtime prerequisites
-are present; unavailable tools remain visible in settings. Agent requests, `bridge tools` and direct
+are present; unavailable tools remain visible in settings. Agent requests, MCP `nl2sh_tools` and direct
 invocation filter by current capability. Development hosts do not advertise Android control or ART
 decompilation; ordinary Termux UIDs do not advertise UI tools requiring shell/root. Static APK
 reads and Tailcat checks remain available. The next task or info request rediscovers state after

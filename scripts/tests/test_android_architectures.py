@@ -1,5 +1,4 @@
 """Exercise Android ABI selection and combined packaging without a device/NDK."""
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -7,7 +6,6 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -58,23 +56,6 @@ esac
                 self.assertEqual(mismatch.returncode, 1)
                 self.assertIn('does not match device ABI', mismatch.stderr)
 
-
-    def test_a2a_candidate_build_uses_x86_64_target(self):
-        spec = importlib.util.spec_from_file_location('workflow', ROOT / 'a2a_gateway/nl2sh_a2a/workflow.py')
-        workflow = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(workflow)
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            build = root / 'build'
-            binary = build / 'x86_64-linux-android/release/nl2sh'
-            binary.parent.mkdir(parents=True)
-            binary.write_bytes(b'candidate')
-            with patch.object(workflow, 'run', side_effect=['x86_64', '', '', '', '']) as run:
-                state = workflow.prepare(ROOT, 'mock', root / 'state.json', build)
-            self.assertEqual(state['target'], 'x86_64-linux-android')
-            self.assertEqual(run.call_args.kwargs['env']['RUST_TARGET'], 'x86_64-linux-android')
-            self.assertEqual(state['binary'], str(binary))
-            self.assertEqual(state['phase'], 'built')
 
     def test_combined_archive_contains_all_android_abis(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -7,6 +7,6 @@ There are three paths: built-in Agent planning, one-shot CLI, and an external ag
 3. Request one specific action and inspect complete targets/arguments in approval.
 4. Reread state and check results; retain failures rather than blindly replaying writes.
 
-Non-interactive CLI rejects unavailable approvals. A2A/MCP writes normally wait for a device terminal; `ask` rejects them by default. Explicit bridge auto-approval gives token holders unattended execution at the process privileges; see [A2A/MCP](a2a-mcp.md).
+Non-interactive CLI rejects unavailable approvals. A2A/MCP tool and Agent mutations normally wait for a device terminal. Explicit protocol auto-approval gives token holders unattended execution at the process privileges; see [A2A/MCP](a2a-mcp.md).
 
 nl2sh has no general scheduler. Host scripts can schedule reads, but scheduling, supervision, permissions, and approval policy must be configured explicitly. `/shell` and companion debug broadcasts are not Agent safety-gated automation interfaces.

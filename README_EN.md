@@ -62,4 +62,4 @@ User documentation lives in `docs/zh/` and `docs/en/`. User-visible code changes
 
 Stars, issues, and contributions are welcome. [Support the project](https://github.com/nl2sh/nl2sh) · [Donate](https://suqishuo.cn/uploads/wechatpay.png)
 
-[Organization projects and integration boundaries](https://nl2sh.github.io/nl2sh/en/development/projects/): native Agent, A2A/MCP gateway, Android Bridge, JADX helper and ADB installer.
+[Organization projects and integration boundaries](https://nl2sh.github.io/nl2sh/en/development/projects/): native Agent, built-in device MCP/A2A, Android Bridge, JADX helper and ADB installer.

@@ -62,4 +62,4 @@ cargo test
 
 欢迎 Star、报告问题或贡献代码。[支持项目](https://github.com/nl2sh/nl2sh) · [微信赞赏](https://suqishuo.cn/uploads/wechatpay.png)
 
-[组织项目与集成边界](https://nl2sh.github.io/nl2sh/development/projects/)：区分原生 Agent、A2A/MCP 网关、Android Bridge、JADX helper 与 ADB 安装助手。
+[组织项目与集成边界](https://nl2sh.github.io/nl2sh/development/projects/)：区分原生 Agent、内置设备 MCP/A2A、Android Bridge、JADX helper 与 ADB 安装助手。

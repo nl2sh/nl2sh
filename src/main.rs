@@ -1,7 +1,7 @@
 mod cli;
 use anyhow::{Context, Result};
 use clap::Parser;
-use cli::{BridgeCommand, Cli, Command, Mode, ServiceCommand};
+use cli::{Cli, Command, Mode, ProtocolCommand, ServiceCommand};
 use nl2sh::{
     agent::{
         android_shell_constraints, AgentRunner, ConfirmationDecision, Confirmer, StdioConfirmer,
@@ -54,7 +54,8 @@ async fn main() -> Result<()> {
             ServiceCommand::Status { json } => (Operation::Status, *json),
             ServiceCommand::Run { .. } => unreachable_service_operation()?,
         };
-        let status = service.control(operation).await?;
+        let mut status = service.control(operation).await?;
+        status.connections = Some(nl2sh::protocol::connection_info(&path).await);
         if json {
             println!("{}", serde_json::to_string(&status)?);
         } else {
@@ -62,22 +63,27 @@ async fn main() -> Result<()> {
         }
         return Ok(());
     }
-    if let Some(Command::Bridge { command }) = &cli.command {
-        let operation = match command {
-            BridgeCommand::Inspect => nl2sh::bridge::BridgeOperation::Inspect,
-            BridgeCommand::Tools => nl2sh::bridge::BridgeOperation::Tools,
-            BridgeCommand::Ask { payload_base64 } => nl2sh::bridge::BridgeOperation::Ask {
-                payload_base64: payload_base64.clone(),
-            },
-            BridgeCommand::Invoke { payload_base64 } => nl2sh::bridge::BridgeOperation::Invoke {
-                payload_base64: payload_base64.clone(),
-            },
-            BridgeCommand::Approvals => nl2sh::bridge::BridgeOperation::Approvals,
-            BridgeCommand::Approve { id } => {
-                nl2sh::bridge::BridgeOperation::Approve { id: id.clone() }
+    if let Some(Command::Protocol { command }) = &cli.command {
+        return match command {
+            ProtocolCommand::Serve {
+                host,
+                port,
+                advertised_url,
+                allow_insecure_http,
+            } => {
+                nl2sh::protocol::serve(
+                    path,
+                    *host,
+                    *port,
+                    advertised_url.as_deref(),
+                    *allow_insecure_http,
+                )
+                .await
             }
+            ProtocolCommand::Stdio => nl2sh::protocol::stdio(path).await,
+            ProtocolCommand::Approvals => nl2sh::protocol::list_approvals(&path),
+            ProtocolCommand::Approve { id } => nl2sh::protocol::approve(&path, id).await,
         };
-        return nl2sh::bridge::run(operation, &path).await;
     }
     if cli.web_only {
         let mut web = nl2sh::web_ui::start(path).await?;
@@ -124,6 +130,7 @@ async fn main() -> Result<()> {
     }
     let web = nl2sh::web_ui::start(path.clone()).await?;
     nl2sh::web_ui::set_welcome_url(web.url().to_owned());
+    nl2sh::protocol::set_welcome_connections(nl2sh::protocol::connection_info(&path).await);
     if matches!(cli.mode, Mode::Agent) {
         loop {
             match tui::run_agent_session(

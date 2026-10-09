@@ -104,7 +104,7 @@ macro_rules! metadata {
     };
 }
 metadata!(START, "start_system_trace", "After confirmation, start a bounded device Perfetto system trace (1–120s, 1–32 MiB buffer, 64 MiB file limit). Returns a managed trace_id. In an Agent task, registers bounded background analysis after auto-stop; direct invocation requires explicit analysis. Requires available linux.ftrace; optional FrameTimeline/process metadata are capability-probed. Does not elevate or install Perfetto.", StartArgs, Mutating, AndroidShell, Sequential);
-metadata!(STOP, "stop_system_trace", "After confirmation, stop only the managed Perfetto session identified by trace_id and finalize its trace file. Safe across bridge processes; expired captures are recognized. Never kills an arbitrary PID or another tracing session.", StopArgs, Mutating, AndroidShell, Sequential);
+metadata!(STOP, "stop_system_trace", "After confirmation, stop only the managed Perfetto session identified by trace_id and finalize its trace file. Safe across nl2sh processes; expired captures are recognized. Never kills an arbitrary PID or another tracing session.", StopArgs, Mutating, AndroidShell, Sequential);
 metadata!(ANALYZE, "analyze_system_trace", "Read a bounded raw Perfetto protobuf file in Rust: runnable main-thread/RenderThread delays, long render/Choreographer slices, legacy FrameTimeline jank, Binder send-to-receive latency, CPU competition and wakeup heuristics. Explicit coverage and limitations; missing events are not proof of health. No external trace processor required.", AnalyzeArgs, ReadOnly, Any, Parallel);
 
 define_tool!(StartTool, StartArgs, START, prepare_start);

@@ -1,6 +1,6 @@
 # Network troubleshooting
 
-1. Identify whether the failure comes from host installation downloads, device provider requests, Web access, or the host gateway; they use different environments.
+1. Identify whether the failure comes from host installation downloads, device provider requests, Web access, or the device protocol service; they use different environments.
 2. Check URLs and actual listener ports. Device loopback means the device. ADB forward reaches the device from the host; ADB reverse reaches the host from the device.
 3. Check DNS, TCP, TLS, and HTTP separately. Ping proves ICMP only, not HTTPS/model access.
 4. Inspect device TOML proxy type/address/authentication/bypass and narrow diagnostic scope.

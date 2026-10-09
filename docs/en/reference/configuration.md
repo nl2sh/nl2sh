@@ -61,7 +61,7 @@ This section is updated from code. Credentials default to empty; never add real 
 | `interactive_execute_timeout_secs` | `0` | Interactive timeout; zero disables it. |
 | `execute_confirm_policy` | `"risk_only"` | General confirmation preference. |
 | `security_level` | `"balanced"` | Safety posture. |
-| `bridge_auto_approve` | `false` | Automatically approve operations received through the A2A/MCP bridge. |
+| `protocol_auto_approve` | `false` | Automatically approve operations received through the device MCP/A2A service. |
 | `tool_groups` | `{}` | Enabled state of optional tool groups. `jadx` and `tailcat` default off. |
 | `tool_overrides` | `{}` | Per-tool enabled state, overriding its group. |
 | `tailcat_binary_path` | `"tailcat"` | Tailcat executable path on this runtime. |

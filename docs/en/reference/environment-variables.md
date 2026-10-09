@@ -1,6 +1,6 @@
 # Environment variables
 
-Device runtime, host installation, builds, and gateways are separate processes. Set variables in the appropriate process; devices do not inherit host variables automatically. Never commit keys.
+Device runtime, host installation, and builds are separate processes. Set variables in the appropriate process; devices do not inherit host variables automatically. Never commit keys.
 
 | Variable | Purpose |
 | --- | --- |
@@ -21,12 +21,10 @@ Device runtime, host installation, builds, and gateways are separate processes. 
 | `ANDROID_HOME / ANDROID_SDK_ROOT / JAVA_HOME` | SDK / JDK for optional Android modules |
 | `NL2SH_PACKAGE_MANAGER_BUILD` | Build-time 1 disables in-app self-update |
 | `ANDROID_TMP_DIR / TERMUX_SSH_LOCAL_PORT / TERMUX_SSH_REMOTE_PORT / TERMUX_TMUX_SESSION` | Termux SSH/tmux development deployment |
-| `NL2SH_A2A_TOKEN / NL2SH_A2A_URL / NL2SH_A2A_ALLOW_INSECURE_HTTP` | Gateway token, client origin, explicit remote HTTP opt-in |
-| `NL2SH_DEVICE_SERIAL / NL2SH_DEVICE_BINARY / NL2SH_DEVICE_CONFIG` | Compose Android serial, binary, config |
-| `NL2SH_GATEWAY_BIND / NL2SH_GATEWAY_PORT / NL2SH_GATEWAY_URL / NL2SH_GATEWAY_BASE_IMAGE` | Compose host binding, advertised URL, base image |
+| `NL2SH_PROTOCOL_TOKEN` | Device HTTP MCP/A2A token, 32–256 printable ASCII characters |
 | `NL2SH_APT_GPG_KEY_ID / TERMUX_APT_GPG_PRIVATE_KEY` | APT key ID / CI secret; private keys never enter source |
 | `NL2SH_WEB_DIST` | Embedded asset directory set by build.rs; not a user setting |
 | `NL2SH_TAILCAT_TEST_BINARY / NL2SH_TAILCAT_TEST_PROXY` | Explicit Tailcat live tests |
 | `TAILCAT_HOST_BIN / TAILCAT_DEVICE_BIN` | Bidirectional transfer test executables |
 
-See [gateway details](../advanced/a2a-mcp.md) and [configuration priority](configuration.md). HTTP_PROXY / HTTPS_PROXY / ALL_PROXY for host downloads do not replace nl2sh device proxy configuration.
+See [device protocol service](../advanced/a2a-mcp.md) and [configuration priority](configuration.md). HTTP_PROXY / HTTPS_PROXY / ALL_PROXY for host downloads do not replace nl2sh device proxy configuration.

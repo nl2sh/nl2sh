@@ -12,7 +12,7 @@
 | `tailcat_status` | 当前进程监听器状态，只读 |
 | `tailcat_stop` | 停止当前进程监听器，需确认 |
 
-输出返回连接地址，只发给预期连接方。接收与服务任务属于当前 TUI/Web 进程；父进程退出会终止子进程。一次性 bridge 暴露安装、检查、发送，不提供跨请求监听管理。关闭工具组不会降低 shell 中 Tailcat 命令的风险。
+输出返回连接地址，只发给预期连接方。接收与服务任务属于当前 TUI/Web/协议服务进程；父进程退出会终止子进程。设备协议服务支持跨请求监听管理。关闭工具组不会降低 shell 中 Tailcat 命令的风险。
 
 实测：宿主指定 `NL2SH_TAILCAT_TEST_BINARY` 后运行 `cargo test --test tailcat_live_tests -- --ignored`。连接设备与宿主都已安装 Tailcat 时，用 `TAILCAT_HOST_BIN`、`TAILCAT_DEVICE_BIN`、`ADB_SERIAL` 运行 `./test-tailcat-connected.sh`；脚本仅清理自己的临时文件。
 
@@ -131,7 +131,7 @@ Web 地址是对端电脑的 `http://127.0.0.1:19999/`。以上设备端口仅�
 
 默认对端本地端口为 13701（配对）、13702（连接）、19999（可选 Web）；占用时在 `share` 参数中设置 `local_pair_port`、`local_connect_port`、`local_web_port`。使用的端口须非零且互不相同，不能用 ADB 服务端口 5037；`web_port` 必须与两种 ADB 端口不同且已有服务可访问。
 
-`tailcat_status({})` 查看共享状态，`tailcat_stop({})` 确认后停止整个监听器。关闭隧道不会关闭系统无线调试或撤销对端配对，需在 Settings 中自行关闭或忘记已配对设备。监听器依附当前 TUI/Web 进程；一次性 bridge 不提供此工具。
+`tailcat_status({})` 查看共享状态，`tailcat_stop({})` 确认后停止整个监听器。关闭隧道不会关闭系统无线调试或撤销对端配对，需在 Settings 中自行关闭或忘记已配对设备。监听器依附当前 TUI/Web/协议服务进程。
 
 ## 无线 ADB 的可行性验证
 

@@ -2,7 +2,7 @@
 
 Let AI complete real tasks in Android Shell.
 
-nl2sh is a multi-turn tool-calling Agent built first for native Android shell, with Termux compatibility. One Rust executable includes a terminal TUI and a multi-session Web UI. An optional A2A/MCP gateway connects external agents.
+nl2sh is a multi-turn tool-calling Agent built first for native Android shell, with Termux compatibility. One Rust executable includes a terminal TUI and a multi-session Web UI. Built-in device-native MCP/A2A services connect external agents.
 
 [Get started](getting-started/index.md){ .md-button .md-button--primary }
 [Install](getting-started/installation.md){ .md-button }

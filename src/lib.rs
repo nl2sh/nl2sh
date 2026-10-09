@@ -3,8 +3,6 @@
 pub mod agent;
 /// Structured metadata for approved execution and refusal diagnostics.
 pub mod audit;
-/// Bounded machine-readable adapter for an external A2A gateway.
-pub mod bridge;
 /// Validated TOML configuration and initialization wizard.
 pub mod config;
 pub mod file_references;
@@ -17,6 +15,8 @@ pub mod limits;
 /// Provider-neutral LLM types and OpenAI-compatible HTTP clients.
 pub mod llm;
 pub mod network;
+/// Device-native MCP/A2A servers and shared task execution.
+pub mod protocol;
 /// Read-only provider account data for documented balance endpoints.
 pub mod provider_account;
 /// Provider-specific model discovery and normalized metadata.

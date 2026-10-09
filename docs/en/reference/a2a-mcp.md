@@ -1,132 +1,84 @@
-# A2A / MCP protocol reference
+# MCP / A2A protocol reference
 
-The implementation lives in `a2a_gateway/nl2sh_a2a/`, `src/bridge.rs`, `src/bridge/approval.rs` and `src/tools/runtime.rs`. See the [deployment guide](../advanced/a2a-mcp.md) for Python, Docker, Hermes and stdio client setup.
-
-## Execution paths
+Implementation lives in `src/protocol/`: execution reuses Tool Runtime / AgentRunner, tasks handles concurrency and cancellation, store persists device tasks, and mcp/a2a adapt their respective protocols. See the [deployment guide](../advanced/a2a-mcp.md) for startup and clients.
 
 ```mermaid
 flowchart LR
-    A[A2A client] --> R[Authenticated JSON-RPC /a2a]
-    M[MCP HTTP /mcp or local stdio] --> R
-    R --> D[Exact adb serial: exec-out]
-    D --> B[Device bridge]
-    B --> T[Tool Runtime: prepare, assess, confirm, execute]
-    B --> G[Optional built-in Agent]
+    M[MCP HTTP / local stdio] --> T[Device Tool Runtime]
+    M --> Q[Device task service]
+    A[A2A JSON-RPC] --> Q
+    Q --> G[Built-in Agent]
     G --> T
+    T --> S[Prepare / safety / local approval / execute]
 ```
 
-The gateway targets one configured device. It does not expose generic adb commands or remote approval methods. A registered shell tool can execute commands through the device's normal risk/approval boundary; the narrow transport is not an allowlist of read-only actions. Tool availability follows device configuration, including optional groups and per-tool overrides. Process-managed Tailcat listeners are filtered from the one-shot bridge.
+## Entry points and authentication
 
-| Endpoint | Access and behavior |
+| Entry | Behavior |
 | --- | --- |
-| `/.well-known/agent-card.json` | Public discovery; JSON-RPC binding/version `1.0`; streaming and push notifications are disabled |
-| `/a2a` | Bearer-authenticated A2A JSON-RPC; send `A2A-Version: 1.0` |
-| `/mcp` | Bearer-authenticated Streamable HTTP MCP; same port/token, not legacy `/sse` |
-| `nl2sh-a2a-mcp` | Local stdio process; authenticated A2A client, no local adb required |
+| `/.well-known/agent-card.json` | Public Agent Card, A2A JSONRPC 1.0; no A2A streaming, push, or extended card |
+| `/a2a` | Bearer authentication, JSON-RPC 2.0, `A2A-Version: 1.0` |
+| `/mcp` | Bearer authentication, Streamable HTTP; not legacy SSE `/sse` |
+| `nl2sh protocol stdio` | Device-local stdin/stdout MCP under the launching user's privileges |
 
-The token must contain at least 32 characters. The server uses one owner identity for all token holders: task IDs and contexts do not provide isolation between clients. Preserve the SQLite database and protect it, ADB keys and tokens. Gateway tasks and device Agent history are separate stores; retaining one does not restore the other. Persistence does not automatically resume an operation interrupted by gateway restart.
+HTTP is separate from Web. `NL2SH_PROTOCOL_TOKEN` must contain 32–256 printable ASCII characters. All holders of the token share one trusted owner; there is no multi-tenant task isolation. Task/context IDs are not access credentials. Host must match the advertised authority or local listener address; any supplied Origin must match the advertised origin. Missing/invalid tokens return 401; invalid Host/Origin returns 403. Network listening and remote HTTP require explicit opt-in.
 
-## Gateway configuration
+MCP uses the official Rust SDK and supports protocol versions `2025-11-25`, `2025-06-18`, and `2024-11-05`. HTTP uses stateless server transport; clients still follow initialize/initialized lifecycle and need not retain `Mcp-Session-Id`. Resources/prompts, remote approvals, sampling, and the MCP Tasks extension are not provided.
 
-Run `nl2sh-a2a --help` for host CLI options. Device paths refer to Android, not the gateway filesystem.
+## MCP tools
 
-| Setting | Default / requirement |
+| Tool | Parameters | Result |
+| --- | --- | --- |
+| `nl2sh_inspect` | None | Fixed device environment object |
+| `nl2sh_tools` | None | Object with a `tools` array of available registered tools and parameter schemas |
+| `nl2sh_invoke` | `tool`, object `arguments` | Direct tool result, without a model call |
+| `nl2sh_read_screen` | None | Text summary and PNG/JPEG MCP image block |
+| `nl2sh_ask` | `message`, optional `context_id` | Device Task for the built-in Agent |
+| `nl2sh_get_task` | `task_id` | Saved device Task |
+| `nl2sh_cancel_task` | `task_id` | Task after requesting cancellation and waiting for settlement |
+
+Direct results contain `tool`, `success`, bounded string `output`, and optional `attachments`. `output` may itself contain JSON text. MCP provides text content and structuredContent; operation failure sets `isError` to true. Successful screen reads require exactly one PNG/JPEG attachment, returned as native MCP image content.
+
+`nl2sh_ask` returns the same Task format as A2A. Agent results contain `session`, `answer`, `steps`, `tool_calls`, and at most eight bounded `failed_tools`, at `artifacts[0].parts[0].data`. COMPLETED means the Agent returned, not that every tool succeeded. Missing model configuration produces a FAILED task. MCP tool discovery does not prove device capabilities; the actual catalog reflects configuration and capability discovery. The long-lived server can expose enabled process-lifetime tools.
+
+## A2A messages, tasks, and pagination
+
+Accepts `ROLE_USER`, a nonempty `messageId`, and text parts only. Parts join with newlines, totaling 1–8192 UTF-8 bytes. All user text enters the Agent; no slash tool commands are parsed. Omit `contextId` to generate one; reuse it to continue Agent history. Each send creates a new task; continuation with an old `taskId` is unsupported.
+
+| JSON-RPC method | Parameters and behavior |
 | --- | --- |
-| `--serial` | Required exact adb serial; only IPv4 `IP:port` triggers automatic reconnect |
-| `--binary`, `--config` | `/data/local/tmp/nl2sh`, `/data/local/tmp/config.toml` on the device |
-| `--db` | Required SQLite file on the gateway host |
-| `--host`, `--port` | `127.0.0.1`, `8765`; accepted hosts: `127.0.0.1`, `localhost`, `0.0.0.0` |
-| `--advertised-url` | Defaults to listener HTTP origin; required when binding `0.0.0.0` |
-| `--allow-insecure-http` | Explicit network-bind/remote HTTP opt-in, also set by `NL2SH_A2A_ALLOW_INSECURE_HTTP=1` |
-| `NL2SH_A2A_TOKEN` | Required shared Bearer token; minimum 32 characters |
-| `NL2SH_A2A_URL` | stdio client origin only; defaults to `http://127.0.0.1:8765` |
+| `SendMessage` | `message`, optional `configuration.returnImmediately/historyLength/acceptedOutputModes`; returns `{task: ...}` |
+| `GetTask` | `id`, optional `historyLength`; returns Task directly |
+| `ListTasks` | Optional `contextId/status/pageSize/pageToken/historyLength/includeArtifacts/statusTimestampAfter` |
+| `CancelTask` | `id`; requests cooperative cancellation and waits for the current operation to settle |
 
-Binding `0.0.0.0` requires the explicit opt-in even when a reverse proxy advertises HTTPS, because uvicorn itself serves HTTP. HTTPS is terminated by the proxy; do not configure a path prefix in the advertised origin. In Compose, `NL2SH_DEVICE_SERIAL/BINARY/CONFIG` supply device CLI values and `NL2SH_GATEWAY_URL` supplies the advertised origin. `NL2SH_GATEWAY_BIND/PORT` control host port publication; the container continues to listen on 8765. Changing the published port requires updating the URL too. Gateway environment variables do not set device `bridge_auto_approve`; edit the device config separately.
+SendMessage waits for terminal status by default; `returnImmediately: true` returns a submitted task for polling. `historyLength: 0` excludes message history. ListTasks defaults to at most 50 items, maximum 100, ordered by update time and ID descending; returns `tasks/totalSize/pageSize/nextPageToken`. The final page token is `""`. Artifacts are omitted unless `includeArtifacts: true`.
 
-## A2A messages and tasks
+Tasks use `id/contextId/status/history/artifacts`. States are `TASK_STATE_SUBMITTED/WORKING/COMPLETED/FAILED/CANCELED`, with RFC3339 timestamps. Artifact `parts[0].data` is structured device output; no nested JSON text needs parsing. Errors follow JSON-RPC and A2A 1.0 mappings, including missing task `-32001`, not cancelable `-32002`, unsupported operation `-32004`, unsupported content type `-32005`, and unsupported version `-32009`.
 
-`SendMessage` uses `ROLE_USER`, a fresh `messageId` and text parts. The gateway strips surrounding whitespace and dispatches these messages:
+## Execution, approval, and cancellation
 
-| Text | Device operation | Device model required |
-| --- | --- | --- |
-| `/inspect` | Fixed environment probes | No |
-| `/tools` | Currently available tools and schemas | No |
-| `/invoke {"tool":"android.screen_dump","arguments":{}}` | One direct registered tool | No |
-| Other nonempty text | One built-in Agent turn | Yes |
+Direct and Agent calls reuse registration, argument validation, preparation, assessment, resource locks, approval, privilege binding, and audit. Permissive remote configuration is raised to at least balanced/risk_only; execution uses captured pipelines. Mutations default to local interactive terminal approval, at most eight requests for 120 seconds; dangerous actions require an exact phrase. No remote approval tool exists. Explicit `protocol_auto_approve` approves all risk levels through the protocol confirmer only.
 
-`/ask` is not a special A2A command: ordinary text invokes consultation. The invoke object must contain exactly `tool` and object-valued `arguments`. Discover the actual device schema before preparing an action.
+Agent tasks sharing a context serialize within the service and use an isolated `protocol-` session namespace. Web/TUI do not share that namespace. Android UI operations retain existing cross-process locks. An HTTP disconnect does not automatically replay or roll back A2A tasks; query known tasks before resubmitting. Message IDs do not promise exactly-once execution.
 
-A read-only JSON-RPC example (POST to `/a2a` with Bearer authentication and `A2A-Version: 1.0`):
+CancelTask/MCP cancellation rejects pending approvals and signals the Agent/captured shell. Execution futures are not directly dropped when client requests end; shell uses existing process-group cleanup, and other tools finish their current operation before stopping. Side effects may already have occurred; CANCELED does not mean rollback. SIGINT/SIGTERM drains tasks through the same boundary before shutdown.
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "inspect-1",
-  "method": "SendMessage",
-  "params": {
-    "message": {
-      "messageId": "unique-message-1",
-      "role": "ROLE_USER",
-      "parts": [{"text": "/inspect"}]
-    }
-  }
-}
-```
+## Storage and limits
 
-The response contains `result.task`. Save its `id` and `contextId`. Query the saved task with `{"jsonrpc":"2.0","id":"lookup-1","method":"GetTask","params":{"id":"TASK_ID"}}`. `GetTask` returns a task directly in `result`. Reuse `contextId` in the next message for Agent follow-ups; the gateway maps it to `a2a-` plus the first 32 hexadecimal characters of its SHA-256. Agent turns sharing that session are serialized within one gateway process. Direct calls do not enter that Agent history, and sharing a context does not serialize direct device actions.
-
-The device JSON result is encoded as text in the `nl2sh_result` artifact, at `task.artifacts[0].parts[0].text`. Parse that text as JSON. `TASK_STATE_COMPLETED` means the gateway returned a device result, not that every device operation succeeded. An exception marks the task failed with a bounded status message. Neither HTTP 200 nor an MCP response alone proves action success.
-
-## MCP tools and result contracts
-
-| Tool | Arguments | Result |
-| --- | --- | --- |
-| `nl2sh_inspect` | None | Task envelope with environment facts |
-| `nl2sh_tools` | None | Task envelope with tool definitions |
-| `nl2sh_invoke` | `tool`, object `arguments` | Task envelope with direct result |
-| `nl2sh_read_screen` | None | Text summary plus PNG/JPEG MCP image block |
-| `nl2sh_ask` | `message`, optional `context_id` | Task envelope with Agent result |
-| `nl2sh_get_task` | `task_id` | Saved task envelope |
-
-Structured envelopes contain `task_id`, `context_id`, `state`, and `result` when an artifact exists; failed tasks also expose `error`. Direct results contain `tool`, `success`, bounded string `output`, and optional `attachments`. An `output` string can itself contain JSON; parse it only when appropriate for that tool. Agent results contain `session`, `answer`, `steps`, `tool_calls`, and up to eight bounded `failed_tools` messages. Review failures and obtain fresh device evidence before claiming completion.
-
-`nl2sh_read_screen` invokes `android.read_screen` and requires a successful result with exactly one supported image attachment. Its text summary contains `task_id`, `state`, `tool` and `output`, rather than the full structured envelope. Tools discovery alone does not validate credentials, the ADB connection or a screenshot. HTTP MCP internally uses authenticated ASGI A2A transport; it does not connect back over the network to the advertised origin.
-
-## Approval and operational limits
-
-By default, `invoke` waits for device-local approval when risk requires it; `ask` rejects requests needing approval. Run `bridge approvals` and `bridge approve REQUEST_ID` in a separate interactive device terminal, using the same config/state path and user identity as the bridge process. At most eight approval requests may be pending. The approval window is 120 seconds; dangerous actions require the displayed second phrase. Use a fresh call after rejection, expiry or target changes.
-
-Explicit device `bridge_auto_approve = true` automatically approves all bridge risks for both paths. Parameter validation, classification, command binding and root capability checks remain. This does not affect TUI/Web/CLI approval policy. The token then permits unattended operations at the bridge process's privileges.
+The device state directory contains `protocol/tasks.sqlite3`, with directory mode 0700 and file mode 0600. An exclusive process lock prevents multiple protocol servers using the same state directory. Complete Agent history lives privately in `sessions/`. Known configured credentials and service tokens are redacted from task snapshots. Restart changes SUBMITTED/WORKING to FAILED without recovering, replaying, or approving execution; unfinished turns are not saved as complete history.
 
 | Boundary | Limit |
 | --- | --- |
-| A2A/MCP message | 1–8192 UTF-8 bytes |
-| MCP tool name | 1–128 characters; native bridge also checks byte length |
-| MCP context/task identifier | 1–256 characters when supplied |
-| Serialized bridge payload | 16 KiB |
-| adb stdout and stderr | 3 MiB each, checked while reading |
-| MCP client's A2A HTTP reply | 4 MiB, checked while reading |
-| MCP screenshot base64 | At most 3 MiB of encoded text, PNG/JPEG only |
-| Wireless IPv4 adb connect | 15 seconds, before each operation |
-| Device inspect/tools | 30 seconds |
-| Device ask/invoke | 180 seconds, including device approval |
-| MCP adapter A2A HTTP client | 200-second timeout |
+| HTTP request body | 32 KiB for MCP/A2A |
+| MCP argument JSON | 16 KiB |
+| Agent user text | 8192 UTF-8 bytes |
+| Tool name | 128 UTF-8 bytes |
+| task/context/message ID | 256 UTF-8 bytes |
+| Active tasks | 16, including context/approval waits |
+| Pending local approvals | 8, 120 seconds |
+| Stored task document | 4 MiB |
+| Retained tasks | 200 / 64 MiB of documents, pruning oldest terminal tasks first |
+| MCP screen base64 | 3 MiB, PNG/JPEG only |
 
-The 200-second value is an HTTP client timeout, not a server-wide request deadline. Configure external clients/reverse proxies with enough time for device execution and approval (the setup guide uses 210 seconds). The adapter disables environment-derived HTTP proxies and redirects. For stdio, `NL2SH_A2A_URL` must be an origin with no path, credentials, query or fragment; its JSON-RPC card must use exactly the same scheme/netloc and `/a2a`. Remote HTTP needs `NL2SH_A2A_ALLOW_INSECURE_HTTP=1`; HTTPS or a loopback SSH tunnel is preferred.
-
-## Troubleshooting and uncertain outcomes
-
-| Symptom | Check |
-| --- | --- |
-| 401 | Same Bearer token on client and gateway; token environment reaches the stdio process |
-| Card works, device tool fails | `adb -s SERIAL get-state`, authorization, device binary and config paths, UID and current wireless connection port |
-| Agent Card origin mismatch | Match client origin and `--advertised-url` / `NL2SH_GATEWAY_URL` exactly; do not append `/a2a` or `/mcp` to stdio `NL2SH_A2A_URL` |
-| Model provider not configured | Configure the device model for `ask`, or use direct tools |
-| Unsupported tool | Refresh `/tools`; check group/individual switches and bridge filtering |
-| No pending approval | Use the same device config/state and UID; request may have expired or auto-approval may be enabled |
-| UI target stale, partial tree or input failure | Read the current screen, resolve a complete target, check companion service/keyboard and shell/root permissions |
-| Timeout, cancellation or lost connection | Query the known task and inspect fresh device state before another write |
-
-The transport never automatically replays a device operation after a lost reply. Killing or cancelling the host adb subprocess is not proof that every device-side action stopped or was rolled back. `GetTask` reads saved state; it does not resume or undo execution. A new message is a new operation: neither a reused context nor message ID is a documented exactly-once guarantee.
-
-Host `workflow prepare|deploy|status` commands are development checkpoints, not remotely advertised tools. `status` reads the checkpoint file, not device health. `deploy` checks the recorded local binary digest and current ABI, then pushes/chmods a separate candidate and runs `--version`; it does not verify the remote file digest or guarantee the candidate path was previously absent. Choose a distinct `--candidate` if an existing candidate must be preserved. See the [deployment guide](../advanced/a2a-mcp.md).
+Task storage is not an indefinite archive; older terminal tasks may be pruned. Agent/tool configuration controls execution budgets; there is no shared 180-second ADB timeout. Client/proxy timeouts must cover execution and approval waits. Long Agent delegations should use returnImmediately + GetTask.

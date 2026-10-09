@@ -1,6 +1,6 @@
 # 网络排查
 
-1. 确认报错来自电脑安装下载、Android Provider 请求、Web 访问还是主机网关；它们使用不同网络环境。
+1. 确认报错来自电脑安装下载、Android Provider 请求、Web 访问还是设备协议服务；它们使用不同网络环境。
 2. 核对完整 URL 与实际监听端口。设备 loopback 指设备自身，ADB forward 从主机访问设备，ADB reverse 从设备访问主机。
 3. 分别检查 DNS、TCP、TLS、HTTP。ping 成功只证明 ICMP，不能证明 HTTPS 或模型服务可用。
 4. 检查设备 TOML 代理类型、地址、认证与绕过列表，必要时缩小诊断范围。

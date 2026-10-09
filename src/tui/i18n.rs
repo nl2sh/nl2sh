@@ -5,6 +5,7 @@ const DONATION_SUPPORT: &str = "❤️ 如果 nl2sh 帮你少敲了几条 adb �
 pub(crate) const BUDDHA_ART_PREFIX: &str = "\u{1e}BUDDHA:";
 pub(crate) const WELCOME_TRAIN_ANCHOR: &str = "\u{1e}WELCOME_TRAIN";
 pub(crate) const WEB_WELCOME_PREFIX: &str = "\u{1e}WEB_WELCOME:";
+pub(crate) const PROTOCOL_WELCOME_PREFIX: &str = "\u{1e}PROTOCOL_WELCOME:";
 const BUDDHA_ART: &str = r#"\\ \\ \\ \\ \\ \\ \\ \\ || || || || || || // // // // // // // //
 \\ \\ \\ \\ \\ \\ \\        _ooOoo_          // // // // // // //
 \\ \\ \\ \\ \\ \\          o8888888o            // // // // // //
@@ -81,6 +82,13 @@ pub(crate) fn startup_history(
     if let Some(url) = crate::web_ui::welcome_url() {
         history.push(format!("{WEB_WELCOME_PREFIX}{url}"));
     }
+    let connections = crate::protocol::connections::welcome_connections()
+        .map(|info| info.terminal_text(language))
+        .unwrap_or_else(|| match language {
+            UiLanguage::ZhCn => "MCP / A2A：另一个设备终端设置 NL2SH_PROTOCOL_TOKEN 后运行 nl2sh protocol serve；本地 MCP 使用 nl2sh protocol stdio。TUI/Web 不自动启动协议服务。".into(),
+            UiLanguage::En => "MCP / A2A: set NL2SH_PROTOCOL_TOKEN in another device terminal, then run nl2sh protocol serve; local MCP uses nl2sh protocol stdio. TUI/Web does not start protocols.".into(),
+        });
+    history.push(format!("{PROTOCOL_WELCOME_PREFIX}{connections}"));
     history
 }
 
@@ -176,6 +184,8 @@ mod tests {
         assert!(english.iter().any(|line| line.contains("applications")));
         assert!(english.iter().any(|line| line.contains("Shift+drag")));
         assert!(english.iter().any(|line| line.contains("Ctrl+Q")));
+        assert!(chinese.iter().any(|line| line.contains("MCP / A2A")));
+        assert!(english.iter().any(|line| line.contains("protocol stdio")));
         assert!(chinese.iter().any(|line| line.contains("nl2sh/nl2sh")));
         assert!(chinese.iter().any(|line| line.contains("点击支持 ->")));
         assert!(chinese.iter().any(|line| line.contains("点击赞赏 ->")));

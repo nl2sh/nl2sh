@@ -41,7 +41,7 @@ Agent 内调用 `start_system_trace` 成功后，运行时会登记绑定当前�
 
 开始返回 `trace_id`；后两步都用 `{"trace_id":"返回的 ID"}`，分析可加 `package` 或 `pid`（二选一），以及 `threshold_ms: 50`、`frame_budget_ms: 16.667`。刷新率为 120 Hz 时可把帧预算设为约 8.333 ms。也可只读分析已存在的外部原始 protobuf 文件：`{"path":"/data/local/tmp/example.pftrace","pid":1234}`。路径不接受符号链接，压缩 Trace 和通用 TrackEvent 不在支持范围内。
 
-采集固定请求调度、唤醒、Binder 和 gfx/view atrace；探测到时才加入进程元数据与 `android.surfaceflinger.frametimeline`。使用二进制 Perfetto 配置并关闭 compact_sched，不接受模型提供的配置或命令。时长默认 10 秒、最多 120 秒，缓冲默认 8 MiB、最多 32 MiB，文件最多 64 MiB。Perfetto 服务持有会话并在到期或文件上限时自动结束，允许跨 bridge 进程停止；只停止本工具创建的随机会话，不向任意 PID 发信号。主动采集中不能用 trace_id 分析。私有元数据保存在配置对应状态目录的 `system-traces/`，protobuf 文件由 Perfetto 以 `0600` 创建在系统允许的 `/data/misc/perfetto-traces/nl2sh-<trace_id>.pftrace`（受 Android SELinux 约束，不能直接写入任意应用目录）。最多保留 16 次；旧证据及对应元数据需用户显式删除，不上传。包过滤只限制应用 atrace，系统调度/Binder 仍全局采集，可能包含敏感名称。
+采集固定请求调度、唤醒、Binder 和 gfx/view atrace；探测到时才加入进程元数据与 `android.surfaceflinger.frametimeline`。使用二进制 Perfetto 配置并关闭 compact_sched，不接受模型提供的配置或命令。时长默认 10 秒、最多 120 秒，缓冲默认 8 MiB、最多 32 MiB，文件最多 64 MiB。Perfetto 服务持有会话并在到期或文件上限时自动结束，允许跨 nl2sh 进程停止；只停止本工具创建的随机会话，不向任意 PID 发信号。主动采集中不能用 trace_id 分析。私有元数据保存在配置对应状态目录的 `system-traces/`，protobuf 文件由 Perfetto 以 `0600` 创建在系统允许的 `/data/misc/perfetto-traces/nl2sh-<trace_id>.pftrace`（受 Android SELinux 约束，不能直接写入任意应用目录）。最多保留 16 次；旧证据及对应元数据需用户显式删除，不上传。包过滤只限制应用 atrace，系统调度/Binder 仍全局采集，可能包含敏感名称。
 
 报告列出覆盖计数、目标 PID、阈值、各类异常计数与最多 50 条例证，以及最多 30 个线程的运行/等待/唤醒摘要：
 

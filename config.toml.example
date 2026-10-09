@@ -40,9 +40,9 @@ execute_timeout_secs = 30
 interactive_execute_timeout_secs = 0
 execute_confirm_policy = "risk_only"
 security_level = "balanced"
-# Explicitly auto-approve all A2A/MCP bridge operations, including dangerous ones.
-# Only enable for a gateway whose Bearer token holders you fully trust.
-bridge_auto_approve = false
+# Explicitly auto-approve all device MCP/A2A service operations, including dangerous ones.
+# Only enable for device protocol clients whose token holders you fully trust.
+protocol_auto_approve = false
 # Optional tools are off until enabled here or in the Web tool catalog.
 tailcat_binary_path = "/data/local/tmp/tailcat"
 execute_user_mode = "auto"

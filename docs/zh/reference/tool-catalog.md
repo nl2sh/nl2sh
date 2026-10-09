@@ -1,6 +1,6 @@
 # 完整工具参数目录
 
-本页从 Rust 注册表与派生 JSON Schema 生成，包含已关闭的可选工具和 ima 能力。名称/类型/参数枚举是协议原文；具体可用项用 `nl2sh bridge tools` 或 Web 工具页核对。关闭项不能直接调用，bridge 不包含长期监听器操作。启用不等于批准，风险和平台支持见 [工具指南](../tools/index.md)。
+本页从 Rust 注册表与派生 JSON Schema 生成，包含已关闭的可选工具和 ima 能力。名称/类型/参数枚举是协议原文；具体可用项用 MCP `nl2sh_tools` 或 Web 工具页核对。关闭项不能直接调用，常驻协议服务可提供进程生命周期工具。启用不等于批准，风险和平台支持见 [工具指南](../tools/index.md)。
 
 [下载机器可读 Schema](../../assets/tool-schemas.json)。Schema 中的英文描述来自模型协议，中文行为说明列在各工具下。
 

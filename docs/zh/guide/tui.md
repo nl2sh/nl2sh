@@ -2,6 +2,8 @@
 
 无参数运行 `nl2sh` 进入多轮 Agent。缺少配置仍可打开界面，但普通模型任务需先配置 Provider。界面按终端能力选择 TrueColor / ANSI 256；`--ascii` 使用 ASCII 标签。
 
+启动页的“MCP / A2A”区域显示启动时读取的协议进程状态、已确认的公告地址、HTTP 鉴权和设备启动/本地 stdio 命令。TUI 不自动启动协议服务；未启动或状态未知时，8765 地址明确标为启动后的默认本机示例。需要刷新状态时运行 `nl2sh --config <配置路径> service status`，或在 Web 的“MCP / A2A”窗口刷新。连接与本地审批详见 [设备 MCP/A2A](../advanced/a2a-mcp.md)。
+
 | 操作 | 按键或命令 |
 | --- | --- |
 | 发送任务 | Enter |

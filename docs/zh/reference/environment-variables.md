@@ -1,6 +1,6 @@
 # 环境变量
 
-设备运行、主机安装、构建与网关是不同进程；在正确进程环境设置变量。设备不会自动继承电脑变量。密钥不要提交到 Git。
+设备运行、主机安装和构建是不同进程；在正确进程环境设置变量。设备不会自动继承电脑变量。密钥不要提交到 Git。
 
 | 变量 | 用途 |
 | --- | --- |
@@ -21,12 +21,10 @@
 | `ANDROID_HOME / ANDROID_SDK_ROOT / JAVA_HOME` | 可选 Android 模块的 SDK / JDK |
 | `NL2SH_PACKAGE_MANAGER_BUILD` | 构建期 1 表示禁用应用内自更新 |
 | `ANDROID_TMP_DIR / TERMUX_SSH_LOCAL_PORT / TERMUX_SSH_REMOTE_PORT / TERMUX_TMUX_SESSION` | Termux SSH/tmux 开发部署脚本 |
-| `NL2SH_A2A_TOKEN / NL2SH_A2A_URL / NL2SH_A2A_ALLOW_INSECURE_HTTP` | 网关令牌、客户端来源、远程 HTTP 显式选择 |
-| `NL2SH_DEVICE_SERIAL / NL2SH_DEVICE_BINARY / NL2SH_DEVICE_CONFIG` | Compose 的 Android 设备、程序与配置 |
-| `NL2SH_GATEWAY_BIND / NL2SH_GATEWAY_PORT / NL2SH_GATEWAY_URL / NL2SH_GATEWAY_BASE_IMAGE` | Compose 主机监听与公告地址、基础镜像 |
+| `NL2SH_PROTOCOL_TOKEN` | 设备 HTTP MCP/A2A 服务令牌，32–256 个可打印 ASCII 字符 |
 | `NL2SH_APT_GPG_KEY_ID / TERMUX_APT_GPG_PRIVATE_KEY` | APT 签名 key ID / CI Secret，私钥不进入源码 |
 | `NL2SH_WEB_DIST` | Cargo build.rs 生成的嵌入资源目录，非用户设置 |
 | `NL2SH_TAILCAT_TEST_BINARY / NL2SH_TAILCAT_TEST_PROXY` | 显式 Tailcat live 测试 |
 | `TAILCAT_HOST_BIN / TAILCAT_DEVICE_BIN` | 双向传输测试程序路径 |
 
-[网关细节](../advanced/a2a-mcp.md)与[配置优先级](configuration.md)。HTTP_PROXY / HTTPS_PROXY / ALL_PROXY 对主机下载工具的作用不等于 nl2sh 设备代理配置。
+[设备协议服务](../advanced/a2a-mcp.md)与[配置优先级](configuration.md)。HTTP_PROXY / HTTPS_PROXY / ALL_PROXY 对主机下载工具的作用不等于 nl2sh 设备代理配置。

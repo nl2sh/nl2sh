@@ -1,249 +1,117 @@
-# A2A / MCP 网关
+# 设备端 MCP / A2A
 
-本页介绍部署与客户端接入；协议格式、限制及排障见 [A2A/MCP 参考](../reference/a2a-mcp.md)。
+MCP 与 A2A 已内置在 nl2sh 的 Rust 可执行文件中。外部 Agent 直接连接设备，不需要 Python、Docker、主机网关或运行时 ADB。MCP 直接调用 Tool Runtime，A2A 向内置 Agent 委派任务。直接工具调用不需要模型；Agent 委派需要配置设备模型。协议和限制见 [协议参考](../reference/a2a-mcp.md)。
 
-这个可选的主机侧模块通过 A2A 1.0 JSON-RPC 接口开放 Android 设备上的 nl2sh Device Runtime。外部 Agent 可直接调用已注册的设备工具，也可选择咨询 nl2sh 内置 Agent。Android 端仍只需部署一个 Rust 可执行文件；Python 和 A2A SDK 运行在网关主机上。网关使用指定的 `adb` 设备序列号，也支持无线 ADB `设备 IP:端口`，通过受限的 `nl2sh bridge` JSON 接口通信，不开放任意 adb shell 命令接口。设备端无需新增网络监听器。
+## 查看连接方式
 
-## 启动
+TUI 启动页、`nl2sh --config <配置路径> service status`（含 `--json` 的 `connections` 字段）、Web 左侧垂直菜单“MCP / A2A”均提供连接方式。HTTP 运行时显示实际公告 origin，即使端口或 HTTPS 地址不同于默认值；stdio 运行只显示本地进程，不宣称 HTTP 可用。未启动或未知时，默认 loopback 地址仅作为明确标记的示例。Web 窗口可以刷新并复制客户端配置、启动命令与 A2A 请求体。
 
-前提条件：Python 3.11 或更新版本、`adb`、已连接的 Android 设备，以及设备上兼容的 nl2sh 程序。直接调用 Tool Runtime 不需要设备端模型服务；只有可选的内置 Agent 咨询需要配置模型。在主仓库的 `a2a_gateway/` 目录中，用虚拟环境安装网关：
+查询使用私有 `protocol/connection.json`、进程启动身份和独占锁，不读取令牌或向公告地址发出请求。停止后的遗留记录不会报告运行中。它只确认同 UID、同配置进程，不保证远端网络可达；TUI 为启动时快照，Web 与 CLI 查询刷新当前状态。三个展示入口不自动启动协议服务。
 
-```sh
-python3 -m venv .venv
-.venv/bin/pip install -e .
-export NL2SH_A2A_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-.venv/bin/nl2sh-a2a --serial DEVICE_SERIAL --binary /data/local/tmp/nl2sh \
-  --config /data/local/tmp/config.toml --db ./a2a-tasks.db
-```
+## 启动设备 HTTP 服务
 
-Windows 用户在 `a2a_gateway/` 目录中使用 PowerShell 执行对应命令，确保 Python 和 `adb` 已加入 `PATH`：
-
-```powershell
-py -3 -m venv .venv
-& .\.venv\Scripts\python.exe -m pip install -e .
-$env:NL2SH_A2A_TOKEN = & .\.venv\Scripts\python.exe -c 'import secrets; print(secrets.token_urlsafe(32))'
-& .\.venv\Scripts\nl2sh-a2a.exe --serial DEVICE_SERIAL --binary /data/local/tmp/nl2sh `
-  --config /data/local/tmp/config.toml --db .\a2a-tasks.db
-```
-
-`/data/local/tmp/...` 是 Android 设备路径，在 Windows 上也保持不变。后续 Codex 端配置还需使用这个令牌。
-
-公开的 Agent Card 位于 `http://127.0.0.1:8765/.well-known/agent-card.json`；A2A JSON-RPC 位于 `/a2a`，Streamable HTTP MCP 位于 `/mcp`。两个协议入口都要求 `Authorization: Bearer <token>`。其他机器可通过 HTTPS 反向代理访问，或在可信私有网络显式设置 `--host 0.0.0.0 --advertised-url http://网关IP:8765 --allow-insecure-http` 直接访问。普通 HTTP 会在网络上传输 Bearer 令牌，只应在受信任的 LAN/VPN 内使用。Agent Card 中的地址必须是 A2A 客户端实际可达的网关地址。一个令牌代表一个受信任的使用者，不应共享给互不信任的客户端。nl2sh 原有 Web 界面使用独立的监听端口和访问策略。
-
-## Docker Compose 与无线 ADB
-
-在**网关主机**的 `a2a_gateway/` 目录执行；设备上先部署兼容的 nl2sh 可执行文件和配置，并启用无线 ADB。经典无线 ADB 可先通过 USB 执行 `adb tcpip 5555`，然后使用 `设备IP:5555`；Android 无线调试配对模式使用设备显示的**连接端口**作为 `NL2SH_DEVICE_SERIAL`，配对端口只用于 `adb pair`。容器必须能访问设备的 ADB 端口。
+在设备 shell/root 终端设置一个随机、至少 32 字符的令牌，然后启动：
 
 ```sh
-cp .env.example .env
-chmod 600 .env
-python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
-# 将生成的令牌填入 .env 的 NL2SH_A2A_TOKEN；填写设备 IP:端口。
-# Hermes 在其他主机时，设置 NL2SH_GATEWAY_URL=http://网关IP:8765
-# 并设置 NL2SH_GATEWAY_BIND=0.0.0.0。
-docker compose up -d --build
-docker compose logs -f gateway
+export NL2SH_PROTOCOL_TOKEN='替换为32到256字符的随机令牌'
+nl2sh --config /data/local/tmp/config.toml protocol serve
 ```
 
-对于需要配对码的无线调试，启动服务前可在同一目录运行 `docker compose run --rm --entrypoint adb gateway pair 设备IP:配对端口`，输入设备显示的配对码。Compose 将 ADB 密钥和 SQLite 任务库分别保存在命名卷中；重建容器后不需重新配对。网关在每次工具调用前执行 `adb connect 设备IP:连接端口`，连接失败时不会执行该次设备操作，也不会在回复丢失后自动重放写入。
+默认独立监听 `127.0.0.1:8765`，不启动 TUI 或 Web。公开发现地址为 `/.well-known/agent-card.json`；`/mcp` 与 `/a2a` 均需 `Authorization: Bearer <token>`。Web 服务有独立端口和访问策略，协议令牌不改变 Web 的访问行为。每个配置的状态目录仅允许一个协议服务进程；HTTP 与 stdio 不应同时使用同一状态目录。
 
-无法访问 Docker Hub 的主机不必修改 `Dockerfile`：在 `.env` 设置 `NL2SH_GATEWAY_BASE_IMAGE`，或给 `docker build` 传 `--build-arg GATEWAY_BASE_IMAGE=...` 即可改用镜像站点。镜像需提供与默认 `python:3.12-slim-bookworm` 相同的 Python 标签。
-
-同一个 `gateway` 容器在 8765 端口提供 A2A 和 HTTP MCP，无需第二个 MCP 容器或外部 Docker 网络。`.env.example` 明确开启容器内的 HTTP 监听，但默认仅将宿主端口发布到 `127.0.0.1`。只有将 `NL2SH_GATEWAY_BIND` 改为 `0.0.0.0` 才能由其他机器按网关 IP 访问；此时应限制可信 LAN/VPN 的访问，或改用 HTTPS 反向代理。`NL2SH_GATEWAY_URL` 应与 A2A 客户端配置的来源地址完全一致。可用 `curl http://网关IP:8765/.well-known/agent-card.json` 检查公开卡片；`/a2a` 和 `/mcp` 仍需要令牌。Docker 和无线 ADB 不改变设备本地审批，需在设备的交互终端运行 `bridge approvals`/`bridge approve`。Docker 守护进程和 Compose 可用时，再执行上述容器命令；本机 Python 启动方式仍可使用相同的 `设备IP:端口` 作为 `--serial`。
-
-客户端发送 `/inspect` 可获取固定的只读设备环境信息，发送 `/tools` 可获取可用工具目录，发送 `/invoke {"tool":"android.screen_dump","arguments":{}}` 可直接调用一次设备 Tool Runtime，发送普通问题则会启动可选的设备端 Agent 对话。直接调用跳过设备端 Agent 和模型请求。Agent 续问时使用相同的 A2A `contextId`。A2A 任务保存在网关的 SQLite 数据库中，Agent 对话回合保存在 nl2sh 的设备端私有会话目录中。确认成功前须检查直接调用结果的 `success` 或 Agent 结果的 `failed_tools`。
-
-当前 UI 后端使用 Android shell/uiautomator，可选安装并启用 [Accessibility companion](android-bridge.md) 以支持中文等 Unicode 输入、实时节点树、语义节点点击和 swipe/scroll 手势。`android.scroll` 可省略坐标，按显示尺寸默认向下滚动，也可设置 `direction: "up"`。没有 companion 时，`android.input_text` 仅接受可打印 ASCII。操作后可再调用 `android.screen_dump` 或 `nl2sh_read_screen` 检查实际屏幕内容。
-
-默认情况下，直接 `/invoke` 调用遇到需要确认的操作时，最多等待 120 秒，让用户在另一个设备交互终端作出一次性决定。在设备上运行 `nl2sh --config /data/local/tmp/config.toml bridge approvals` 查看请求，再运行 `nl2sh --config /data/local/tmp/config.toml bridge approve REQUEST_ID`。审批命令展示完整操作和风险；危险操作要求再次输入精确短语。拒绝或超时均不执行。网关不暴露审批命令；Agent `/ask` 默认仍拒绝待确认操作。在设备端 `config.toml` 中设置 `bridge_auto_approve = true` 后，A2A/MCP 的 `ask` 和 `invoke` 会自动批准所有等级的操作，包括危险与严重操作，无需设备本地确认；设备下次桥接调用读取配置后生效，不影响 TUI、Web 或 CLI。工具参数校验、风险分类、命令绑定和 root 能力检查仍执行。桥接调用会把本地 `unsafe`/`never` 设置至少提升到 `balanced`/`risk_only`。此时网关令牌持有者能以设备进程权限无人值守执行操作，只应交给完全信任的客户端。
-
-## 构建、部署并继续任务
-
-编码 Agent 修改 nl2sh 后，可显式执行以下主机侧检查点：
+设备可达的可信 LAN/VPN 中，显式开放 HTTP：
 
 ```sh
-python3 -m nl2sh_a2a.workflow prepare --repo /path/to/nl2sh \
-  --serial DEVICE_SERIAL --state ./build-state.json --build-dir /path/to/build-target
-python3 -m nl2sh_a2a.workflow deploy --state ./build-state.json
-python3 -m nl2sh_a2a.workflow status --state ./build-state.json
+nl2sh --config /data/local/tmp/config.toml protocol serve \
+  --host 0.0.0.0 --port 8765 \
+  --advertised-url http://设备IP:8765 --allow-insecure-http
 ```
 
-Windows 主机执行这些检查点时，应在 WSL 的 Linux 项目检出目录运行上述命令，并在 WSL 中准备好 `adb`、Rust、Node.js 和 Android NDK。`prepare` 会调用 `cross-compile.sh`，检查点写入也使用 Unix 文件权限，因此此工作流不能直接在原生 PowerShell 中运行。`--repo`、`--state` 和 `--build-dir` 应使用 Linux 路径；网关服务本身仍可按上面的示例运行在 Windows PowerShell 中。
+将 `设备IP` 替换为客户端可达的设备地址。普通 HTTP 明文传输令牌；公网接入使用 HTTPS 反向代理，并将 `--advertised-url` 设置为实际 HTTPS origin。监听非 loopback 地址仍需 `--allow-insecure-http`，因为原生监听器提供 HTTP。公告 URL 不允许路径前缀、凭据、query 或 fragment。代理需保留公告 Host；服务校验 Host 和携带的 Origin。
 
-`prepare` 执行 Rust 格式检查、编译检查和测试，探测设备 ABI 并交叉编译。`deploy` 核对构建产物摘要和设备 ABI，只把程序推送到独立的 `/data/local/tmp/nl2sh-a2a-*` 候选路径，并检查程序版本；不会替换设备上现有的 `nl2sh`。随后将网关的 `--binary` 指向候选程序，沿用同一个 A2A 上下文，在设备上验证新功能。检查点文件和任务数据库应保持私有。主机侧命令必须由编码 Agent 或用户显式调用，外部 A2A 客户端不能把它们当作网关技能调用。
+服务可以在设置令牌的设备终端后台启动：
 
-运行网关测试：Unix 使用 `.venv/bin/python -m unittest discover -s tests -v`；Windows PowerShell 使用 `& .\.venv\Scripts\python.exe -m unittest discover -s tests -v`。
-
-## Hermes 等外部 Agent 的直接工具调用
-
-外部 Agent 可用 A2A 1.0 客户端连接 `/a2a`，用 HTTP MCP 客户端连接 `/mcp`，或用 stdio MCP 客户端连接 `nl2sh-a2a-mcp`，并在适配器环境中设置 `NL2SH_A2A_URL`、`NL2SH_A2A_TOKEN`。stdio MCP 适配器只需要 Python 与到网关的网络连接，不需要本机 `adb` 或设备端模型凭据。先用 `nl2sh_tools` 取得工具名称及参数 Schema，再通过 `nl2sh_invoke` 传入注册工具名称与结构化参数。视觉步骤可用 `nl2sh_read_screen`，可访问节点可用 `android.screen_dump`。外部 Agent 自己负责规划和生成语言；`nl2sh_ask` 会启动独立、可选的设备端内置 Agent，需设备端配置模型服务。
-
-Hermes Agent 可直接连接网关的 HTTP MCP。先在 Hermes 私有的 `~/.hermes/.env` 中设置 `NL2SH_A2A_TOKEN`，再将以下配置加入 `~/.hermes/config.yaml`：
-
-```yaml
-mcp_servers:
-  nl2sh_android:
-    url: "http://127.0.0.1:8765/mcp"
-    headers:
-      Authorization: "Bearer ${NL2SH_A2A_TOKEN}"
-    skip_preflight: true
-    timeout: 210
-    tools:
-      include: [nl2sh_inspect, nl2sh_tools, nl2sh_invoke, nl2sh_read_screen]
-      resources: false
-      prompts: false
+```sh
+nohup nl2sh --config /data/local/tmp/config.toml protocol serve \
+  --host 0.0.0.0 --advertised-url http://设备IP:8765 --allow-insecure-http \
+  </dev/null > /data/local/tmp/nl2sh-protocol.log 2>&1 &
 ```
 
-`skip_preflight` 让 Hermes 在此端点的 HEAD 检查未返回 MCP 内容类型时继续发送 MCP `initialize` POST。Hermes 与网关分机时，首选通过 HTTPS 反向代理连接 `https://网关主机/mcp`。若使用可信私有 LAN/VPN 的明文 HTTP，在网关 `.env` 中设置 `NL2SH_GATEWAY_BIND=0.0.0.0`、`NL2SH_GATEWAY_URL=http://网关IP:8765`，再把上例 MCP URL 的 `127.0.0.1` 换成网关 IP。HTTP 会明文传输 MCP Bearer 令牌。这里使用 Streamable HTTP 的 `/mcp`，不是旧式 SSE `/sse`。缺少令牌的请求返回 401；发现工具后调用 `nl2sh_inspect` 才能确认设备链路。Compose 健康检查仅探测公开 Agent Card，不能证明 MCP 鉴权或设备连接成功。
+保护日志和配置目录，不把令牌放入公共脚本或版本控制。设备需维持网络可达和进程存活；启动命令不会自动建立后台保活。SIGINT/SIGTERM 请求取消并等待当前操作安全结束，随后关闭服务；取消不回滚已经发生的动作。
 
-若 Hermes 运行在同一主机的另一个容器中，将 Hermes 容器加入本网关 Compose 项目的默认网络，MCP URL 使用 `http://gateway:8765/mcp`，并继续传入相同的 Authorization Header。网关宿主端口仍可只绑定回环地址。HTTP MCP 工具在网关进程内调用 A2A，因此这种接法不要求 Agent Card 公告地址为 `gateway:8765`。
+## 连接 MCP 客户端
 
-也可以在 Hermes 所在主机的 Python 虚拟环境安装本网关包，使用下面的本地 stdio 适配器配置。把命令路径换成该虚拟环境中的 `nl2sh-a2a-mcp`，并在 Hermes 私有的 `~/.hermes/.env` 或进程环境设置 `NL2SH_A2A_TOKEN`。Hermes 与 A2A 网关同机时可用示例中的 loopback 地址；分机运行时首选 HTTPS。若网关按上面的可信私网 HTTP 方式发布，把 `NL2SH_A2A_URL` 改为 `http://网关IP:8765`，并在 Hermes MCP 服务的 `env` 中加入 `NL2SH_A2A_ALLOW_INSECURE_HTTP: "1"`；默认客户端会拒绝远程明文 HTTP。
+HTTP 客户端直接使用 `http://设备IP:8765/mcp`，远程优先 HTTPS。使用 Streamable HTTP，路径不是 `/sse`。客户端环境中的 `NL2SH_PROTOCOL_TOKEN` 必须与设备服务令牌相同。
 
-```yaml
-mcp_servers:
-  nl2sh_android:
-    command: "/path/to/nl2sh-a2a-mcp"
-    env:
-      NL2SH_A2A_URL: "http://127.0.0.1:8765"
-      NL2SH_A2A_TOKEN: "${NL2SH_A2A_TOKEN}"
-    timeout: 210
-    tools:
-      include: [nl2sh_inspect, nl2sh_tools, nl2sh_invoke, nl2sh_read_screen]
-      resources: false
-      prompts: false
-```
-
-Hermes 与网关分机、通过可信私网 IP 直连时，将上例的 `env` 改为：
-
-```yaml
-    env:
-      NL2SH_A2A_URL: "http://192.168.1.10:8765"
-      NL2SH_A2A_TOKEN: "${NL2SH_A2A_TOKEN}"
-      NL2SH_A2A_ALLOW_INSECURE_HTTP: "1"
-```
-
-其中 `192.168.1.10` 替换为网关主机 IP，必须与网关 `.env` 的 `NL2SH_GATEWAY_URL` 一致；Android 设备 IP 只填写在网关的 `NL2SH_DEVICE_SERIAL` 中。
-
-工具白名单让 Hermes 只看到直接调用路径，不加载可选的内置 Agent `nl2sh_ask`。210 秒 MCP 调用超时为适配器的 200 秒 HTTP 超时及设备端 120 秒审批窗口留出空间；网关没有独立的 200 秒服务端总时限。修改配置后重启 Hermes 或重新加载 MCP 连接。以上字段和环境变量引用见 Hermes 官方 [MCP 配置参考](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference)。
-
-例如先以 `{}` 调用 `android.screen_dump`，确认出现目标节点后，再以 `{"text":"搜索"}` 调用 `android.tap_text`。第二步需设备本地审批；操作后重新读取 UI 并检查直接结果的 `success`。这条流程不绑定具体 App，也不向外部 Agent 提供批准入口。
-
-## 供 Codex 使用的 A2A→MCP 适配层
-
-同一个 Python 包还会安装 `nl2sh-a2a-mcp`，这是一个运行在本机、通过标准输入输出通信的 MCP 服务。它向网关发送带认证的 A2A 1.0 请求，本身不直接连接 Android 或 `adb`。它提供 `nl2sh_inspect`、`nl2sh_tools`、`nl2sh_invoke`、`nl2sh_read_screen`、`nl2sh_ask` 和 `nl2sh_get_task` 六个工具。`nl2sh_read_screen` 返回视觉模型可读取的 MCP 图像块。每次结果都包含 `task_id`、`context_id` 和任务 `state`；已完成的任务还包含设备返回结果。续问时将 `context_id` 传给 `nl2sh_ask`，确认成功前应检查直接调用的 `result.success` 或 Agent 的 `result.failed_tools`。
-
-### 在 Codex 所在机器安装
-
-以下命令在 **Codex 所在机器** 执行。A2A 网关应先在连接 Android 设备的机器上启动；Codex 所在机器只需 Python 和到网关的网络连接，不需要 `adb`、Android SDK 或 NDK。
-
-1. 在客户端机器克隆主仓库并进入网关目录：
-
-   ```sh
-   git clone https://github.com/nl2sh/nl2sh.git
-   cd nl2sh/a2a_gateway
-   ```
-
-   Windows PowerShell 也可使用上述命令。每台机器分别创建虚拟环境，不复制网关主机的 `.venv/`。
-
-2. 确认 Python 至少为 3.11，创建该机器自己的虚拟环境并安装 Python 包：
-
-   ```sh
-   python3 --version
-   python3 -m venv .venv
-   .venv/bin/python -m pip install .
-   test -x .venv/bin/nl2sh-a2a-mcp
-   ```
-
-   `pip install .` 会安装依赖和 `nl2sh-a2a-mcp` 命令。修改本地适配层源码并希望立即生效时，可改用 `.venv/bin/python -m pip install -e .`。若 `python3 -m venv` 不可用，先安装该操作系统提供的 Python venv 组件。
-
-   Windows PowerShell 中，在 `nl2sh/a2a_gateway/` 目录运行以下命令：
-
-   ```powershell
-   py -3 --version
-   py -3 -m venv .venv
-   & .\.venv\Scripts\python.exe -m pip install .
-   Test-Path .\.venv\Scripts\nl2sh-a2a-mcp.exe
-   ```
-
-   确认 Python 版本至少为 3.11，且最后一条命令输出 `True`。若要以可编辑模式安装，使用 `& .\.venv\Scripts\python.exe -m pip install -e .`。
-
-   如果安装时使用的软件包镜像报告 `No matching distribution found for hatchling>=1.25`，在当前目录指定官方 PyPI 源重试：
-
-   ```powershell
-   & .\.venv\Scripts\python.exe -m pip install --index-url https://pypi.org/simple .
-   ```
-
-   此参数只覆盖本次命令使用的软件包源，包含隔离构建环境所需的依赖，不会修改全局 pip 配置。如果仍显示镜像地址，可运行 `& .\.venv\Scripts\python.exe -m pip config debug` 和 `Get-ChildItem Env:PIP*` 检查生效的配置。
-
-3. 建立到网关的连接。使用 SSH 隧道时，在 Codex 所在机器的另一个终端保持下列命令运行：
-
-   ```sh
-   ssh -N -L 8765:127.0.0.1:8765 USER@GATEWAY_HOST
-   ```
-
-   将 `USER@GATEWAY_HOST` 替换为网关主机的 SSH 地址。如果已有受信任的 HTTPS 反向代理，则无需 SSH 隧道。stdio 通过此隧道连接时，网关卡片须公告 `http://127.0.0.1:8765/a2a`，与客户端 origin 一致；即使隧道可用，公告其他主机名也会被同源检查拒绝。
-   安装 OpenSSH Client 后，Windows PowerShell 也可使用同一条 `ssh -N -L 8765:127.0.0.1:8765 USER@GATEWAY_HOST` 命令。
-
-4. 在**即将启动 Codex 的终端**设置网关地址和同一个 Bearer 令牌，并检查 Agent Card 可访问：
-
-   ```sh
-   export NL2SH_A2A_URL=http://127.0.0.1:8765
-   read -r -s -p 'A2A token: ' NL2SH_A2A_TOKEN
-   printf '\n'
-   export NL2SH_A2A_TOKEN
-   curl -fsS "$NL2SH_A2A_URL/.well-known/agent-card.json" | python3 -m json.tool
-   ```
-
-   使用 HTTPS 反向代理时，把 `NL2SH_A2A_URL` 改为网关 `--advertised-url` 所用的来源地址，例如 `https://agent.example.com`。令牌须与启动网关时的 `NL2SH_A2A_TOKEN` 相同；上述输入方式不会把令牌写入 shell 历史。
-
-   Windows PowerShell 中改用以下命令；安全输入不会回显令牌或将其写入命令历史：
-
-   ```powershell
-   $env:NL2SH_A2A_URL = 'http://127.0.0.1:8765'
-   $secureToken = Read-Host 'A2A token' -AsSecureString
-   $env:NL2SH_A2A_TOKEN = [System.Net.NetworkCredential]::new('', $secureToken).Password
-   Remove-Variable secureToken
-   (Invoke-RestMethod "$env:NL2SH_A2A_URL/.well-known/agent-card.json") | ConvertTo-Json -Depth 20
-   ```
-
-5. 在该机器的 `~/.codex/config.toml` 中添加 MCP 服务，将 `command` 改为第 2 步生成的可执行文件**绝对路径**：
+支持相应 MCP 配置的客户端可填写：
 
 ```toml
-[mcp_servers.nl2sh_a2a]
-command = "/absolute/path/to/a2a_gateway/.venv/bin/nl2sh-a2a-mcp"
-env_vars = ["NL2SH_A2A_URL", "NL2SH_A2A_TOKEN"]
+[mcp_servers.nl2sh]
+url = "http://设备IP:8765/mcp"
+bearer_token_env_var = "NL2SH_PROTOCOL_TOKEN"
 tool_timeout_sec = 210
 ```
 
-   如显式启用可信远程 HTTP，还需导出 `NL2SH_A2A_ALLOW_INSECURE_HTTP=1`，并将变量名加入 `env_vars`。
+先调用 `nl2sh_tools` 获取当前工具名称和 Schema，再调用 `nl2sh_invoke`，例如：
 
-   `command` 示例中的 `/absolute/path/to/a2a_gateway` 不能原样使用；在该目录运行 `pwd` 可取得实际路径。`env_vars` 会把启动 Codex 时已有的两个变量传给本地 MCP 子进程，不要把令牌值写进 TOML 文件。
-
-   Windows 上配置文件位于 `$HOME\.codex\config.toml`。`command` 应填入 `.exe` 入口的绝对路径，并在 TOML 中使用正斜杠。例如：
-
-   ```toml
-   [mcp_servers.nl2sh_a2a]
-   command = "C:/projects/nl2sh-a2a-gateway/.venv/Scripts/nl2sh-a2a-mcp.exe"
-   env_vars = ["NL2SH_A2A_URL", "NL2SH_A2A_TOKEN"]
-tool_timeout_sec = 210
-   ```
-
-   可运行 `(Resolve-Path .\.venv\Scripts\nl2sh-a2a-mcp.exe).Path` 查找实际路径，并替换示例中的 `C:/projects/nl2sh-a2a-gateway`。
-
-6. 从第 4 步的终端启动或重启 Codex，运行 `codex mcp list` 确认出现 `nl2sh_a2a`，然后请 Codex 调用 `nl2sh_inspect`。能返回设备信息才表示 MCP → A2A → Android 链路实际连通；仅能看到工具名称还不足以证明网关鉴权或设备连接正常。
-
-适配层默认拒绝远程明文 HTTP（显式开启后可用），并拒绝把令牌引向其他来源的 Agent Card。MCP 不提供批准工具，设备按配置选择本地审批或显式 `bridge_auto_approve`。
-
-### Codex 直接使用 HTTP MCP
-
-网关可达时，可用以下配置替代上面的 stdio 入口，客户端无需安装本地 Python 包。在启动 Codex 的环境中设置 `NL2SH_A2A_TOKEN`，填入实际 `/mcp` 地址（远程优先 HTTPS，隧道可用 loopback）：
-
-```toml
-[mcp_servers.nl2sh_a2a]
-url = "http://127.0.0.1:8765/mcp"
-bearer_token_env_var = "NL2SH_A2A_TOKEN"
-tool_timeout_sec = 210
+```json
+{"tool":"android.screen_dump","arguments":{}}
 ```
 
-同一服务名选择一种传输即可。stdio 配置也需 `tool_timeout_sec = 210`，客户端默认 60 秒短于设备审批窗口。环境与超时字段见 [OpenAI 官方 MCP 文档](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。重启客户端后调用 `nl2sh_inspect` 验证完整链路；本网关使用 Bearer 鉴权，不使用 OAuth 登录流程。
+视觉步骤调用 `nl2sh_read_screen`，返回文本和 PNG/JPEG MCP 图像块。检查 `success`、`isError` 和新的设备证据后再宣称完成。`nl2sh_ask` 进入设备 Agent，返回 Task；保存 `contextId`，后续调用用 `context_id` 续问。MCP 工具执行不经过 A2A，也不把直接工具调用加入 Agent 历史。
+
+本地 MCP 客户端与 nl2sh 位于同一设备或主机时，可直接启动 stdio：
+
+```sh
+nl2sh --config /path/to/config.toml protocol stdio
+```
+
+stdio 不需要 Bearer 令牌，使用启动用户的本地权限。stdout 专用于 MCP，诊断使用 stderr。远程客户端不能通过这个命令启动另一台设备上的进程，应使用 HTTP 接入。
+
+## A2A Agent 委派
+
+Agent Card 公告 A2A 1.0 JSON-RPC。发送普通用户文本给 `/a2a`，不使用旧的斜杠工具命令：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "request-1",
+  "method": "SendMessage",
+  "params": {
+    "message": {
+      "messageId": "unique-message-1",
+      "role": "ROLE_USER",
+      "parts": [{"text": "读取设备环境并总结"}]
+    },
+    "configuration": {"returnImmediately": true}
+  }
+}
+```
+
+请求带 `Content-Type: application/json`、`Authorization: Bearer <token>` 和 `A2A-Version: 1.0`。`returnImmediately` 返回已提交任务；省略或 false 等待最终状态。用 `GetTask` 查询任务，`ListTasks` 按上下文/状态分页，`CancelTask` 请求取消。同一 `contextId` 的 Agent 任务串行处理；续问发送新的消息与任务，不携带旧 `taskId`。直接工具调用使用 MCP。
+
+## 设备本地审批
+
+默认情况下，工具调用和 Agent 委派遇到修改都等待设备本地一次性审批。另一个**同 UID、同配置路径**的设备交互终端运行：
+
+```sh
+nl2sh --config /data/local/tmp/config.toml protocol approvals
+nl2sh --config /data/local/tmp/config.toml protocol approve REQUEST_ID
+```
+
+审批展示完整动作与本地风险；危险操作还需输入绑定请求 ID 的精确短语。120 秒过期、拒绝或取消都不批准操作。最多同时八个待决审批；MCP/A2A 没有远程批准接口。
+
+显式设置 `protocol_auto_approve = true` 会自动批准协议调用的全部风险等级，包括 Dangerous/Critical，只适用于完全信任的调用者。它默认关闭；配置在新协议任务执行时读取，当前任务保留快照。参数校验、安全评估、命令绑定和 root 能力检查继续执行，TUI/Web/普通 CLI 使用各自审批器。
+
+## 更新与验证
+
+升级设备 nl2sh 后重新启动协议服务。原 `a2a_gateway/`、`nl2sh-a2a`、`nl2sh-a2a-mcp`、`bridge` 命令及 `bridge_auto_approve` 已移除，不提供兼容入口或自动迁移；旧配置需要删除旧字段并按上文重新设置。
+
+内置协议回归：
+
+```sh
+cargo test --lib protocol::
+cargo test --test protocol_stdio_tests
+```
+
+Android 完整 UI 自动化要求 shell/root UID；普通 Termux UID 的能力不同。可选 [Android Bridge](android-bridge.md) 支持实时节点树、Unicode 输入与手势，调用仍使用 nl2sh 的审批和目标复核。

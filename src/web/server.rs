@@ -219,6 +219,7 @@ pub(in crate::web) fn router(state: Arc<Shared>) -> Router {
     Router::new()
         .route("/healthz", get(|| async { Json(serde_json::json!({"status":"ok"})) }))
         .route("/api/info", get(get_info))
+        .route("/api/connections", get(get_connections))
         .route("/api/update", get(get_update).post(start_update))
         .route("/api/update/progress", get(update_progress))
         .route("/api/version", get(|| async { env!("CARGO_PKG_VERSION") }))

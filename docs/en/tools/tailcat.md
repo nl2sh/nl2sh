@@ -12,7 +12,7 @@ The optional `tailcat` group defaults off. `tailcat_check` reads the configured 
 | `tailcat_status` | Read current process listener state |
 | `tailcat_stop` | Stop a current process listener; confirmation |
 
-Results return a connection address; share only with intended peers. Receiver/service jobs belong to the current TUI/Web process and terminate when the parent exits. One-shot bridge exposes install/check/send, without cross-request listener management. Disabling the group does not lower shell Tailcat command risks.
+Results return a connection address; share only with intended peers. Receiver/service jobs belong to the current TUI/Web/protocol service process and terminate when the parent exits. The device protocol service supports cross-request listener management. Disabling the group does not lower shell Tailcat command risks.
 
 For live testing set `NL2SH_TAILCAT_TEST_BINARY` and run `cargo test --test tailcat_live_tests -- --ignored`. With Tailcat on host and connected device, set `TAILCAT_HOST_BIN`, `TAILCAT_DEVICE_BIN`, and `ADB_SERIAL` for `./test-tailcat-connected.sh`; it removes only its own temporary files.
 
@@ -131,7 +131,7 @@ Web is available on the peer computer at `http://127.0.0.1:19999/`. Device ports
 
 Default peer-local ports are 13701 for pairing, 13702 for connecting, and 19999 for optional Web. If occupied, set `local_pair_port`, `local_connect_port`, and `local_web_port` in the `share` arguments. Used local ports must be nonzero, distinct, and different from ADB server port 5037. `web_port` must differ from both ADB ports and have an accessible existing service.
 
-Use `tailcat_status({})` to inspect sharing and approve `tailcat_stop({})` to stop the entire listener. Stopping the tunnel does not disable system Wireless debugging or revoke paired computers; turn it off or forget devices in Settings yourself. The listener belongs to the current TUI/Web process; this tool is unavailable in one-shot bridge processes.
+Use `tailcat_status({})` to inspect sharing and approve `tailcat_stop({})` to stop the entire listener. Stopping the tunnel does not disable system Wireless debugging or revoke paired computers; turn it off or forget devices in Settings yourself. The listener belongs to the current TUI/Web/protocol service process.
 
 ## Wireless ADB feasibility test
 

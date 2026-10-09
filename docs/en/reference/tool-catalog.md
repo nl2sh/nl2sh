@@ -1,6 +1,6 @@
 # Complete tool argument catalog
 
-Generated from the Rust registry and derived JSON schemas, including disabled optional tools and ima capability. Names/types/enums retain protocol spelling. Check actual availability with `nl2sh bridge tools` or Web tools. Disabled tools cannot be invoked; bridge excludes long-lived listeners. Enabling does not approve actions. See [tool guides](../tools/index.md) for risks/platforms.
+Generated from the Rust registry and derived JSON schemas, including disabled optional tools and ima capability. Names/types/enums retain protocol spelling. Check actual availability with MCP `nl2sh_tools` or Web tools. Disabled tools cannot be invoked; the long-lived protocol service can expose process-lifetime tools. Enabling does not approve actions. See [tool guides](../tools/index.md) for risks/platforms.
 
 [Download machine-readable schemas](../../assets/tool-schemas.json). Protocol descriptions inside schemas are preserved verbatim.
 
@@ -2674,7 +2674,7 @@ List requested and declared manifest permissions; does not infer installed grant
 
 ## `nl2sh_config`
 
-Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Writes preserve other fields and comments and do not hot-reload the current task. New Web tasks/bridge processes reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.
+Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Writes preserve other fields and comments and do not hot-reload the current task. New Web/protocol tasks reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.
 
 | Descriptor | Value |
 | --- | --- |
@@ -2884,7 +2884,7 @@ After confirmation, start a bounded device Perfetto system trace (1–120s, 1–
 
 ## `stop_system_trace`
 
-After confirmation, stop only the managed Perfetto session identified by trace_id and finalize its trace file. Safe across bridge processes; expired captures are recognized. Never kills an arbitrary PID or another tracing session.
+After confirmation, stop only the managed Perfetto session identified by trace_id and finalize its trace file. Safe across nl2sh processes; expired captures are recognized. Never kills an arbitrary PID or another tracing session.
 
 | Descriptor | Value |
 | --- | --- |

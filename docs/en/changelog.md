@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Add MCP/A2A connection guidance to TUI startup, human/JSON `service status`, and the Web left vertical menu. Shared private process discovery shows actual advertised URLs, HTTP/stdio client configuration and local approval guidance, distinguishes default examples from running endpoints, and omits token values.
+
+- Move MCP/A2A into the single device Rust executable: authenticated HTTP, local stdio MCP, A2A Agent delegation, persisted device tasks/query/cancellation, and serialized contexts. Tool and Agent mutations default to local `protocol approvals/approve`; configuration is now `protocol_auto_approve`. Remove the Python/ADB gateway, Docker, bridge command, deployment workflow, and legacy configuration compatibility; clients connect directly to the device.
+
 - Add a Web update badge and Update now / Not now / Skip dialog. Standalone Android installations update directly with actual download progress and verification/installation phases, preserving ownership and signature checks and prompting for a restart on completion. Local image, audio, and video links in conversation answers reuse file manager previews, including WAV/PCM parameter playback.
 
 - Move `android-run-windows.bat` Web mode onto native `service start --json`, matching the Linux and build launchers. Stopping now closes only the managed service owned by this configuration instead of ending every nl2sh process on the device by name. All Web-only launchers reuse an already healthy service, so a newly pushed binary needs an explicit `service restart --json`. Add launcher regression tests that keep `nohup`, `kill -9`, and `/proc` process scans out.

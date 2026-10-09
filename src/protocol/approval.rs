@@ -1,4 +1,4 @@
-//! One-time, device-local approval channel for direct bridge tool calls.
+//! One-time, device-local approval channel for protocol calls.
 
 use crate::{
     agent::{ConfirmationDecision, Confirmer},
@@ -45,12 +45,12 @@ struct PendingRequest {
     rules: Vec<String>,
 }
 
-/// Confirmer that pauses a direct bridge call for one local terminal decision.
-pub(super) struct BridgeApprovalConfirmer {
+/// Confirmer that pauses a protocol call for one local terminal decision.
+pub(super) struct LocalApprovalConfirmer {
     root: PathBuf,
 }
 
-impl BridgeApprovalConfirmer {
+impl LocalApprovalConfirmer {
     pub(super) fn new(config_path: &Path) -> Result<Self> {
         Ok(Self {
             root: approval_root(config_path)?,
@@ -101,9 +101,9 @@ impl Drop for ApprovalLock {
 }
 
 #[async_trait]
-impl Confirmer for BridgeApprovalConfirmer {
+impl Confirmer for LocalApprovalConfirmer {
     fn audit_source(&self) -> &'static str {
-        "bridge_terminal"
+        "protocol_terminal"
     }
     async fn confirm(
         &self,
@@ -433,7 +433,7 @@ fn connect_socket(path: &Path) -> Result<UnixStream> {
 #[cfg(test)]
 mod tests {
     use super::{
-        approval_matches, read_pending, request_path, send_decision, BridgeApprovalConfirmer,
+        approval_matches, read_pending, request_path, send_decision, LocalApprovalConfirmer,
         PendingRequest,
     };
     use crate::{config::Config, shell::ShellExecutor, tools::runtime::invoke};
@@ -446,7 +446,7 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let config_path = directory.path().join("config.toml");
         let target = directory.path().join("target.txt");
-        let confirmer = BridgeApprovalConfirmer::new(&config_path)?;
+        let confirmer = LocalApprovalConfirmer::new(&config_path)?;
         let root = confirmer.root.clone();
         let stale_paths = (0..stale_requests)
             .map(|index| root.join(format!("rdead{index:08}")))
@@ -517,7 +517,7 @@ mod tests {
     async fn concurrent_calls_cannot_exceed_pending_approval_limit() -> Result<()> {
         let directory = tempfile::tempdir()?;
         let config_path = directory.path().join("config.toml");
-        let root = BridgeApprovalConfirmer::new(&config_path)?.root;
+        let root = LocalApprovalConfirmer::new(&config_path)?.root;
         let barrier = Arc::new(Barrier::new(super::MAX_PENDING * 2 + 1));
         let mut tasks = Vec::new();
         let mut targets = Vec::new();
@@ -529,7 +529,7 @@ mod tests {
             tasks.push(tokio::spawn(async move {
                 let config = Config::default();
                 let executor = ShellExecutor::new(config.clone());
-                let confirmer = BridgeApprovalConfirmer::new(&config_path)?;
+                let confirmer = LocalApprovalConfirmer::new(&config_path)?;
                 barrier.wait().await;
                 invoke(
                     &config,

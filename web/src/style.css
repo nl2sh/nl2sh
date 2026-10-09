@@ -448,3 +448,9 @@ button:disabled { opacity: .45; }
 .tailcat-modal .tailcat-port{width:90px}
 
 .update-check{position:relative;display:flex}.update-check>button{position:relative;display:flex;align-items:center}.update-dot{position:absolute;right:3px;top:3px;width:7px;height:7px;border-radius:50%;background:var(--error)}.update-modal{width:min(560px,92vw)}.update-choices{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}.update-progress progress{width:100%}.update-progress p{overflow-wrap:anywhere}.media-preview{display:inline-block;max-width:100%}.media-preview img,.media-preview video{display:block;max-width:100%;max-height:65vh;object-fit:contain}.media-preview audio{max-width:100%}.message [data-media-path]{display:inline-block;max-width:100%;vertical-align:top}.message img{max-width:100%}
+/* Connection values remain selectable and horizontally scrollable on narrow screens. */
+.protocol-connections section{margin-top:1.5rem;border-top:1px solid var(--border);padding-top:.75rem}
+.connection-value{margin:.75rem 0}
+.connection-value-heading{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+.connection-value pre{white-space:pre;overflow:auto;max-width:100%;margin:.35rem 0;padding:.65rem;background:var(--background-alt);border-radius:6px}
+.connection-value small{color:var(--text-secondary)}

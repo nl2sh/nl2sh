@@ -49,18 +49,29 @@ pub struct Status {
     pub port: Option<u16>,
     /// Unix startup timestamp.
     pub started_at: Option<u64>,
+    /// Device protocol connections, populated by the public CLI independently of Web status.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connections: Option<crate::protocol::ConnectionInfo>,
 }
 
 impl Status {
     /// Compact human-readable summary.
     pub fn summary(&self) -> String {
-        format!(
-            "{} pid={} port={} version={}",
+        let mut text = format!(
+            "Web: {} pid={} port={} version={}",
             self.state,
             self.pid.map_or_else(|| "-".into(), |v| v.to_string()),
             self.port.map_or_else(|| "-".into(), |v| v.to_string()),
             self.version.as_deref().unwrap_or("-")
-        )
+        );
+        if let Some(port) = self.port {
+            text.push_str(&format!("\nWeb URL: http://127.0.0.1:{port}"));
+        }
+        if let Some(connections) = &self.connections {
+            text.push('\n');
+            text.push_str(&connections.terminal_text(crate::config::UiLanguage::En));
+        }
+        text
     }
 }
 
@@ -201,6 +212,7 @@ impl Service {
             version: Some(record.version),
             port: Some(record.port),
             started_at: Some(record.started_at),
+            connections: None,
         })
     }
 
@@ -420,10 +432,11 @@ fn stopped() -> Status {
         version: None,
         port: None,
         started_at: None,
+        connections: None,
     }
 }
 
-fn start_ticks(pid: u32) -> Result<Option<u64>> {
+pub(crate) fn start_ticks(pid: u32) -> Result<Option<u64>> {
     let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
         Ok(value) => value,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

@@ -1,6 +1,16 @@
 # Project Plan
 
-状态以 2026-10-01 的代码、验证记录和公开发布状态为准；当前发布版本为 1.0.6。未完成项不会机械勾选。
+## 设备端内置 MCP/A2A
+
+- [x] 共享设备执行入口；MCP 直接调用 Tool Runtime，A2A 委派内置 Agent。
+- [x] HTTP/stdio MCP、独立鉴权监听器及 A2A 1.0 JSON-RPC。
+- [x] 设备私有 SQLite 任务库、上下文串行、协作取消、退出等待与重启不重放。
+- [x] 本地 protocol approvals/approve 和默认关闭的 protocol_auto_approve。
+- [x] 删除 Python/ADB 网关、Docker 配置、bridge CLI、部署工作流及旧配置兼容。
+- [x] 同步双语部署、协议、安全与派生 CLI/config/tool 参考。
+- [x] TUI 启动页、service status 和 WebUI 展示共享协议连接信息与启动/客户端配置。
+
+状态以 2026-10-09 的代码与验证记录为准；当前 Cargo 版本为 1.1.0，公开发布状态以实际 Release 为准。未完成项不会机械勾选。
 
 ## Agent Runtime 平台化重构 — 完成实现与本地验收
 
@@ -54,18 +64,17 @@
 - [x] APK/JADX 与 Tailcat 工具组默认关闭，允许按组及按单工具设置并保存配置；关闭工具不进入模型定义或直接调用注册表。
 - [x] Tailcat 结构化检查、原始流接收与发送、文件接收箱与复制、单端口服务及状态/停止；操作按本地风险审批，监听器绑定当前进程。
 - [x] Tailcat 安装工具按 Android ABI 选取固定官方发行包，在修改确认后下载、校验并原子安装；检查工具继续保持只读。
-- [x] 通用 shell 路径对 Tailcat 网络与文件操作升险；一次性 bridge 入口过滤无法保持的监听器工具。
+- [x] 通用 shell 路径对 Tailcat 网络与文件操作升险；设备协议服务按生命周期保持监听器工具。
 - [x] 宿主工具级 live 测试及已连接 Android 设备双向传输脚本。
 
 ## Hermes 设备 Tool Runtime — 进行中
 
-- [x] A2A 网关支持 Docker Compose 部署、无线 ADB `设备IP:端口` 连接与跨主机 Hermes MCP 接入；明文私网 HTTP 需显式开启，ADB 密钥和任务库由命名卷持久化。
-- [x] 创建 `feature/hermes` 分支，保留内置 Agent，并增加直接工具调用的 bridge/A2A/MCP 路径。
+- [x] 设备端内置 MCP/A2A 替代主机网关；旧 ADB 协议传输、bridge CLI 与兼容配置已删除。
+- [x] 创建 `feature/hermes` 分支，保留内置 Agent，并增加设备端直接工具调用与 MCP/A2A 路径。
 - [x] 注册通用 `android.*` UI 工具，复用设备端工具准备、安全评估和确认；文字/节点点击执行前重读 UI 树。
 - [x] 将当前节点所属包名纳入语义点击与 Unicode 输入的审批前后和 companion 最终执行校验。
 - [x] 为每个 `android.*` 工具公开对应字段与必填参数的 Schema，并在准备阶段拒绝无关参数。
-- [x] 建立设备交互终端的一次性审批通道；直接工具调用等待本地决定，修改类需确认、危险类需二次确认，网关不暴露批准入口。
-- [x] 增加默认关闭的 `bridge_auto_approve` 设备配置，使 A2A/MCP 的 `ask` 与 `invoke` 可显式自动批准所有风险等级；其他入口继续使用各自审批器。
+- [x] 建立设备交互终端的一次性审批通道；直接工具调用等待本地决定，修改类需确认、危险类需二次确认，协议不暴露批准入口。
 - [x] 直接工具结果保留 `view_screenshot` 的有界图片附件，A2A/MCP 传输限额覆盖其最大尺寸。
 - [x] 提供无持久截图文件的直接屏幕捕获与有界图片回传，MCP 将图片转为视觉模型可读取的图像内容块。
 - [x] 完成 Android shell 与可选 Accessibility companion 的通用 UI 后端：APK 提供 Unicode 输入、实时节点树、按文本或 bounds 点击、单笔 swipe/scroll；无 companion 时保留 uiautomator、input、am 和 screencap 路径，模拟器验证两种点击与手势后端。
@@ -77,14 +86,8 @@
 - [ ] 若要让普通 Termux UID 使用 companion，设计显式本地授权与 Binder 客户端，不放宽现有 shell/root provider 的安全边界。
 - [ ] 在 Android API 26+ 真机验证 A2A/MCP 直接调用、审批、UI 操作及失败恢复。
 
-## 独立 A2A 网关 — 已实现
 
-- [x] 主机侧独立 A2A 1.0 网关，支持 Agent Card、Bearer 认证、JSON-RPC、持久 Task 与同上下文续接。
-- [x] 独立 stdio MCP 适配层通过 A2A 协议调用网关，供 Codex 发现设备盘点、工具目录、咨询与任务查询能力。
-- [x] A2A 网关在同一监听端口提供需 Bearer 令牌的 Streamable HTTP MCP `/mcp`，复用现有工具与设备安全链。
-- [x] Android 单文件程序增加最小 `bridge` 适配，复用既有 Agent、工具、安全和私有会话；默认 ask 拒绝待确认操作、invoke 等待本地审批，显式 bridge_auto_approve 可自动批准。
-- [x] 主机侧显式格式检查、测试、按 ABI 交叉编译、摘要校验和独立候选部署工作流。
-- [x] 连接设备验证 Agent Card、鉴权、环境盘点、工具发现、跨轮续接、拒绝修改及构建部署后的继续测试。
+
 
 ## Web 易用性与任务反馈 — 已实现
 

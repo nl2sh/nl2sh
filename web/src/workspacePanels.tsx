@@ -20,10 +20,10 @@ const panels:{id:Panel;label:string;path:string}[]=[
   {id:'config',label:'配置',path:'M4 6h16M4 12h16M4 18h16M9 4v4m6 2v4m-6 2v4'},
 ];
 
-export function ActivityBar({active,select,create}:{active:Panel|null;select:(panel:Panel)=>void;create:()=>void}){
+export function ActivityBar({active,select,create,openConnections}:{active:Panel|null;select:(panel:Panel)=>void;create:()=>void;openConnections:()=>void}){
   const[version,setVersion]=useState('');
   useEffect(()=>{let active=true;getVersion().then(value=>{if(active)setVersion(value)}).catch(()=>{});return()=>{active=false}},[]);
-  return <nav class="activity-bar" aria-label="左侧菜单"><img src="/logo.png" alt="nl2sh"/>{version&&<small class="activity-version" title={`nl2sh v${version}`}>v{version}</small>}{panels.map(panel=><button key={panel.id} type="button" title={panel.label} aria-label={panel.label} aria-pressed={active===panel.id} onClick={()=>select(panel.id)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={panel.path}/></svg></button>)}<button class="activity-new-session" type="button" title="新建会话" aria-label="新建会话" onClick={create}>＋</button></nav>
+  return <nav class="activity-bar" aria-label="左侧菜单"><img src="/logo.png" alt="nl2sh"/>{version&&<small class="activity-version" title={`nl2sh v${version}`}>v{version}</small>}{panels.map(panel=><button key={panel.id} type="button" title={panel.label} aria-label={panel.label} aria-pressed={active===panel.id} onClick={()=>select(panel.id)}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={panel.path}/></svg></button>)}<button type="button" title="MCP / A2A" aria-label="MCP / A2A" aria-haspopup="dialog" onClick={openConnections}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12h8M5 5l5 5m4 4 5 5M19 5l-5 5m-4 4-5 5"/><circle cx="12" cy="12" r="3"/><circle cx="4" cy="4" r="2"/><circle cx="20" cy="4" r="2"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="20" r="2"/></svg></button><button class="activity-new-session" type="button" title="新建会话" aria-label="新建会话" onClick={create}>＋</button></nav>
 }
 
 export function PanelHeading({title,minimize}:{title:string;minimize:()=>void}){

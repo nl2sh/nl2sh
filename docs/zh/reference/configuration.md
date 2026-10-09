@@ -61,7 +61,7 @@
 | `interactive_execute_timeout_secs` | `0` | 交互命令超时，0 不限制 |
 | `execute_confirm_policy` | `"risk_only"` | 一般确认偏好，服从强制策略 |
 | `security_level` | `"balanced"` | strict/balanced/unsafe 安全偏好 |
-| `bridge_auto_approve` | `false` | 默认关闭；显式自动批准桥接全部风险操作 |
+| `protocol_auto_approve` | `false` | 默认关闭；显式自动批准设备 MCP/A2A 全部风险操作 |
 | `tool_groups` | `{}` | 可选组开关，jadx/tailcat 未设置时关闭 |
 | `tool_overrides` | `{}` | 按名覆盖组开关 |
 | `tailcat_binary_path` | `"tailcat"` | Tailcat 路径；Android 默认 /data/local/tmp/tailcat |

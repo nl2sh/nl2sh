@@ -16,7 +16,7 @@
 
 ## Safety and Web
 
-**Can a model run dangerous commands automatically?** Defaults require strong confirmation, including Root. Explicit bridge_auto_approve permits every risk level for bridge calls only. See [approvals](../guide/security-confirmation.md).
+**Can a model run dangerous commands automatically?** Defaults require strong confirmation, including Root. Explicit protocol_auto_approve permits every risk level for protocol calls only. See [approvals](../guide/security-confirmation.md).
 
 **Why is port 9999 unavailable?** Check actual startup port, device address, network, and ADB forwarding; occupied ports can change the listener. See [network troubleshooting](network.md).
 

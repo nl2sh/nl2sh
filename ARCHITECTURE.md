@@ -2,7 +2,7 @@
 
 ## 产品定位
 
-nl2sh 是以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent，以多轮 Tool Calling 连接模型、本地安全引擎和真实 Android 执行结果。其部署单元是单个 stable Rust Android 可执行文件，内置 TUI、Web 服务和设备桥接入口；可选 A2A/MCP 网关运行在主机侧。配置、日志和发布辅助脚本不是直接 Android 部署的运行时依赖。终端交互以丰富 TUI 为主，同时提供 Web 多会话界面和单次 CLI 模式。“类 Hermes”不构成对 Hermes API、插件系统或功能集的兼容承诺。
+nl2sh 是以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent，以多轮 Tool Calling 连接模型、本地安全引擎和真实 Android 执行结果。其部署单元是单个 stable Rust Android 可执行文件，内置 TUI、Web 服务以及设备端 MCP/A2A 协议服务。配置、日志和发布辅助脚本不是直接 Android 部署的运行时依赖。终端交互以丰富 TUI 为主，同时提供 Web 多会话界面和单次 CLI 模式。“类 Hermes”不构成对 Hermes API、插件系统或功能集的兼容承诺。
 
 预编译包的主机启动器在选定 ABI 后分别计算主机文件与设备端实际 ELF 的 SHA-256；摘要一致时保留设备文件并直接启动，不一致时推送并再次校验。Bootstrap 脚本从用户显式选择的 GitHub 或 Gitee 最新 Release 同时下载 ZIP 与 `SHA256SUMS`，校验后解压；Gitee 路径通过公开 Release API 解析最新 tag，不在 GitHub 失败后隐式切换来源。脚本可根据显式 Provider、模型、Endpoint 和 API Key 生成最小配置；Linux 脚本在 `curl | bash` 模式完成脚本读取后把启动器 stdin 重新连接到主机 controlling terminal，使 ADB 能为 TUI 分配远端 PTY。Windows CMD Bootstrap 作为交互批处入口，复用 PowerShell 安装核心执行 HTTPS 下载、SHA-256 校验和 ZIP 解压，并保留 CMD 控制台输入。只有显式设置 `NL2SH_CONFIG_SOURCE` 时启动器才覆盖设备配置，设备文件继续保持 `0600`。这些主机侧便利流程不改变设备内的 Agent 安全与确认链。
 
@@ -15,7 +15,7 @@ Android API 26+ 原生发行支持 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`，�
 ```text
 User
   |
-TUI / Web / CLI / bridge
+TUI / Web / CLI / device MCP / A2A
   |
 Agent Runner ---- LLM Provider
   |                   |
@@ -32,11 +32,15 @@ Root / su Layer
 Android Runtime
 ```
 
-可选 `a2a_gateway/` 是主机侧独立 Python 模块：A2A 1.0 Agent Card/JSON-RPC、Bearer 认证和 SQLite Task Store → 固定设备序列号的 `adb exec-out` → Android 单文件程序的 `bridge inspect|tools|ask|invoke`。设备序列号为 IPv4 `地址:端口` 时，网关在每次调用前建立无线 ADB 连接，不在回复丢失后重放操作。`ask` 进入内置 Agent；`invoke` 将具名工具和结构化参数直接交给设备 Tool Runtime，不进行设备端模型请求。两条路径复用工具注册、准备、安全评估和执行边界。A2A `contextId` 映射到私有设备 Agent 会话。默认情况下，`ask` 的无终端确认器拒绝待确认操作，`invoke` 在私有一次性 Unix socket 上等待设备交互终端决定。显式设置设备配置 `bridge_auto_approve = true` 时，两条路径都由桥接确认器自动批准全部风险等级；安全评估、参数校验、命令绑定与提权能力检查继续执行。该配置只在 bridge 入口选择确认器，TUI/Web/CLI 不读取它来决定审批。网关本身不提供批准接口。构建、交叉编译和候选部署是主机侧显式工作流，不作为远程 A2A 技能暴露；候选文件不会覆盖现有设备程序。网关默认仅监听 loopback；网络监听与远程明文 HTTP 需要显式选择，远程客户端默认要求 HTTPS。Compose 镜像持久化 ADB 密钥和 SQLite 任务库，不在设备端添加网络服务。
+`src/protocol/` 在设备单文件程序内提供独立的 MCP Streamable HTTP `/mcp`、A2A 1.0 JSON-RPC `/a2a` 和本地 stdio MCP。`protocol serve` 默认监听 loopback 8765；网络监听、远程 HTTP 与公告 origin 均需显式配置。HTTP 要求独立的 `NL2SH_PROTOCOL_TOKEN`，校验 Host/Origin；Web 不继承协议令牌。MCP 工具直接调用 Tool Runtime，不经过 A2A 或 ADB；A2A 委派普通文本给内置 Agent。主机 Python 网关、ADB 传输、旧 bridge CLI、候选部署工作流和旧配置字段全部移除，没有兼容路径。
 
-本地一次性审批的私有目录使用跨进程文件锁串行化请求计数与发布，最多同时保留八个待决请求。强制终止留下的 `live` 标记只有在对应 Unix socket 已不再监听时才清理；正常请求的目录和 socket 仍由 RAII 释放。审批者必须在设备交互终端查看完整动作，危险操作还要输入与请求 ID 绑定的二次确认短语。
+协议启动在持有独占状态锁期间以私有 `protocol/connection.json` 公告 PID、启动身份、配置路径、传输和 HTTP origin，不保存令牌。TUI 启动页、CLI service status 与 Web `/api/connections`、`/api/info.connections` 共享只读发现；校验私有目录/文件、持锁、UID、启动身份和配置，不探测网络。记录遗留但锁已释放时报告 stopped；权限/身份无法确认时报告 unknown，不提供活动 HTTP 地址。Web 左侧垂直菜单的连接窗口提供复制与手动刷新，TUI 为启动快照；展示不启动服务或提供远程审批。
 
-同一 Python 包的 MCP 适配层既可作为编码 Agent 所在机器的 stdio 服务，也可由网关进程在 `/mcp` 提供 Streamable HTTP 服务。HTTP MCP 与 A2A 共用监听端口和 Bearer 令牌；网关内的 MCP 工具通过进程内 ASGI 传输执行 Agent Card 同来源校验及带 Bearer 鉴权的 A2A JSON-RPC，不依赖网关的外部公告地址回连。两种传输公开相同的环境盘点、工具目录、直接工具调用、咨询和任务查询，返回 A2A 任务与设备结果；MCP 不直接连接 adb，也不增加写入批准入口。
+共享任务服务最多接纳 16 个活动任务。任务和取消信号由设备运行层拥有，客户端断连不会直接丢弃执行 Future；Agent 与捕获式 shell 复用取消链，其他工具完成当前动作后结束。SIGINT/SIGTERM 先取消并安全等待任务结束，再关闭监听。相同 context 的 Agent 任务按弱引用上下文锁串行处理，使用独立 `protocol-` 私有会话命名空间，不与 Web/TUI 历史混用；Android UI 仍共用跨进程资源锁。
+
+`protocol/tasks.sqlite3` 位于设备状态目录，私有目录 0700、数据库 0600，持有进程 flock，拒绝多个协议服务共享状态。SQL 操作放在 blocking worker 中；最多保留 200 项、64 MiB 文档，清理最旧终态记录，单任务最多 4 MiB。任务快照对已知配置凭据和协议令牌脱敏。重启将未完成任务标记失败而不重放。A2A 支持 SendMessage/GetTask/ListTasks/CancelTask，不公告流式/推送/扩展卡片；结果 artifact 使用结构化 data。MCP 使用官方 rmcp Rust SDK，HTTP 无服务器会话，支持固定的 2025-11-25/2025-06-18/2024-11-05 版本，stdout 专用于 stdio 协议。
+
+工具直调与 Agent 操作默认使用同一设备本地一次性审批：`protocol approvals/approve` 只能在同 UID 的交互终端决定；120 秒、最多八请求，危险类要求与请求 ID 绑定的精确短语。协议没有远程批准入口。显式 `protocol_auto_approve` 为协议任务选择全部风险自动批准确认器，其他入口不读取它决定审批；参数、安全评估、目标复核和 Root 能力绑定仍执行。私有审批目录与 Unix socket 保留跨进程发布锁、失效请求清理和 RAII 生命周期。
 
 逻辑上分为 Agent Layer（TUI/Web/CLI 的内置 Agent）、Tool Runtime（注册、参数验证、风险评估、确认和执行）及 Platform Adapters（Android shell、可选 Accessibility companion、Termux 与开发主机条件路径）。直接工具调用只跳过 Agent Layer；安全与确认层仍在设备端。`android.*` 语义工具默认可使用 Android shell 的 `am`、`input`、`uiautomator` 和 `screencap`；应用启动使用限定包名的 MAIN/LAUNCHER Intent，不发送随机输入事件；可选 companion 通过 Android ContentProvider 的 Binder 调用提供实时节点树、按文字或 bounds 点击节点、Unicode 输入和单笔 swipe/scroll 手势，Manifest 的 DUMP 权限与 `Binder.getCallingUid()` 双重限制调用方为 shell/root。文字与节点点击在确认后重读完整 UI 树，核对节点所属包名、类名、资源 ID、文字、描述和 bounds；Accessibility 点击在 companion 内再次复核这些字段。Unicode 输入在确认前后及写入前核对焦点控件的包名、类名、资源 ID 和 bounds。缺失包名的语义写入目标会被拒绝。节点树截断或读取失败时不执行语义点击。手势在确认前固定坐标和时长，确认后重新计算并核对；companion 等待 Android 的完成或取消回调再返回结果，确认后不静默切换到 shell。无路径截图在 Android shell 的 `/data/local/tmp` 或 Termux HOME 建立私有临时目录，并以有界图片附件返回。Shell `input text` 只接受可打印 ASCII，并把字面量 `%s` 拆成独立输入命令以避免被 Android 解码为空格；Unicode 需要安装并启用 companion。远程调用方不能代替设备交互终端批准动作。
 
@@ -111,8 +115,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 | `src/tools/ui` | UIAutomator 控件树、焦点窗口、截图及模型图片附件 | 当前界面/本地图片 → 有界节点、截图或临时多模态内容 | 固定探测静默执行；超限图片有界缩放；截图写入必须确认；附件不持久化 |
 | `src/update` | GitHub Release 发现、版本/ABI 选择、SHA-256 校验与原子替换 | Release 元数据与 Android ABI → 已校验的新可执行文件 | 不执行模型输出；不接受跨 ABI 或无校验资产 |
 | `src/agent` | `AgentRunner`、上下文完整交互单元、`Confirmer` | 用户任务 → Tool Loop / 最终文本 | 不得绕过 security 和 confirmer |
-| `src/bridge`、`src/tools/runtime` | 固定环境盘点、工具目录、有界 JSON Agent 调用和直接工具调用 | `bridge` CLI → JSON / 私有会话或工具结果 | 直接调用绕过 LLM 但保留工具安全链；默认 ask 拒绝待确认操作、invoke 等待本地审批，显式 bridge_auto_approve 自动批准；不开放任意 adb 命令 |
-| `a2a_gateway` | 主机侧 A2A Agent Card、JSON-RPC、鉴权、Task Store、adb 传输、stdio/HTTP MCP 适配及显式构建部署 | MCP → A2A 消息 → Android bridge 结果 | 不在设备运行；HTTP MCP 需 Bearer 令牌；不直接执行模型输出；部署仅到独立候选路径 |
+| `src/protocol`、`src/tools/runtime` | 设备 MCP/A2A、任务/上下文、本地审批和直接工具调用 | HTTP/stdio → Task / Agent / Tool Runtime | 无运行时 ADB；共享安全链，默认本地审批，显式 protocol_auto_approve；任务重启不重放 |
 | `src/tools` | `Tool`、显式 `ToolRegistry`、风险/能力元数据、派生 schema 与 `PreparedToolCall` | 模型调用 → 预备动作 → 审批后有界结果 | 只用本地元数据定风险；修改预览必须在统一确认入口批准后执行 |
 | `crates/nl2sh-tool-macros` | 编译期 `#[tool]` 生成适配器与元数据 | 注解函数 → Rust Tool 实现 | 只在构建主机运行；不自动注册或授予执行权限 |
 | `src/security` | `shell/{parser,analyzer,expansion,effects}`、`policy/{filesystem,android,privilege,network}`、特殊 regex/自定义规则、`SecurityAssessment` | 原始命令或结构化工具风险 → 风险和确认要求、命令绑定能力 | 不依赖 TUI、LLM 或执行器 |
@@ -123,7 +126,7 @@ TUI 启动欢迎内容把 Web 浏览器入口放在末尾，以专用显示标�
 
 公共 trait 允许测试以 mock 替换网络、执行、确认和 root 探测。依赖方向保持 `UI → Agent → abstractions`，security 与 shell 彼此通过调用参数协作，无循环依赖。
 
-模型可见工具由 Registry 显式注册，ima 按本地 `Capability` 条件暴露；APK/JADX 与 Tailcat 组默认关闭，配置的单工具开关覆盖组开关。Agent、桥接直调与目录共用可用性判定，关闭项不进入模型定义且无法直接调用；Web 目录另外列出关闭项供用户设置。一次性桥接入口过滤需当前进程维持的 Tailcat 监听器工具。`tailcat_install` 在准备阶段固定设备 ABI、官方 v0.7.0 URL（ARM64/ARMv7/x86_64 对应 arm64/armv7/amd64 静态包）、预置 SHA-256 与绝对目标路径，作为修改类进入同一确认链；批准后才下载有界归档，核验摘要、ELF 架构及版本，使用同目录临时文件原子替换，失败时保留原程序。`tailcat_check` 保持只读。`tailcat_adb_pair` 的 setup/share 都是 Dangerous：setup 仅通过受限 Settings 导航引导无线调试，未启用开发者选项或不支持界面时请求用户操作；share 在准备阶段固定当前配对码、地址和连接端口，审批后及监听器启动前后重新核对，以一个受管理子进程共享两个 ADB 端口和显式可选 Web 端口。配对码按用户需求返回模型与对话，不进入审批预览或 shell 参数；监听器不自动替换，失败只清理本次新建实例，停止不撤销系统配对。`tailcat_serve` 把隧道连接转发到已有 localhost 服务，参数是目标服务端口，不重复绑定目标端口；共享仍需 Dangerous 强确认。参数类型通过 `schemars::JsonSchema` 派生定义。共用内部参数类型的 `android.*` 工具按各自操作收窄公开字段及必填项，准备阶段也拒绝无关字段，避免外部 Agent 按宽泛 Schema 误填。`Tool::prepare` 解析参数并构造预览与待执行动作；工具元数据声明风险下限，剪贴板、媒体和便签按实际参数升高单次风险。Agent 统一根据本地风险决定确认/强确认，再调用 `PreparedExecution::execute`。补丁和下载在确认前只准备 diff 或数据，截图、HTTP POST、输入注入与设备控制必须先显示预览；输入注入执行前重新校验当前 UI bounds。Shell 命令继续逐次经过原安全分类、编辑重评估、Root 与 PTY 回收路径。音频缺参问答与分析缓存、截图附件以及 Web 会话审批沿用既有行为。`define_tool!` 和构建期 `#[tool(...)]` 均只生成适配器，注册和权限仍需显式决定。
+模型可见工具由 Registry 显式注册，ima 按本地 `Capability` 条件暴露；APK/JADX 与 Tailcat 组默认关闭，配置的单工具开关覆盖组开关。Agent、协议直调与目录共用可用性判定，关闭项不进入模型定义且无法直接调用；Web 目录另外列出关闭项供用户设置。常驻协议服务按配置和真实能力暴露进程生命周期工具。`tailcat_install` 在准备阶段固定设备 ABI、官方 v0.7.0 URL（ARM64/ARMv7/x86_64 对应 arm64/armv7/amd64 静态包）、预置 SHA-256 与绝对目标路径，作为修改类进入同一确认链；批准后才下载有界归档，核验摘要、ELF 架构及版本，使用同目录临时文件原子替换，失败时保留原程序。`tailcat_check` 保持只读。`tailcat_adb_pair` 的 setup/share 都是 Dangerous：setup 仅通过受限 Settings 导航引导无线调试，未启用开发者选项或不支持界面时请求用户操作；share 在准备阶段固定当前配对码、地址和连接端口，审批后及监听器启动前后重新核对，以一个受管理子进程共享两个 ADB 端口和显式可选 Web 端口。配对码按用户需求返回模型与对话，不进入审批预览或 shell 参数；监听器不自动替换，失败只清理本次新建实例，停止不撤销系统配对。`tailcat_serve` 把隧道连接转发到已有 localhost 服务，参数是目标服务端口，不重复绑定目标端口；共享仍需 Dangerous 强确认。参数类型通过 `schemars::JsonSchema` 派生定义。共用内部参数类型的 `android.*` 工具按各自操作收窄公开字段及必填项，准备阶段也拒绝无关字段，避免外部 Agent 按宽泛 Schema 误填。`Tool::prepare` 解析参数并构造预览与待执行动作；工具元数据声明风险下限，剪贴板、媒体和便签按实际参数升高单次风险。Agent 统一根据本地风险决定确认/强确认，再调用 `PreparedExecution::execute`。补丁和下载在确认前只准备 diff 或数据，截图、HTTP POST、输入注入与设备控制必须先显示预览；输入注入执行前重新校验当前 UI bounds。Shell 命令继续逐次经过原安全分类、编辑重评估、Root 与 PTY 回收路径。音频缺参问答与分析缓存、截图附件以及 Web 会话审批沿用既有行为。`define_tool!` 和构建期 `#[tool(...)]` 均只生成适配器，注册和权限仍需显式决定。
 
 Web 前端源码和 npm lockfile 保存在 `web/`；Cargo 的 `build.rs` 先把源码复制到 `OUT_DIR`，在副本中执行 `npm ci` 和 `npm run build`，再由 `rust-embed` 把产物编入单一可执行文件。构建需要 Node.js/npm，生成目录不进入版本控制或发布源码包；Android 运行时不依赖 Node.js。TUR 构建使用 Termux 提供的主机 Node 工具。
 
@@ -131,7 +134,7 @@ Web 配置页通过 `/api/config/validate` 使用 Rust `Config` 解析及运行�
 
 Web 会话侧栏支持直接删除单个会话或确认后删除全部会话：删除同时移除内存条目与私有会话快照，只针对合法的会话文件名；运行中、等待审批或终端仍连接的会话拒绝删除。会话列表、恢复、启动任务和删除共享注册表同步，防止删除后立即被迟到的恢复或任务重新写回。
 
-`src/tools/configuration` 注册 `nl2sh_config`（Configuration 类）：list/get 只读展示默认、磁盘、解析及当前任务快照；set/reset 使用强类型动作与原生 JSON 值，仅操作 `Config.source`。loader 的 TOML 解析、预算预设及环境覆盖由内置加载与工具共享。工具保存通过 toml_edit 保留其他字段/注释，不序列化运行快照；审批后复核有界原始内容，稳定侧文件锁串行化工具写入，私有临时文件原子替换并同步。凭据仅展示配置状态且拒绝模型写入，解析诊断不回显原文；安全/Root/桥接/工具/网络/审计字段升至 Dangerous。写入不改变当前任务、客户端、工具目录或审批器；新 Web 任务/bridge 进程加载，TUI 重启应用，不涉及 shell 或 PTY。
+`src/tools/configuration` 注册 `nl2sh_config`（Configuration 类）：list/get 只读展示默认、磁盘、解析及当前任务快照；set/reset 使用强类型动作与原生 JSON 值，仅操作 `Config.source`。loader 的 TOML 解析、预算预设及环境覆盖由内置加载与工具共享。工具保存通过 toml_edit 保留其他字段/注释，不序列化运行快照；审批后复核有界原始内容，稳定侧文件锁串行化工具写入，私有临时文件原子替换并同步。凭据仅展示配置状态且拒绝模型写入，解析诊断不回显原文；安全/Root/桥接/工具/网络/审计字段升至 Dangerous。写入不改变当前任务、客户端、工具目录或审批器；新 Web/协议任务加载，TUI 重启应用，不涉及 shell 或 PTY。
 
 ## Agent 执行流程
 
@@ -247,7 +250,7 @@ Release 先构建签名 Termux APT 快照并作为正式资产发布，不再直
 
 ## 运行时能力与服务信息
 
-`runtime::RuntimeCapabilities` 为每个任务及只读 Web 信息请求建立独立快照；Agent、bridge tools 和
+`runtime::RuntimeCapabilities` 为每个任务及只读 Web 信息请求建立独立快照；Agent、MCP 工具目录和
 直接调用使用 `ToolRegistry::for_runtime`。配置目录保留全部工具以供设置，并分别呈现 enabled 与
 available。能力不是安全许可，仍需原有 Security → Confirmation → Execution。
 Bridge 原生端先只读发现 protocol 2 与服务/限额，使用 invoke/base64url JSON、唯一请求 ID 和有界
@@ -269,7 +272,7 @@ The pinned public key authenticates binary SHA-256 OpenPGP signatures before JSO
 
 ### Tool descriptors
 
-Every explicitly registered adapter exposes one ToolDescriptor with typed schema generation, group/default switch, capability and platform requirements, risk floor, scheduling policy and process lifetime. ToolMetadata is an alias for source compatibility. Configuration validation, Web/TUI settings, one-shot listener filtering, runtime availability and code-exported references derive from this inventory. Existing #[tool] generates descriptors and accepts explicit policy attributes; registration remains explicit. AndroidUi operations acquire a stable process-shared flock before preparation and retain its descriptor through the task, including subsequent model/confirmation waits. Privileged Android Shell calls use the same lease; direct command entries acquire it for execution. A task-local ownership scope prevents nested broker reacquisition. No lock inode is unlinked; cancellation/exit releases the descriptor. Parallel ReadOnly calls execute in contiguous batches of at most four with isolated call contexts, ordered results, mutation/UI/Shell barriers, prepared-risk validation and the same assessment boundary. Structured audits carry task/session/request correlation, interface, risk, preview SHA256, approval, process UID, root request, result and duration; arguments/output/error strings are excluded. Private bounded JSONL appends are flock-serialized between processes. External input and user-controlled /shell remain outside managed UI coordination, so existing state revalidation remains required.
+Every explicitly registered adapter exposes one ToolDescriptor with typed schema generation, group/default switch, capability and platform requirements, risk floor, scheduling policy and process lifetime. ToolMetadata is an alias for source compatibility. Configuration validation, Web/TUI settings, runtime availability and code-exported references derive from this inventory. Existing #[tool] generates descriptors and accepts explicit policy attributes; registration remains explicit. AndroidUi operations acquire a stable process-shared flock before preparation and retain its descriptor through the task, including subsequent model/confirmation waits. Privileged Android Shell calls use the same lease; direct command entries acquire it for execution. A task-local ownership scope prevents nested broker reacquisition. No lock inode is unlinked; cancellation/exit releases the descriptor. Parallel ReadOnly calls execute in contiguous batches of at most four with isolated call contexts, ordered results, mutation/UI/Shell barriers, prepared-risk validation and the same assessment boundary. Structured audits carry task/session/request correlation, interface, risk, preview SHA256, approval, process UID, root request, result and duration; arguments/output/error strings are excluded. Private bounded JSONL appends are flock-serialized between processes. External input and user-controlled /shell remain outside managed UI coordination, so existing state revalidation remains required.
 
 ## Web 后端职责
 
@@ -277,7 +280,7 @@ Every explicitly registered adapter exposes one ToolDescriptor with typed schema
 
 ## Tailcat 本地快捷流程
 
-Web `/api/tailcat` 与 TUI `/tailcat` 共用 `tools::tailcat::quick` 的进程内有界状态与单任务互斥，直接调用 Tool Runtime，无 LLM 或模型历史写入。任务配置快照临时启用所需具名工具；准备、安全评估、权限检查、资源锁、执行复用原工具；只读检测现有 ADB 属性，失败默认 5555，允许用户编辑；`tailcat_serve` 的可选 `additional_ports` 复用同一监听器共享 Web/ADB。用户在快捷弹窗确定端口即授权本次固定操作，私有 `UserInitiatedConfirmer` 直接批准，不再产生安全确认或二次确认弹窗；只允许检查、安装、停止与端口共享四种快捷工具，不提供通用调用或全局放行开关。模型、bridge 和其他工具调用不使用该确认器，原审批规则保持。下载字节通过 task-local scope 报告，普通 Agent 安装不写入弹窗状态。Web 状态轮询与 TUI frame 读取同一快照；确定或重试先通过既有停止工具回收旧托管监听器再共享；成功和失败结果不自动关闭；TUI 对分段方向键 Esc 做过滤，只有独立 Esc 才关闭，复制用浏览器现有 fallback 或 TUI OSC 52。窗口关闭不停止托管监听器。
+Web `/api/tailcat` 与 TUI `/tailcat` 共用 `tools::tailcat::quick` 的进程内有界状态与单任务互斥，直接调用 Tool Runtime，无 LLM 或模型历史写入。任务配置快照临时启用所需具名工具；准备、安全评估、权限检查、资源锁、执行复用原工具；只读检测现有 ADB 属性，失败默认 5555，允许用户编辑；`tailcat_serve` 的可选 `additional_ports` 复用同一监听器共享 Web/ADB。用户在快捷弹窗确定端口即授权本次固定操作，私有 `UserInitiatedConfirmer` 直接批准，不再产生安全确认或二次确认弹窗；只允许检查、安装、停止与端口共享四种快捷工具，不提供通用调用或全局放行开关。模型、协议和其他工具调用不使用该确认器，原审批规则保持。下载字节通过 task-local scope 报告，普通 Agent 安装不写入弹窗状态。Web 状态轮询与 TUI frame 读取同一快照；确定或重试先通过既有停止工具回收旧托管监听器再共享；成功和失败结果不自动关闭；TUI 对分段方向键 Esc 做过滤，只有独立 Esc 才关闭，复制用浏览器现有 fallback 或 TUI OSC 52。窗口关闭不停止托管监听器。
 
 ## 系统 Trace 工具
 

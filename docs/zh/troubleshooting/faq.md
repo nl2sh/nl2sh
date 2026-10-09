@@ -16,7 +16,7 @@
 
 ## 安全与 Web
 
-**模型能自动执行危险命令吗？** 默认需强确认，Root 不跳过。显式 bridge_auto_approve 仅桥接入口可自动批准所有等级。[确认](../guide/security-confirmation.md)。
+**模型能自动执行危险命令吗？** 默认需强确认，Root 不跳过。显式 protocol_auto_approve 仅协议入口可自动批准所有等级。[确认](../guide/security-confirmation.md)。
 
 **9999 打不开？** 查看实际端口、设备地址、网络和 ADB forward；端口占用可改变监听端口。[网络排查](network.md)。
 

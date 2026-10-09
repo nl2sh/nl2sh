@@ -49,6 +49,80 @@ impl Drop for Fixture {
 }
 
 #[tokio::test]
+async fn status_and_web_discover_separate_protocol_listener_without_disclosing_token() {
+    let fixture = Fixture::new();
+    let token = "connection-discovery-secret-token-0123456789";
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_nl2sh"))
+        .arg("--config")
+        .arg(&fixture.config)
+        .args(["protocol", "serve", "--port", "0"])
+        .env("NL2SH_PROTOCOL_TOKEN", token)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("protocol starts");
+    let status = tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let status = fixture.status(&["status", "--json"]).await;
+            if status["connections"]["state"] == "running" {
+                break status;
+            }
+            tokio::time::sleep(Duration::from_millis(40)).await;
+        }
+    })
+    .await
+    .expect("protocol announces itself");
+    assert_eq!(status["state"], "stopped", "Web status is independent");
+    let connections = &status["connections"];
+    let mcp = connections["mcp_url"].as_str().expect("MCP URL");
+    assert!(mcp.starts_with("http://127.0.0.1:"));
+    assert!(!mcp.contains(":8765/"), "actual ephemeral port is shown");
+    assert_eq!(connections["transport"], "http");
+    assert!(!status.to_string().contains(token));
+    let summary = fixture.call(&["status"]).await;
+    let summary = String::from_utf8(summary.stdout).expect("status text");
+    assert!(summary.contains(mcp));
+    assert!(summary.contains("Authorization: Bearer <token>"));
+    assert!(!summary.contains(token));
+    let web = fixture.status(&["start", "--port", "0", "--json"]).await;
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
+    let base = format!("http://127.0.0.1:{}", web["port"]);
+    let response = client
+        .get(format!("{base}/api/connections"))
+        .send()
+        .await
+        .expect("connection API");
+    assert!(response.status().is_success());
+    let api: Value = response.json().await.expect("connection JSON");
+    assert_eq!(&api, connections);
+    assert!(!api.to_string().contains(token));
+    let info: Value = client
+        .get(format!("{base}/api/info"))
+        .send()
+        .await
+        .expect("info API")
+        .json()
+        .await
+        .expect("info JSON");
+    assert_eq!(&info["connections"], connections);
+    child.kill().await.expect("stop protocol process");
+    let stopped: Value = client
+        .get(format!("{base}/api/connections"))
+        .send()
+        .await
+        .expect("connection API")
+        .json()
+        .await
+        .expect("connection JSON");
+    assert_eq!(stopped["state"], "stopped");
+    assert!(stopped["mcp_url"].is_null());
+}
+
+#[tokio::test]
 async fn native_service_is_idempotent_uses_actual_port_and_private_authorized_shutdown() {
     let fixture = Fixture::new();
     assert_eq!(

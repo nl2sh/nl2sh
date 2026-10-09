@@ -9,15 +9,18 @@ nl2sh --mode command --dry-run "查看内存"
 nl2sh --config /data/local/tmp/config.toml --no-pty --ascii
 nl2sh --web-only
 nl2sh update
-nl2sh bridge inspect
-nl2sh bridge tools
+nl2sh protocol serve
+nl2sh protocol stdio
+nl2sh protocol approvals
 ```
 
-`--endpoint`、`--model`、`--api-type` 临时覆盖后统一校验；`--no-pty` 使用管道捕获，`--ascii` 改显示符号。bridge 的 ask/invoke 接收无 padding 的 base64url JSON，不提供任意 adb shell；见 [A2A/MCP](../advanced/a2a-mcp.md)。
+`--endpoint`、`--model`、`--api-type` 临时覆盖后统一校验；`--no-pty` 使用管道捕获，`--ascii` 改显示符号。设备 MCP/A2A 使用独立协议服务与本地审批；见 [A2A/MCP](../advanced/a2a-mcp.md)。
+
+`nl2sh --config <配置路径> service status` 显示 Web 与 MCP/A2A 的独立状态及连接方式；`--json` 新增 `connections`，包含实际 HTTP 端点（仅确认运行时）和启动/stdio 命令。未启动时端点为 null，默认地址只是示例，不代表已监听。详见 [设备 MCP/A2A](../advanced/a2a-mcp.md)。
 
 ## 从 clap 导出的帮助
 
-以下含根命令与全部 bridge 子命令，不手工维护参数列表。
+以下含根命令与全部 protocol 子命令，不手工维护参数列表。
 
 <!-- generated:start -->
 
@@ -27,10 +30,10 @@ Natural Language to Shell for Android
 Usage: nl2sh [OPTIONS] [INSTRUCTION] [COMMAND]
 
 Commands:
-  update   Check for and install the latest compatible GitHub Release
-  service  Manage the native background Web service for this configuration
-  bridge   Machine-readable, non-interactive interface for a trusted local bridge
-  help     Print this message or the help of the given subcommand(s)
+  update    Check for and install the latest compatible GitHub Release
+  service   Manage the native background Web service for this configuration
+  protocol  Serve device-native MCP/A2A or manage local protocol approvals
+  help      Print this message or the help of the given subcommand(s)
 
 Arguments:
   [INSTRUCTION]
@@ -174,17 +177,15 @@ Arguments:
 ```
 
 ```text
-Machine-readable, non-interactive interface for a trusted local bridge
+Serve device-native MCP/A2A or manage local protocol approvals
 
-Usage: bridge <COMMAND>
+Usage: protocol <COMMAND>
 
 Commands:
-  inspect    Return bounded, read-only Android environment facts
-  tools      Return the configured model-facing tool catalog
-  ask        Run the Agent with a bounded base64url JSON request and stored history
-  invoke     Invoke one registered tool directly with base64url {tool,arguments} JSON
-  approvals  List pending direct-tool approvals on this device
-  approve    Approve or reject one pending direct-tool request from an interactive terminal
+  serve      Serve authenticated HTTP MCP and A2A on the device
+  stdio      Serve MCP over local stdin/stdout; never starts the TUI or Web UI
+  approvals  List pending protocol approvals on this device
+  approve    Approve or reject one request in an interactive local terminal
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -193,9 +194,31 @@ Options:
 ```
 
 ```text
-Return bounded, read-only Android environment facts
+Serve authenticated HTTP MCP and A2A on the device
 
-Usage: inspect
+Usage: serve [OPTIONS]
+
+Options:
+      --host <HOST>
+          [default: 127.0.0.1]
+
+      --port <PORT>
+          [default: 8765]
+
+      --advertised-url <ADVERTISED_URL>
+          Public HTTP(S) origin used in the Agent Card
+
+      --allow-insecure-http
+          Explicitly allow a non-loopback plaintext HTTP listener
+
+  -h, --help
+          Print help
+```
+
+```text
+Serve MCP over local stdin/stdout; never starts the TUI or Web UI
+
+Usage: stdio
 
 Options:
   -h, --help
@@ -203,43 +226,7 @@ Options:
 ```
 
 ```text
-Return the configured model-facing tool catalog
-
-Usage: tools
-
-Options:
-  -h, --help
-          Print help
-```
-
-```text
-Run the Agent with a bounded base64url JSON request and stored history
-
-Usage: ask --payload-base64 <PAYLOAD_BASE64>
-
-Options:
-      --payload-base64 <PAYLOAD_BASE64>
-          Base64url without padding, containing {session,message} JSON
-
-  -h, --help
-          Print help
-```
-
-```text
-Invoke one registered tool directly with base64url {tool,arguments} JSON
-
-Usage: invoke --payload-base64 <PAYLOAD_BASE64>
-
-Options:
-      --payload-base64 <PAYLOAD_BASE64>
-          Base64url without padding, containing {tool,arguments} JSON
-
-  -h, --help
-          Print help
-```
-
-```text
-List pending direct-tool approvals on this device
+List pending protocol approvals on this device
 
 Usage: approvals
 
@@ -249,13 +236,13 @@ Options:
 ```
 
 ```text
-Approve or reject one pending direct-tool request from an interactive terminal
+Approve or reject one request in an interactive local terminal
 
 Usage: approve <ID>
 
 Arguments:
   <ID>
-          Request identifier printed by `bridge approvals`
+
 
 Options:
   -h, --help

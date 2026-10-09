@@ -24,16 +24,16 @@ fn normal_toml_and_defaults() -> anyhow::Result<()> {
     assert_eq!(cfg.ui_language, UiLanguage::ZhCn);
     assert!(cfg.show_buddha_ascii_art);
     assert!(cfg.show_train_ascii_art);
-    assert!(!cfg.bridge_auto_approve);
+    assert!(!cfg.protocol_auto_approve);
     Ok(())
 }
 
 #[test]
-fn bridge_auto_approve_round_trips() -> anyhow::Result<()> {
-    let cfg: Config = toml::from_str("bridge_auto_approve = true")?;
-    assert!(cfg.bridge_auto_approve);
+fn protocol_auto_approve_round_trips() -> anyhow::Result<()> {
+    let cfg: Config = toml::from_str("protocol_auto_approve = true")?;
+    assert!(cfg.protocol_auto_approve);
     let saved = toml::to_string(&cfg)?;
-    assert!(toml::from_str::<Config>(&saved)?.bridge_auto_approve);
+    assert!(toml::from_str::<Config>(&saved)?.protocol_auto_approve);
     Ok(())
 }
 

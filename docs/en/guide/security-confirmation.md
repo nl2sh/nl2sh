@@ -21,10 +21,10 @@ Mutations use one approval click. Dangerous actions require a first click to ent
 
 ## A2A / MCP
 
-By default `ask` rejects actions needing approval; `invoke` waits for one-time approval in a separate interactive device terminal, refusing after 120 seconds. Dangerous actions require an exact phrase. The gateway has no approval endpoint.
+Both direct tools and delegated Agent tasks default to one-time approval in another interactive device terminal, refusing after 120 seconds. Dangerous actions require an exact phrase. Use `nl2sh protocol approvals` / `nl2sh protocol approve REQUEST_ID` with the same UID and configuration path. Protocol clients have no approval endpoint.
 
-!!! warning "Explicit bridge auto-approval"
+!!! warning "Explicit protocol auto-approval"
 
-    `bridge_auto_approve = true` automatically approves bridge `ask` / `invoke` at every risk level, including Dangerous/Critical. It defaults off and applies only to bridge entry points. Classification, validation, and identity binding still run. Give the gateway token only to fully trusted clients.
+    `protocol_auto_approve = true` approves protocol calls at every risk level, including Dangerous/Critical. It defaults off and applies only to protocol entry points. Classification, parameter validation, and identity binding still run. Give the service token only to fully trusted clients.
 
 Safety checks cannot guarantee model understanding. Inspect targets and side effects; reject uncertain actions and request read-only diagnosis first. See [the security model](../reference/security-model.md).

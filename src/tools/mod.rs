@@ -128,16 +128,6 @@ pub async fn available_tools(
     ToolRegistry::for_runtime(config, &runtime).definitions()
 }
 
-/// Remove managed listeners from one-shot bridge processes, which cannot keep them alive.
-pub fn disable_managed_tailcat_for_bridge(config: &mut Config) {
-    for descriptor in builtin_descriptors()
-        .iter()
-        .filter(|tool| tool.lifetime == ToolLifetime::Process)
-    {
-        config.tool_overrides.insert(descriptor.name.into(), false);
-    }
-}
-
 /// Names whose availability can be configured independently of their group.
 pub fn optional_tool_names() -> &'static [&'static str] {
     static NAMES: OnceLock<Vec<&'static str>> = OnceLock::new();
@@ -729,12 +719,6 @@ mod tests {
             .definitions()
             .iter()
             .all(|definition| definition.name != "tailcat_receive"));
-        super::disable_managed_tailcat_for_bridge(&mut config);
-        let bridge = ToolRegistry::for_config(&config, &[]);
-        assert!(bridge.get("tailcat_check").is_some());
-        assert!(bridge.get("tailcat_receive").is_none());
-        assert!(bridge.get("tailcat_serve").is_none());
-        assert!(bridge.get("tailcat_adb_pair").is_none());
     }
 
     #[test]

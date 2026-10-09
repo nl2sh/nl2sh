@@ -1,132 +1,84 @@
-# A2A / MCP 协议参考
+# MCP / A2A 协议参考
 
-实现位于 `a2a_gateway/nl2sh_a2a/`、`src/bridge.rs`、`src/bridge/approval.rs` 和 `src/tools/runtime.rs`。Python、Docker、Hermes 和 stdio 客户端设置见 [部署指南](../advanced/a2a-mcp.md)。
-
-## 执行路径
+实现位于 `src/protocol/`：execution 复用 Tool Runtime / AgentRunner，tasks 管理并发与取消，store 保存设备任务，mcp 与 a2a 分别适配协议。启动和客户端设置见 [部署指南](../advanced/a2a-mcp.md)。
 
 ```mermaid
 flowchart LR
-    A[A2A 客户端] --> R[鉴权 JSON-RPC /a2a]
-    M[MCP HTTP /mcp 或本地 stdio] --> R
-    R --> D[固定 adb 序列号: exec-out]
-    D --> B[设备 bridge]
-    B --> T[Tool Runtime: 准备、分类、确认、执行]
-    B --> G[可选内置 Agent]
+    M[MCP HTTP / 本地 stdio] --> T[设备 Tool Runtime]
+    M --> Q[设备任务服务]
+    A[A2A JSON-RPC] --> Q
+    Q --> G[内置 Agent]
     G --> T
+    T --> S[准备 / 安全 / 本地审批 / 执行]
 ```
 
-网关固定连接一台设备，不公开通用 adb 命令或远程批准方法。注册的 shell 工具仍可经过设备安全/审批链执行命令，受限传输并不是只读动作白名单。工具可用性由设备配置决定，包括可选组与单工具开关；一次性 bridge 会过滤依赖当前进程保持的 Tailcat 监听器。
+## 入口与鉴权
 
-| 端点 | 访问与行为 |
+| 入口 | 行为 |
 | --- | --- |
-| `/.well-known/agent-card.json` | 公开发现；JSON-RPC binding/version 为 `1.0`；不支持流式与推送通知 |
-| `/a2a` | Bearer 鉴权的 A2A JSON-RPC；发送 `A2A-Version: 1.0` |
-| `/mcp` | Bearer 鉴权的 Streamable HTTP MCP，共用端口/令牌，不是旧 `/sse` |
-| `nl2sh-a2a-mcp` | 本地 stdio 进程，作为鉴权 A2A 客户端，无需本机 adb |
+| `/.well-known/agent-card.json` | 公开 Agent Card，A2A JSONRPC 1.0；不支持 A2A 流式、推送或扩展卡片 |
+| `/a2a` | Bearer 鉴权，JSON-RPC 2.0，`A2A-Version: 1.0` |
+| `/mcp` | Bearer 鉴权，Streamable HTTP；不是旧 SSE `/sse` |
+| `nl2sh protocol stdio` | 设备本地 stdin/stdout MCP，使用启动用户权限 |
 
-令牌至少 32 字符。所有令牌持有者共用一个 owner 身份，任务 ID 和上下文不提供客户端隔离。保留 SQLite 数据库并保护数据库、ADB 密钥和令牌。网关任务与设备 Agent 历史分别保存，只保留其中一个不能恢复另一个；持久化不会自动恢复网关重启中断的操作。
+HTTP 服务与 Web 独立。`NL2SH_PROTOCOL_TOKEN` 必须为 32–256 个可打印 ASCII 字符。所有持有同一令牌的调用者共享同一个可信所有者，不提供多租户任务隔离；task/context ID 不是访问凭据。Host 必须匹配公告 authority 或本地监听地址；有 Origin 时必须匹配公告 origin。缺少/错误令牌返回 401，错误 Host/Origin 返回 403。网络监听与远程 HTTP 必须显式开启。
 
-## 网关配置
+MCP 使用官方 Rust SDK；支持 `2025-11-25`、`2025-06-18`、`2024-11-05` 协议版本。HTTP 使用无服务器会话模式，客户端仍按协议执行 initialize/initialized 生命周期；无须保存 `Mcp-Session-Id`。服务不提供 MCP resources/prompts、远程审批、采样或 MCP Tasks 扩展。
 
-主机 CLI 选项见 `nl2sh-a2a --help`；设备路径属于 Android，不是网关主机文件。
+## MCP 工具
 
-| 设置 | 默认值 / 要求 |
-| --- | --- |
-| `--serial` | 必填精确 adb 序列号，仅 IPv4 `IP:port` 自动重连 |
-| `--binary`、`--config` | 设备 `/data/local/tmp/nl2sh`、`/data/local/tmp/config.toml` |
-| `--db` | 必填，网关主机上的 SQLite 文件 |
-| `--host`、`--port` | `127.0.0.1`、`8765`；接受 `127.0.0.1`、`localhost`、`0.0.0.0` |
-| `--advertised-url` | 默认监听器 HTTP origin，监听 `0.0.0.0` 时必填 |
-| `--allow-insecure-http` | 显式网络监听/远程 HTTP 开关，也可设置 `NL2SH_A2A_ALLOW_INSECURE_HTTP=1` |
-| `NL2SH_A2A_TOKEN` | 必填共享 Bearer 令牌，至少 32 字符 |
-| `NL2SH_A2A_URL` | 仅 stdio 客户端 origin，默认 `http://127.0.0.1:8765` |
-
-即使反向代理公告 HTTPS，监听 `0.0.0.0` 也需显式开关，因为 uvicorn 本身提供 HTTP。由代理终止 HTTPS，公告 origin 不设置路径前缀。Compose 中 `NL2SH_DEVICE_SERIAL/BINARY/CONFIG` 对应设备 CLI 值，`NL2SH_GATEWAY_URL` 对应公告 origin；`NL2SH_GATEWAY_BIND/PORT` 控制宿主发布端口，容器仍监听 8765，改变发布端口时同步更新 URL。网关环境变量不设置设备 `bridge_auto_approve`，需另行编辑设备配置。
-
-## A2A 消息与任务
-
-`SendMessage` 使用 `ROLE_USER`、新的 `messageId` 与 text parts。网关去除首尾空白后按以下规则分发：
-
-| 文本 | 设备操作 | 需要设备模型 |
+| 工具 | 参数 | 返回 |
 | --- | --- | --- |
-| `/inspect` | 固定环境探测 | 否 |
-| `/tools` | 当前工具及 Schema | 否 |
-| `/invoke {"tool":"android.screen_dump","arguments":{}}` | 一次直接注册工具调用 | 否 |
-| 其他非空文本 | 一轮内置 Agent | 是 |
+| `nl2sh_inspect` | 无 | 固定设备环境对象 |
+| `nl2sh_tools` | 无 | 对象，其 `tools` 为当前注册工具及参数 Schema 数组 |
+| `nl2sh_invoke` | `tool`、对象 `arguments` | 直接工具结果，不调用模型 |
+| `nl2sh_read_screen` | 无 | 文本摘要、PNG/JPEG MCP image block |
+| `nl2sh_ask` | `message`、可选 `context_id` | 内置 Agent 的设备 Task |
+| `nl2sh_get_task` | `task_id` | 保存的设备 Task |
+| `nl2sh_cancel_task` | `task_id` | 请求取消后等待操作结束的 Task |
 
-`/ask` 不是特殊 A2A 命令，普通文本即进入咨询。invoke 对象必须恰好包含 `tool` 和对象类型的 `arguments`；准备动作前先获取设备实际 Schema。
+直接工具结果含 `tool`、`success`、有界字符串 `output` 与可选 `attachments`；`output` 可能自身是 JSON 字符串。MCP 同时提供 text content 和 structuredContent，操作失败将 `isError` 设为 true。截图成功必须恰有一个 PNG/JPEG 附件，作为原生 MCP 图像返回。
 
-只读 JSON-RPC 示例（POST 到 `/a2a`，附 Bearer 鉴权和 `A2A-Version: 1.0`）：
+`nl2sh_ask` 返回的 Task 与 A2A 共享格式。Agent 结果包含 `session`、`answer`、`steps`、`tool_calls`、最多八条有界 `failed_tools`，位于 `artifacts[0].parts[0].data`。Task 为 COMPLETED 只表示 Agent 已返回；不保证每个工具成功。缺少模型时 task 为 FAILED。发现 MCP 工具不等于设备工具可用；实际目录由配置与能力快照决定。常驻服务可以提供配置允许的进程生命周期工具。
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "inspect-1",
-  "method": "SendMessage",
-  "params": {
-    "message": {
-      "messageId": "unique-message-1",
-      "role": "ROLE_USER",
-      "parts": [{"text": "/inspect"}]
-    }
-  }
-}
-```
+## A2A 消息、任务与分页
 
-响应包含 `result.task`，保存其 `id` 与 `contextId`。查询使用 `{"jsonrpc":"2.0","id":"lookup-1","method":"GetTask","params":{"id":"TASK_ID"}}`，`GetTask` 在 `result` 直接返回 task。Agent 续问在下一条 message 复用 `contextId`；网关将其映射为 `a2a-` 加 SHA-256 前 32 位十六进制。同一网关进程内该会话的 Agent 回合串行化；直接调用不进入 Agent 历史，共用 context 也不会使直接设备动作串行化。
+仅接受 `ROLE_USER`、非空 `messageId`、text parts；各段用换行连接，总计 1–8192 UTF-8 bytes。所有用户文本都进入内置 Agent，不解析工具斜杠命令。`contextId` 可省略，由服务生成；复用相同 context 继续 Agent 历史。每次发送创建新 task，不接受携带旧 `taskId` 的任务续接。
 
-设备 JSON 结果编码为 `nl2sh_result` artifact 中的文本，位于 `task.artifacts[0].parts[0].text`，需再解析为 JSON。`TASK_STATE_COMPLETED` 只表示网关返回了设备结果，不保证每项设备操作成功。异常会将任务标为失败并提供有界状态消息。HTTP 200 或收到 MCP 回复本身均不能证明操作成功。
-
-## MCP 工具与结果契约
-
-| 工具 | 参数 | 结果 |
-| --- | --- | --- |
-| `nl2sh_inspect` | 无 | 任务封装及环境事实 |
-| `nl2sh_tools` | 无 | 任务封装及工具定义 |
-| `nl2sh_invoke` | `tool`、对象 `arguments` | 任务封装及直接结果 |
-| `nl2sh_read_screen` | 无 | 文本摘要及 PNG/JPEG MCP 图像块 |
-| `nl2sh_ask` | `message`、可选 `context_id` | 任务封装及 Agent 结果 |
-| `nl2sh_get_task` | `task_id` | 已保存任务封装 |
-
-结构化封装包含 `task_id`、`context_id`、`state`，有 artifact 时包含 `result`；失败任务还提供 `error`。直接结果包含 `tool`、`success`、有界字符串 `output` 及可选 `attachments`；`output` 可能自身是 JSON 字符串，按该工具约定解析。Agent 结果包含 `session`、`answer`、`steps`、`tool_calls`，以及最多八条有界 `failed_tools`。宣称完成前查看失败并取得新的设备证据。
-
-`nl2sh_read_screen` 调用 `android.read_screen`，要求成功且恰有一个支持的图像附件。文本摘要只有 `task_id`、`state`、`tool`、`output`，不是完整结构化任务封装。发现工具不等于验证令牌、ADB 或截图能力。HTTP MCP 通过进程内鉴权 ASGI A2A 调用，不通过网络回连公告 origin。
-
-## 审批与运行限制
-
-默认情况下，`invoke` 在风险要求时等待设备本地批准，`ask` 拒绝待批准操作。在另一个设备交互终端运行 `bridge approvals` 和 `bridge approve REQUEST_ID`，使用与 bridge 进程相同的配置/状态路径及用户身份。最多同时八个待决请求，审批窗口 120 秒；危险操作需输入展示的二次确认短语。拒绝、过期或目标变化后应重新调用。
-
-设备显式设置 `bridge_auto_approve = true` 后，两条 bridge 路径都会自动批准全部风险。参数校验、风险分类、命令绑定与 root 能力检查仍执行，不影响 TUI/Web/CLI 审批策略。此时令牌可触发以 bridge 进程权限运行的无人值守操作。
-
-| 边界 | 限制 |
+| JSON-RPC 方法 | 参数与行为 |
 | --- | --- |
-| A2A/MCP 消息 | 1–8192 UTF-8 bytes |
-| MCP 工具名称 | 1–128 字符，原生 bridge 另检查字节长度 |
-| MCP context/task ID | 提供时 1–256 字符 |
-| 序列化 bridge payload | 16 KiB |
-| adb stdout、stderr | 分别 3 MiB，边读取边检查 |
-| MCP 客户端 A2A HTTP 回复 | 4 MiB，边读取边检查 |
-| MCP 截图 base64 | 编码文本最多 3 MiB，仅 PNG/JPEG |
-| 无线 IPv4 adb connect | 每次操作前，15 秒 |
-| 设备 inspect/tools | 30 秒 |
-| 设备 ask/invoke | 180 秒，包含设备审批等待 |
-| MCP 适配器 A2A HTTP 客户端 | 200 秒超时 |
+| `SendMessage` | `message`、可选 `configuration.returnImmediately/historyLength/acceptedOutputModes`；结果为 `{task: ...}` |
+| `GetTask` | `id`、可选 `historyLength`；结果直接为 Task |
+| `ListTasks` | 可选 `contextId/status/pageSize/pageToken/historyLength/includeArtifacts/statusTimestampAfter` |
+| `CancelTask` | `id`；请求协作取消并等待当前操作结束 |
 
-200 秒是 HTTP 客户端超时，不是服务端统一请求总时限。外部客户端/反向代理需给设备执行与审批留足时间（接入示例使用 210 秒）。适配器禁用环境 HTTP 代理和重定向。stdio 的 `NL2SH_A2A_URL` 必须是没有路径、凭据、query 或 fragment 的 origin；卡片中的 JSON-RPC 地址必须使用完全相同的 scheme/netloc 和 `/a2a`。远程 HTTP 需 `NL2SH_A2A_ALLOW_INSECURE_HTTP=1`；优先 HTTPS 或 loopback SSH 隧道。
+默认 SendMessage 等待最终状态；`returnImmediately: true` 返回已提交任务，可用 GetTask 轮询。`historyLength: 0` 不返回消息历史。ListTasks 默认最多 50 项、最大 100，按更新时间和 ID 倒序，返回 `tasks/totalSize/pageSize/nextPageToken`；最后一页 token 为 `""`。默认省略 artifacts，`includeArtifacts: true` 才返回。
 
-## 排障与不确定结果
+Task 使用 `id/contextId/status/history/artifacts`。状态为 `TASK_STATE_SUBMITTED/WORKING/COMPLETED/FAILED/CANCELED`；状态 timestamp 使用 RFC3339。artifact 的 `parts[0].data` 是结构化设备结果，无需解析嵌套 JSON 文本。错误使用标准 JSON-RPC 和 A2A 1.0 错误码，例如任务不存在 `-32001`、不可取消 `-32002`、不支持操作 `-32004`、不支持输入类型 `-32005`、版本不支持 `-32009`。
 
-| 现象 | 检查 |
+## 执行、审批与取消
+
+直接调用与 Agent 调用都复用工具注册、参数校验、准备、风险评估、资源锁、确认、权限绑定和审计。远程宽松配置提升至至少 balanced/risk_only；执行使用捕获式管道。默认修改等待设备本地交互终端审批，最多八个请求、120 秒；危险类需要精确短语。协议不提供批准工具。显式 `protocol_auto_approve` 可自动批准所有风险等级，仅影响协议确认器。
+
+同一 context 的 Agent 任务在服务内串行处理，并使用独立的 `protocol-` 会话名；Web/TUI 会话不复用该命名空间。Android UI 互斥仍使用现有跨进程锁。HTTP 请求断连不自动重放或回滚 A2A 任务；查询已知 task 后再决定是否重新提交。message ID 不提供 exactly-once 保证。
+
+CancelTask/MCP 取消会拒绝待审批动作，并给 Agent/捕获式 shell 传递取消信号。执行 Future 不因客户端请求结束而被直接丢弃；shell 沿现有进程组回收链停止，其他工具在当前操作完成后结束。取消期间可能已有副作用，CANCELED 不表示回滚。SIGINT/SIGTERM 按相同边界等待任务结束后关闭服务。
+
+## 存储与限制
+
+任务库为设备状态目录下 `protocol/tasks.sqlite3`，目录 0700、文件 0600；进程锁防止同状态目录启动多个协议服务。Agent 完整历史在 `sessions/` 私有目录。已知配置凭据与服务令牌从任务快照脱敏。重启将 SUBMITTED/WORKING 标为 FAILED，不恢复、重放或批准执行；未完成回合不作为完整历史保存。
+
+| 边界 | 上限 |
 | --- | --- |
-| 401 | 客户端与网关 Bearer 令牌一致，环境变量传入 stdio 进程 |
-| 卡片可访问，设备工具失败 | `adb -s SERIAL get-state`、授权、设备程序/配置路径、UID 和当前无线连接端口 |
-| 卡片 origin 不一致 | 客户端 origin 与 `--advertised-url` / `NL2SH_GATEWAY_URL` 完全一致；stdio `NL2SH_A2A_URL` 不追加 `/a2a` 或 `/mcp` |
-| 模型未配置 | 为 `ask` 配置设备模型，或改用直接工具 |
-| 不支持工具 | 重新获取 `/tools`，检查组/单工具开关及 bridge 过滤 |
-| 没有待决审批 | 核对设备配置/状态路径及 UID，请求可能已过期或启用了自动审批 |
-| UI 目标过期、部分树或输入失败 | 重读屏幕，取得完整目标，检查 companion 服务/键盘及 shell/root 权限 |
-| 超时、取消或连接丢失 | 查询已知任务，重新检查设备状态后再决定是否写入 |
+| HTTP 请求体 | 32 KiB，MCP/A2A |
+| MCP 参数 JSON | 16 KiB |
+| Agent 用户文本 | 8192 UTF-8 bytes |
+| 工具名 | 128 UTF-8 bytes |
+| task/context/message ID | 256 UTF-8 bytes |
+| 活动任务 | 16，包括等待上下文/审批 |
+| 待决本地审批 | 8，120 秒 |
+| 单任务存储文档 | 4 MiB |
+| 保存任务 | 200 / 文档总量 64 MiB，先清理最旧终态任务 |
+| MCP 截图 base64 | 3 MiB，仅 PNG/JPEG |
 
-传输不会在丢失回复后自动重放设备操作。终止或取消主机 adb 子进程不能证明所有设备动作已停止或回滚。`GetTask` 只读已保存状态，不恢复或撤销执行。新消息是新操作，复用 context 或 message ID 都没有已承诺的 exactly-once 保证。
-
-主机 `workflow prepare|deploy|status` 是开发检查点，不是远程公布的工具。`status` 读取检查点文件，不探测设备健康。`deploy` 校验记录的本地程序摘要和当前 ABI，然后推送/chmod 独立候选程序并运行 `--version`；它不校验远端文件摘要，也不保证候选路径此前不存在。如需保留旧候选，使用不同的 `--candidate`。见 [部署指南](../advanced/a2a-mcp.md)。
+Task 存储不是无限期归档，旧终态任务可能被清理。执行时间由配置中的 Agent 与工具预算控制，没有统一 180 秒 ADB 超时；客户端与反向代理超时应覆盖任务时长和审批等待，长期 Agent 委派建议 returnImmediately + GetTask。

@@ -21,7 +21,15 @@ pub(in crate::web) async fn get_info(
             "aarch64" => "arm64-v8a", "arm" => "armeabi-v7a", other => other,
         },
         "capabilities": capabilities,
+        "connections": crate::protocol::connection_info(&state.path).await,
     })))
+}
+
+// Lightweight read-only discovery; no provider, device probe, credentials or server start.
+pub(in crate::web) async fn get_connections(
+    State(state): State<Arc<Shared>>,
+) -> Json<crate::protocol::ConnectionInfo> {
+    Json(crate::protocol::connection_info(&state.path).await)
 }
 
 // Read-only discovery; installation remains with its existing owner.

@@ -2,6 +2,12 @@
 
 交互启动默认同时监听 `0.0.0.0:9999`；端口占用时选择其他可用端口，以启动日志中的实际地址为准。**页面无需登录，能访问页面的人可查看数据、编辑配置并提交任务。只在受信任网络使用。** `adb forward` 不会关闭局域网监听。
 
+## MCP / A2A 连接
+
+左侧垂直菜单“MCP / A2A”打开连接窗口，可刷新协议进程状态，复制实际 MCP Streamable HTTP、A2A JSON-RPC 与公开 Agent Card 地址，以及 HTTP/stdio 客户端配置、设备启动命令与 A2A 请求示例。查询无需模型，不启动服务，也不展示令牌或提供协议审批按钮。修改仍需设备同 UID、同配置的交互终端批准。
+
+Web 与协议服务分别启动；Web 的 `ready` 不代表 MCP/A2A 已启动。`service status` 文本及 JSON 的 `connections` 字段也提供同一连接信息，`/api/connections` 提供轻量只读查询，`/api/info` 包含 `connections`。状态为 `running/stopped/unknown`；运行中只确认本地协议进程身份与独占锁，不保证客户端网络可达。未启动或无法确认 HTTP 时显示明确标记的默认本机示例。127.0.0.1 仅同设备可用；跨设备需显式设置监听与公告地址，远程推荐 HTTPS。令牌变量仅显示名称 `NL2SH_PROTOCOL_TOKEN`。详见 [设备 MCP/A2A](../advanced/a2a-mcp.md)。
+
 ## 无终端后台启动
 
 ```bash
@@ -55,7 +61,7 @@ adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service st
 能力查询不下载资产、不改变系统设置、不请求 su；主程序的内部探测使用普通用户、管道捕获和五秒超时。
 
 `/api/tools` 的 `enabled` 是配置开关，`available` 表示运行时前置条件；未就绪工具仍可在设置目录中
-显示。Agent、`bridge tools` 与直接工具调用按当前能力过滤。开发主机不暴露 Android 控制和 ART
+显示。Agent、MCP `nl2sh_tools` 与直接工具调用按当前能力过滤。开发主机不暴露 Android 控制和 ART
 反编译；普通 Termux UID 不暴露需要 shell/root 的 UI 工具。APK 静态读取和 Tailcat 检查仍保留。
 服务/安装状态变化后，下一任务或信息请求重新发现；当前任务的注册表不在执行中自动改变。
 

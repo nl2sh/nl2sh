@@ -721,6 +721,18 @@ fn conversation_lines(app: &App, width: usize, theme: Theme) -> Vec<Line<'_>> {
             }
         } else if let Some(url) = entry.strip_prefix(super::i18n::WEB_WELCOME_PREFIX) {
             lines.extend(web_welcome_lines(url, app.language, app.ascii, theme));
+        } else if let Some(text) = entry.strip_prefix(super::i18n::PROTOCOL_WELCOME_PREFIX) {
+            lines.push(Line::raw(""));
+            for (index, text) in text.lines().enumerate() {
+                lines.push(Line::styled(
+                    text,
+                    if index == 0 {
+                        theme.bold(theme.cyan)
+                    } else {
+                        theme.style(theme.text_primary)
+                    },
+                ));
+            }
         } else if let Some(encoded) = entry.strip_prefix(super::output::TOOL_RESULT_PREFIX) {
             let (prefix, details) = encoded.split_once('\n').unwrap_or((encoded, ""));
             if app.tool_results_expanded {

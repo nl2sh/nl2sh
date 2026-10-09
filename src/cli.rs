@@ -21,10 +21,10 @@ pub enum Command {
         #[command(subcommand)]
         command: ServiceCommand,
     },
-    /// Machine-readable, non-interactive interface for a trusted local bridge.
-    Bridge {
+    /// Serve device-native MCP/A2A or manage local protocol approvals.
+    Protocol {
         #[command(subcommand)]
-        command: BridgeCommand,
+        command: ProtocolCommand,
     },
 }
 #[derive(Debug, Clone, Subcommand)]
@@ -66,30 +66,26 @@ pub enum ServiceCommand {
     },
 }
 #[derive(Debug, Clone, Subcommand)]
-pub enum BridgeCommand {
-    /// Return bounded, read-only Android environment facts.
-    Inspect,
-    /// Return the configured model-facing tool catalog.
-    Tools,
-    /// Run the Agent with a bounded base64url JSON request and stored history.
-    Ask {
-        /// Base64url without padding, containing {session,message} JSON.
+pub enum ProtocolCommand {
+    /// Serve authenticated HTTP MCP and A2A on the device.
+    Serve {
+        #[arg(long, default_value = "127.0.0.1")]
+        host: std::net::IpAddr,
+        #[arg(long, default_value_t = 8765)]
+        port: u16,
+        /// Public HTTP(S) origin used in the Agent Card.
         #[arg(long)]
-        payload_base64: String,
-    },
-    /// Invoke one registered tool directly with base64url {tool,arguments} JSON.
-    Invoke {
-        /// Base64url without padding, containing {tool,arguments} JSON.
+        advertised_url: Option<String>,
+        /// Explicitly allow a non-loopback plaintext HTTP listener.
         #[arg(long)]
-        payload_base64: String,
+        allow_insecure_http: bool,
     },
-    /// List pending direct-tool approvals on this device.
+    /// Serve MCP over local stdin/stdout; never starts the TUI or Web UI.
+    Stdio,
+    /// List pending protocol approvals on this device.
     Approvals,
-    /// Approve or reject one pending direct-tool request from an interactive terminal.
-    Approve {
-        /// Request identifier printed by `bridge approvals`.
-        id: String,
-    },
+    /// Approve or reject one request in an interactive local terminal.
+    Approve { id: String },
 }
 impl From<ApiTypeArg> for nl2sh::config::ApiType {
     fn from(value: ApiTypeArg) -> Self {

@@ -37,7 +37,7 @@ Setting `agent_mode` preserves explicit budget fields: an existing `max_agent_st
 
 ## Approval and credentials
 
-list/get are read-only. Ordinary set/reset actions require mutation approval. Safety policy, confirmation policy, Root identity, bridge auto-approval, custom security rules, tool groups/overrides, the Tailcat executable path, Provider/Jev endpoints, proxy settings, and audit log paths/limits require Dangerous strong approval. Local field policy determines risk; the model cannot lower it. Existing explicit run permissions or bridge auto-approval follow their established rules. Changing `bridge_auto_approve` does not immediately replace the confirmer for the current call.
+list/get are read-only. Ordinary set/reset actions require mutation approval. Safety policy, confirmation policy, Root identity, protocol auto-approval, custom security rules, tool groups/overrides, the Tailcat executable path, Provider/Jev endpoints, proxy settings, and audit log paths/limits require Dangerous strong approval. Local field policy determines risk; the model cannot lower it. Existing explicit run permissions or protocol auto-approval follow their established rules. Changing `protocol_auto_approve` does not immediately replace the confirmer for the current call.
 
 `api_key`, `ima_client_id`, `ima_api_key`, `jev_api_key`, `proxy_username`, and `proxy_password` report only whether configured. They are never returned as plaintext and cannot be set/reset through this tool. Ask the user to manage credentials in TUI `/config` or Web settings. Known credentials embedded in other displayed values and HTTP(S) URL authentication, queries, and fragments are redacted. The tool refuses to set Provider/Jev URLs containing authentication, queries, or fragments. Parse errors do not echo TOML lines containing keys.
 
@@ -45,6 +45,6 @@ Files are limited to 256 KiB and individual values to 16 KiB. Writes preserve ot
 
 ## When changes apply
 
-Write results report that the file was saved and requires reload. The current task keeps its model client, tool registry, confirmer, budgets, and terminal snapshot. New Web tasks and new bridge processes load the disk configuration. Exit the TUI safely and restart it to apply changes. Environment and CLI overrides can still take precedence over a saved field. The tool does not restart processes, change environment variables, or approve subsequent actions when enabling tools.
+Write results report that the file was saved and requires reload. The current task keeps its model client, tool registry, confirmer, budgets, and terminal snapshot. New Web tasks and new protocol tasks load the disk configuration. Exit the TUI safely and restart it to apply changes. Environment and CLI overrides can still take precedence over a saved field. The tool does not restart processes, change environment variables, or approve subsequent actions when enabling tools.
 
-See the [tool argument catalog](../reference/tool-catalog.md) for the complete schema. Built-in Agent calls and direct bridge calls share the same preparation, security assessment, confirmation, and execution flow.
+See the [tool argument catalog](../reference/tool-catalog.md) for the complete schema. Built-in Agent calls and direct protocol calls share the same preparation, security assessment, confirmation, and execution flow.

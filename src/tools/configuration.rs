@@ -20,7 +20,7 @@ use toml_edit::{DocumentMut, Item};
 const MAX_CONFIG_BYTES: usize = 256 * 1024;
 const META: ToolMetadata = ToolMetadata {
     name: "nl2sh_config",
-    description: "Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Writes preserve other fields and comments and do not hot-reload the current task. New Web tasks/bridge processes reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.",
+    description: "Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Writes preserve other fields and comments and do not hot-reload the current task. New Web/protocol tasks reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.",
     category: ToolCategory::Configuration,
     risk: ToolRisk::ReadOnly,
     requires: &[],
@@ -409,7 +409,7 @@ fn prepare_sync(active: Config, path: PathBuf, args: ConfigArgs) -> Result<Prepa
         }
     }
     secrets.sort_by_key(|s| std::cmp::Reverse(s.len()));
-    let notice = "Writes affect the file only. Current task/clients keep their snapshot. New Web tasks and bridge processes reload; restart TUI to apply. Environment and CLI overrides may take precedence.";
+    let notice = "Writes affect the file only. Current task/clients keep their snapshot. New Web and protocol tasks reload; restart TUI to apply. Environment and CLI overrides may take precedence.";
     if matches!(args.action, Action::List | Action::Get) {
         let keys: Vec<String> = if let Some(key) = args.key {
             vec![key]
@@ -749,7 +749,7 @@ mod tests {
         for key in [
             "security_level",
             "execute_confirm_policy",
-            "bridge_auto_approve",
+            "protocol_auto_approve",
             "execute_user_mode",
             "security_rules",
             "tool_groups",

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- TUI 启动页、`service status` 文本/JSON 和 Web 左侧垂直菜单新增 MCP/A2A 连接说明；共享私有协议进程发现，显示实际公告地址、HTTP/stdio 客户端配置与本地审批方式，默认示例和运行状态区分，令牌不展示。
+
+- 将 MCP/A2A 内置到设备单个 Rust 程序，提供独立鉴权 HTTP 和本地 stdio MCP、A2A Agent 委派、设备任务持久化/查询/取消与上下文串行。工具与 Agent 写入默认等待 `protocol approvals/approve` 本地审批；配置改为 `protocol_auto_approve`。删除 Python/ADB 网关、Docker、bridge 命令、部署工作流及旧配置兼容，客户端改为直接连接设备。
+
 - Web 增加版本检查红点与立即更新/暂不更新/跳过弹窗；独立 Android 安装可直接更新，显示真实下载进度与校验/安装阶段，保留安装归属和签名验证，完成后提示重启。对话中的本地图片与音视频链接复用文件管理预览组件，包括 WAV/PCM 参数播放。
 
 - `android-run-windows.bat` 的 Web 模式改用原生 `service start --json`，与 Linux/构建启动器一致；停止不再按进程名批量结束设备上的其他 nl2sh 进程，只关闭本配置拥有的受管服务。所有 Web-only 启动器复用已健康的服务，推送新二进制后需显式 `service restart --json`。新增启动器回归测试，禁止 `nohup`、`kill -9` 与 `/proc` 进程扫描回流。

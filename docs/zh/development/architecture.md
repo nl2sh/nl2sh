@@ -1,13 +1,15 @@
 # 架构
 
-核心以 stable Rust 2021 单 ELF 交付；Tokio 驱动异步，reqwest 使用 rustls，ratatui/crossterm 管理 TUI，Axum/SSE/WebSocket 与嵌入的 Preact 页面管理 Web。Python A2A/MCP 仅在主机运行，companion APK 与 JADX DEX helper 都是可选依赖。
+核心以 stable Rust 2021 单 ELF 交付；Tokio 驱动异步，reqwest 使用 rustls，ratatui/crossterm 管理 TUI，Axum/SSE/WebSocket 与嵌入的 Preact 页面管理 Web。MCP/A2A 在设备端内置，companion APK 与 JADX DEX helper 都是可选依赖。
 
 ```mermaid
 flowchart TB
     UI[TUI / Web / CLI] --> Agent[Agent Runner]
     Agent <--> Provider[Provider adapter]
     Agent --> Tool[Tool Runtime]
-    Bridge[A2A / MCP → adb bridge] --> Tool
+    MCP[Device MCP] --> Tool
+    A2A[Device A2A] --> Tasks[Device task service]
+    Tasks --> Agent
     Tool --> Prep[Validate / Prepare]
     Prep --> Security[Security + Confirmation]
     Security --> Broker[Execution / Privilege Broker]
@@ -15,7 +17,7 @@ flowchart TB
     Exec --> Tool
 ```
 
-逻辑分三层：Agent 规划层、具名 Tool Runtime、安全执行的平台适配层。`bridge invoke` 跳过设备 Agent 和模型请求，但保留准备、安全与执行；`bridge ask` 使用内置 Agent。工具结果、模型历史、UI 显示和审计各自设限。
+逻辑分三层：Agent 规划层、具名 Tool Runtime、安全执行的平台适配层。MCP 工具直调跳过 Agent 与模型，但保留准备、安全与审批；A2A 和 MCP ask 共用设备任务服务与内置 Agent。工具结果、模型历史、UI 显示和审计各自设限。
 
 ## 模块与扩展
 
@@ -25,7 +27,7 @@ flowchart TB
 - `src/security/`：AST shell 语义与领域策略。
 - `src/shell/`：提权计划、执行 broker、PTY/管道、取消与恢复。
 - `src/config/`、`src/tui/`、`src/web/`：配置与用户入口。
-- `a2a_gateway/`：主仓库内可选主机模块；[Android Bridge](https://github.com/nl2sh/android-bridge) 与 [JADX helper](https://github.com/nl2sh/jadx-helper) 为独立 Android 项目和 Git 仓库，各自构建与发布。
+- `src/protocol/`：设备 MCP/A2A、任务持久化、上下文串行与本地审批；[Android Bridge](https://github.com/nl2sh/android-bridge) 与 [JADX helper](https://github.com/nl2sh/jadx-helper) 为独立 Android 项目和 Git 仓库，各自构建与发布。
 
 新增工具必须保持 prepare → assessment → confirmation → execution；显示组件不得直接执行 Provider JSON。PTY 输出过滤终端控制序列，fd 与进程采用 RAII，异常仍 wait 并恢复终端。
 

@@ -15,4 +15,4 @@
 
 APK/JADX 和 Tailcat 默认关闭，Web 工具页或 TUI `/config` 的“工具”分类可按组或单项启用。`tool_overrides` 优先于 `tool_groups`；关闭工具不会进入模型定义或直接调用。切换组开关会清除组内单项覆盖。新 Web 任务读取配置；TUI 保存后自动重载，无需重启。开启工具不等于批准动作。ima 需要独立凭据。
 
-[完整工具参数目录](../reference/tool-catalog.md)由代码导出，包含所有可选项；实际可用性仍由配置、能力和入口决定。一次性 bridge 不暴露需要长期存活的 Tailcat 监听器操作。
+[完整工具参数目录](../reference/tool-catalog.md)由代码导出，包含所有可选项；实际可用性仍由配置、能力和入口决定。设备协议服务支持需要长期存活的 Tailcat 监听器操作。

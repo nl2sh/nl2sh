@@ -175,8 +175,8 @@ pub struct Config {
     pub execute_confirm_policy: ConfirmPolicy,
     /// Safety posture.
     pub security_level: SecurityLevel,
-    /// Automatically approve operations received through the A2A/MCP bridge.
-    pub bridge_auto_approve: bool,
+    /// Automatically approve operations received through the device MCP/A2A service.
+    pub protocol_auto_approve: bool,
     /// Enabled state of optional tool groups. `jadx` and `tailcat` default off.
     pub tool_groups: BTreeMap<String, bool>,
     /// Per-tool enabled state, overriding its group.
@@ -267,7 +267,7 @@ impl Default for Config {
             interactive_execute_timeout_secs: 0,
             execute_confirm_policy: ConfirmPolicy::RiskOnly,
             security_level: SecurityLevel::Balanced,
-            bridge_auto_approve: false,
+            protocol_auto_approve: false,
             tool_groups: BTreeMap::new(),
             tool_overrides: BTreeMap::new(),
             tailcat_binary_path: PathBuf::from(if cfg!(target_os = "android") {

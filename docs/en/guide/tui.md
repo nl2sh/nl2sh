@@ -2,6 +2,8 @@
 
 Run `nl2sh` without arguments for the multi-turn Agent. Missing configuration still opens the UI, but model tasks require a provider first. Terminal capabilities select TrueColor / ANSI 256; `--ascii` uses ASCII labels.
 
+The startup “MCP / A2A” section shows a protocol-process snapshot, confirmed advertised addresses, HTTP authentication, and device startup/local stdio commands. The TUI does not start protocols; when stopped or unknown, port 8765 URLs are explicitly local examples after default startup. Refresh through `nl2sh --config <config-path> service status` or the Web “MCP / A2A” dialog. See [device MCP/A2A](../advanced/a2a-mcp.md) for connections and local approval.
+
 | Action | Key or command |
 | --- | --- |
 | Send task | Enter |

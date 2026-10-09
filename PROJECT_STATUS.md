@@ -4,6 +4,12 @@ Last Updated: 2026-10-09
 
 ## Recent Changes
 
+- 将 MCP/A2A 连接入口移至 Web 左侧垂直菜单，复用连接窗口；顶栏不再显示该入口，双语指南同步。验证：39 项前端测试、生产构建及严格文档构建通过；浏览器确认左侧入口、连接窗口、顶栏折叠独立访问、Esc/焦点恢复和 390px 手机布局。
+
+- MCP/A2A 连接入口：TUI 启动页展示协议状态快照和连接方式，service status 文本/JSON 增加独立协议 connections，Web 左侧垂直菜单增加连接窗口，可刷新并复制实际公告端点、HTTP/stdio 客户端配置、启动命令和 A2A 请求体。私有协议公告绑定 PID/启动身份、UID、配置与独占锁，遗留记录不误报运行；不保存或展示令牌、不探测公告 URL、不自动启动服务，双语指南和架构同步。
+
+- 设备端内置 MCP/A2A：新增 `protocol serve/stdio/approvals/approve`；MCP 直接复用 Tool Runtime，A2A 与 MCP ask 共用设备任务服务、私有上下文和 SQLite。独立 Bearer、Host/Origin 校验，有界并发/存储，协作取消与退出等待，重启不重放；工具与 Agent 默认等待设备本地一次性审批，显式 `protocol_auto_approve` 仅作用于协议。删除 Python/ADB 网关、Docker、候选部署工作流、bridge CLI 与旧配置字段，不保留兼容路径。双语手册与派生参考同步。下方旧网关/bridge 验证记录属于历史版本，不表示当前支持的能力。
+
 - Web 顶栏新增版本检查红点及立即更新/暂不更新/跳过弹窗；独立 Android 安装在明确选择后重新校验版本、安装归属及签名发布清单，显示真实下载字节和校验/安装进度，拒绝重复安装，刷新后恢复进度，完成提示重启。对话中的本地图片及音视频 Markdown 链接复用文件管理媒体组件、Range 与 WAV/PCM 参数播放。双语 Web 用户说明、更新记录和架构同步。验证：37 项前端测试、生产构建、完整 Rust 测试、格式检查与 cargo check、49 对双语文档及严格站点构建通过；浏览器模拟发布响应验证三项选择、明确版本提交、进度、刷新恢复、失败重试、安装完成提示、Helper 更新限制和 390px 弹窗布局；`cargo test --no-default-features update` 验证包管理器构建更新边界通过。
 
 - 消除启动器在后台服务管理上的不一致：`android-run-windows.bat` 的 Web-only 路径此前仍是 `nohup '%REMOTE_BINARY%' --web-only >nl2sh-web.log` 加按 `/proc/*/comm` 扫进程名 `kill`/`kill -9`，而 `android-build-run.ps1`、`android-build-run.sh`、`android-run-linux.sh` 已改用原生 `service start/stop --json`；`install-android.ps1` 与 `install-android.bat` 走的正是该 bat，因此 Windows 安装链仍落到旧的未受管路径。现改为 `'%REMOTE_BINARY%' --config '%REMOTE_CONFIG%' service start --json` 与对应的 `service stop --json`，沿用同一配置的私有服务目录、实际端口回读、就绪核验和令牌授权优雅退出；启动失败时提示检查 `config.service` 目录，并打印按实际端口做 `adb forward` 的方法。停止不再按进程名批量结束设备上其他配置的 nl2sh 进程，也不再写 `nl2sh-web.log`（日志改由私有 `config.service/service.log` 承担）。同时统一 Web-only 语义：`service start` 幂等，因此 root adbd / Android su / adb shell 三条权限路径在 Web-only 下都不再先执行 stop（此前仅 `android-run-linux.sh` 跳过，`android-build-run.sh` 与 `.ps1` 仍会先停再起，造成无谓中断），TUI 前台路径保持先停后起。
@@ -349,12 +355,12 @@ Last Updated: 2026-10-09
 
 ## Current Phase
 
-1.0.6 已发布；Hermes 设备 Tool Runtime 升级正在开发中。直接工具调用、设备交互终端一次性审批、截图图像块回传、可选 Accessibility companion 和三层逻辑边界已实现并通过 API 26 模拟器验证；真机闭环验证仍待完成。
+当前 Cargo 版本为 1.1.0；设备 MCP/A2A 已替代主机网关。实现与验证范围见 Recent Changes 与 Verification Performed；历史版本设备验证不代替当前协议入口的真机验收。
 
 ## Overall Status
 
 - Product positioning: 以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent；核心程序以单个可执行文件交付，提供多轮 Tool Calling 和丰富 TUI，不声称与 Hermes API 或插件兼容。
-- Build status: 当前 Cargo 版本为 1.0.6；构建与测试结果见下方 Verification Performed。
+- Build status: 当前 Cargo 版本为 1.1.0；构建与测试结果见下方 Verification Performed。
 - Test status: 全量 `cargo test --all-targets` 通过；显式凭据 ima live smoke 按设计忽略。
 - Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
@@ -441,6 +447,10 @@ Last Updated: 2026-10-09
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- MCP/A2A 连接展示：完整 `cargo test --workspace --all-targets` 通过（440 项通过、4 项显式 live 测试忽略），39 项 Web 测试与生产构建通过；格式及全目标编译检查、CLI service/stdio 回归、Android API 26 AArch64/ARMv7/x86_64 编译检查通过。新增回归覆盖实际 HTTP 公告 origin、stdio 无 HTTP、私有权限、PID 启动身份、同状态目录不同配置、遗留记录不误报、CLI/Web 连接一致与令牌不泄露。真实浏览器验证自定义端口、复制地址/客户端配置、Esc 与焦点恢复、390px 窗口、停止/stdio 切换刷新和查询失败清除旧地址；实际 TUI 伪终端验证运行状态、公告地址、鉴权/stdio 说明及安全退出。49 对双语文档、派生参考、严格 MkDocs 构建与站点检查通过。严格 Clippy 仍被既有 17 项告警阻断，本次连接模块无新增告警。
+
+- 设备内置 MCP/A2A：完整 `cargo test --workspace --all-targets` 通过（437 项通过、4 项显式 live 测试忽略），17 项 Python 脚本回归通过；格式检查、全目标编译检查、协议与实际 CLI stdio 回归通过。49 对双语页面、派生参考检查、严格 MkDocs 构建及构建后站点检查通过。Android API 26 AArch64、ARMv7、x86_64 release 构建均通过。Android API 26 x86_64 模拟器验证原生 HTTP MCP 握手、七工具发现、设备信息、Shell、截图图片、本地终端拒绝/一次性批准，以及模拟模型提供方下两轮 A2A Agent 上下文复用；测试结束停止协议服务。主机协议回归覆盖鉴权/Host/Origin/请求上限、任务存储权限/独占锁/重启失败、取消、上下文串行与凭据脱敏、旧 CLI/配置拒绝。严格 Clippy 被既有模块告警阻断，新增协议模块无告警。模拟器验证不代替厂商真机验收。
 
 - 系统性能 Trace：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test` 通过（400 项通过、4 项显式 live 测试忽略）；12 项新增回归覆盖五类证据、跨 CPU 排序、睡眠排除、丢失/序列起始时长、损坏/超限、私有路径、锁与拒绝停止不执行。Android API 26 AArch64、ARMv7、x86_64 的 `cargo check --target <target> --no-default-features` 与 x86_64 release 构建通过。Android 15/API 35 x86_64 模拟器经 `bridge invoke` 与本地交互审批验证拒绝开始、批准采集、采集中分析拒绝、复现设置页滚动、跨进程停止/分析、重复停止、自动到期以及拒绝停止保持采集；真实 trace 覆盖 sched_switch、sched_wakeup、atrace、Binder send/receive 和 FrameTimeline，并保留部分证据标志。双语派生参考、页面/站点检查、严格 MkDocs 构建及签名/摘要校验后的 APT 合并通过。严格 Clippy 被既有模块告警阻断；新增 Trace 模块无告警。此验证不代替厂商真机或其他 Perfetto 编码验收。
 

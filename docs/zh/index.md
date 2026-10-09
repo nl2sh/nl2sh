@@ -2,7 +2,7 @@
 
 让 AI 在 Android Shell 上完成真实任务。
 
-nl2sh 是以原生 Android shell 为一等环境、兼容 Termux 的多轮 Tool Calling Agent。核心程序是单个 Rust 可执行文件，内置终端 TUI 与 Web 多会话界面；可选 A2A/MCP 网关连接其他 Agent。
+nl2sh 是以原生 Android shell 为一等环境、兼容 Termux 的多轮 Tool Calling Agent。核心程序是单个 Rust 可执行文件，内置终端 TUI 与 Web 多会话界面；内置设备端 MCP/A2A 服务连接其他 Agent。
 
 [快速开始](getting-started/index.md){ .md-button .md-button--primary }
 [安装](getting-started/installation.md){ .md-button }

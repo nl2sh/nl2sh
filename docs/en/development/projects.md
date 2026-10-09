@@ -5,7 +5,7 @@ The [nl2sh organization](https://github.com/nl2sh) maintains distinct components
 | Project | Role | Runtime and permissions | Guide |
 | --- | --- | --- | --- |
 | [nl2sh](https://github.com/nl2sh/nl2sh) | Agent, TUI/Web/CLI, Tool Runtime | Single Rust device binary; privileges follow caller/root policy | [Start](../getting-started/index.md) |
-| `a2a_gateway/` in nl2sh | A2A 1.0, HTTP/stdio MCP | Python 3.11+ on host; adb targets one device; direct tools need no device model | [A2A/MCP](../advanced/a2a-mcp.md) |
+| Built-in `src/protocol/` | A2A 1.0, HTTP/stdio MCP | One device Rust executable; direct tools need no model, runtime ADB or Python | [MCP/A2A](../advanced/a2a-mcp.md) |
 | [android-bridge](https://github.com/nl2sh/android-bridge) | Accessibility, Unicode input and gestures | Optional installed API 26+ APK; provider/broadcasts require shell/root; services enabled manually | [Integration](../advanced/android-bridge.md) |
 | [jadx-helper](https://github.com/nl2sh/jadx-helper) | One-class APK decompilation | API 26+ DEX JAR through app_process; not installed as an APK | [APK/JADX](../tools/apk-jadx.md) |
 | [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) | Android ADB installer and browser launcher | API 26+ controller, TCP or target Android 11+ wireless pairing; deploys latest ARM64/ARMv7 release | [Installation](../getting-started/installation.md#nl2sh-helper) (repository access required) |
@@ -14,6 +14,6 @@ The ADB installer is not the Accessibility companion. It verifies release checks
 
 Companion/helper release cycles are independent. The native release aggregates the selected artifacts in an authenticated compatibility manifest. Bridge tagged releases require APK signing; local unsigned builds remain available for development. JADX defaults come from the signed embedded policy, and unsigned source builds require explicit offline/custom configuration. Preserve package names, provider authority and DEX entrypoint when coordinating interfaces.
 
-Default bridge approval differs from local TUI/Web: direct calls wait for device-terminal approval; Agent consultation rejects pending-confirmation actions. Explicit `bridge_auto_approve` permits unattended bridge operations at all risk levels. Risk assessment and capability checks still run. Full UI automation requires shell/root; ordinary Termux UIDs have a different permission boundary. The built-in Web UI currently has no login and binds all IPv4 interfaces; it does not inherit gateway Bearer authentication.
+Protocol tool and Agent mutations default to device-terminal approval. Explicit `protocol_auto_approve` permits all risk levels while retaining risk and capability checks. Full UI automation requires shell/root. Web and protocol services have separate ports and access policies.
 
 Report bugs in the component repository with version, Android API/ABI, caller UID, backend/transport and redacted evidence. Shared organization contribution guidance is maintained in [.github](https://github.com/nl2sh/.github). The organization's TUR fork serves packaging/upstream contribution work, not Agent runtime development.
