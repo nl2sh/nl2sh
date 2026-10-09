@@ -13,6 +13,24 @@ fn configuration(root: &Path, extra: &str) -> Result<PathBuf> {
     std::fs::write(&path, extra)?;
     Ok(path)
 }
+
+#[tokio::test]
+async fn protocol_listener_prefers_requested_port_and_falls_back_only_when_occupied() -> Result<()>
+{
+    let host = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    let occupied = bind_http_listener(host, 0).await?;
+    let preferred = occupied.local_addr()?.port();
+    let fallback = bind_http_listener(host, preferred).await?;
+    assert_ne!(fallback.local_addr()?.port(), preferred);
+    assert_eq!(fallback.local_addr()?.ip(), host);
+    assert!(occupied.local_addr().is_ok());
+    drop(occupied);
+    let available = bind_http_listener(host, preferred).await?;
+    assert_eq!(available.local_addr()?.port(), preferred);
+    let unavailable = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1));
+    assert!(bind_http_listener(unavailable, 0).await.is_err());
+    Ok(())
+}
 async fn server(tasks: Arc<Tasks>) -> Result<(String, tokio::task::JoinHandle<()>)> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();

@@ -177,7 +177,7 @@ pub struct Config {
     pub security_level: SecurityLevel,
     /// Start device HTTP MCP/A2A with Web/TUI services, including the managed background service.
     pub protocol_start_with_service: bool,
-    /// MCP/A2A port when starting with Web/TUI; zero requests an available ephemeral port.
+    /// Preferred MCP/A2A port with Web/TUI; occupied ports fall back to an available port, zero assigns one directly.
     pub protocol_service_port: u16,
     /// Automatically approve operations received through the device MCP/A2A service.
     pub protocol_auto_approve: bool,

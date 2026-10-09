@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MCP/A2A selects an available port when the configured or default port `8765` is occupied, preserving the bind address and announcing the actual port. Other bind errors still fail; unrelated services remain running.
+
 - Fix TUI/foreground Web ignoring the MCP/A2A startup switch. UIs manage protocols they start and reuse existing processes. TUI/Web show the running version, actual endpoints, complete Bearer token and authenticated client configuration, using verified private live announcements. Ordinary status and Agent Cards omit credentials; Web details disable caching.
 
 - Add default-off `protocol_start_with_service`, `protocol_service_port`, and Web settings. Managed services can start and stop Web and MCP/A2A in one process, clean up failed starts, preserve standalone processes, and rotate generated tokens on restart.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MCP/A2A 配置或默认端口 `8765` 被占用时自动选择空闲端口，保留监听地址并公告实际端口；其他绑定错误仍报错，不停止无关服务。
+
 - 修复 TUI/前台 Web 未读取 MCP/A2A 启动开关；UI 一并启停自建协议并复用已有进程。TUI/Web 显示运行版本、实际地址、完整 Bearer 令牌和带鉴权客户端配置；凭据仅从私有、已验证运行公告读取，普通状态与 Agent Card 省略令牌，Web 详细接口禁止缓存。
 
 - 新增 `protocol_start_with_service` 与 `protocol_service_port` 配置及 Web 设置，默认关闭；后台服务可在同一进程中一并启停 Web 与 MCP/A2A，启动失败清理、独立进程不接管、重启轮换自动令牌。

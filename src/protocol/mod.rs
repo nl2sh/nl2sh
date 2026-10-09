@@ -303,9 +303,7 @@ pub(crate) async fn start_http(
     let (token, generated) = protocol_token(std::env::var("NL2SH_PROTOCOL_TOKEN"))?;
     // Validate before opening the listener or modifying persistent state.
     settings(host, port, advertised, insecure, &token)?;
-    let listener = tokio::net::TcpListener::bind(SocketAddr::new(host, port))
-        .await
-        .context("cannot bind protocol listener")?;
+    let listener = bind_http_listener(host, port).await?;
     let port = listener.local_addr()?.port();
     let access = settings(host, port, advertised, insecure, &token)?;
     let tasks = Tasks::open_with_token(path, Some(token.clone()))?;
@@ -342,6 +340,24 @@ pub(crate) async fn start_http(
         shutdown,
         task: Some(task),
     })
+}
+async fn bind_http_listener(host: IpAddr, port: u16) -> Result<tokio::net::TcpListener> {
+    let address = SocketAddr::new(host, port);
+    match tokio::net::TcpListener::bind(address).await {
+        Ok(listener) => Ok(listener),
+        Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+            tokio::net::TcpListener::bind(SocketAddr::new(host, 0))
+                .await
+                .with_context(|| {
+                    format!(
+                        "protocol listener at {address} is occupied; cannot bind an available port"
+                    )
+                })
+        }
+        Err(error) => {
+            Err(error).with_context(|| format!("cannot bind protocol listener at {address}"))
+        }
+    }
 }
 async fn shutdown_signal() {
     #[cfg(unix)]

@@ -66,7 +66,7 @@ This section is updated from code. Credentials default to empty; never add real 
 | `execute_confirm_policy` | `"risk_only"` | General confirmation preference. |
 | `security_level` | `"balanced"` | Safety posture. |
 | `protocol_start_with_service` | `false` | Start device HTTP MCP/A2A with Web/TUI services, including the managed background service. |
-| `protocol_service_port` | `8765` | MCP/A2A port when starting with Web/TUI; zero requests an available ephemeral port. |
+| `protocol_service_port` | `8765` | Preferred MCP/A2A port with Web/TUI; occupied ports fall back to an available port, zero assigns one directly. |
 | `protocol_auto_approve` | `false` | Automatically approve operations received through the device MCP/A2A service. |
 | `tool_groups` | `{}` | Enabled state of optional tool groups. `jadx` and `tailcat` default off. |
 | `tool_overrides` | `{}` | Per-tool enabled state, overriding its group. |

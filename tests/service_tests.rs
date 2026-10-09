@@ -212,11 +212,42 @@ async fn managed_protocol_follows_config_start_restart_stop_and_startup_failure(
         format!("protocol_start_with_service=true\nprotocol_service_port={protocol_port}\n"),
     )
     .unwrap();
-    assert!(!fixture
-        .call(&["start", "--port", "0", "--json"])
+    let fallback = fixture.status(&["start", "--port", "0", "--json"]).await;
+    assert_eq!(fallback["state"], "ready");
+    assert_eq!(fallback["connections"]["state"], "running");
+    let fallback_url = fallback["connections"]["agent_card_url"].as_str().unwrap();
+    let fallback_port = url::Url::parse(fallback_url).unwrap().port().unwrap();
+    assert_ne!(fallback_port, protocol_port);
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(format!(
+            "http://127.0.0.1:{fallback_port}/.well-known/agent-card.json"
+        ))
+        .send()
         .await
-        .status
-        .success());
+        .unwrap();
+    assert!(response.status().is_success());
+    assert_eq!(
+        reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .unwrap()
+            .post(format!("http://127.0.0.1:{fallback_port}/mcp"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert!(occupied.local_addr().is_ok());
+    fixture.status(&["stop", "--json"]).await;
+    assert!(
+        tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, fallback_port))
+            .await
+            .is_ok()
+    );
     assert_eq!(
         fixture.status(&["status", "--json"]).await["state"],
         "stopped"
