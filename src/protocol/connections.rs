@@ -152,7 +152,7 @@ impl ConnectionInfo {
             },
             self.approvals_command
         ));
-        lines.push(if zh { "默认监听 0.0.0.0:8765 并允许 HTTP；自动获取设备 IPv4。仅本机使用可加 --host 127.0.0.1。HTTP 明文传输令牌，远程推荐 HTTPS。TUI/Web 不自动启动协议服务。" } else { "Defaults: 0.0.0.0:8765, HTTP allowed, device IPv4 detected automatically. Use --host 127.0.0.1 for local only. HTTP sends tokens in plaintext; prefer HTTPS remotely. TUI/Web does not start protocols." }.into());
+        lines.push(if zh { "默认监听 0.0.0.0:8765 并允许 HTTP；自动获取设备 IPv4。仅本机使用可加 --host 127.0.0.1。HTTP 明文传输令牌，远程推荐 HTTPS。TUI 不自动启动协议；设 protocol_start_with_service=true 可随后台服务启停，令牌与连接信息在私有 config.service/service.log。" } else { "Defaults: 0.0.0.0:8765, HTTP allowed, device IPv4 detected automatically. Use --host 127.0.0.1 for local only. HTTP sends tokens in plaintext; prefer HTTPS remotely. TUI does not start protocols. Set protocol_start_with_service=true to manage protocols with the background service; token and connection details are in private config.service/service.log." }.into());
         lines.join("\n")
     }
 }

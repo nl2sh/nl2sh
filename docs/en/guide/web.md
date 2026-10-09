@@ -1,12 +1,14 @@
 # Web UI
 
+`protocol_start_with_service` defaults to `false`; enabling it lets managed `service start/restart/stop` control Web and MCP/A2A together. `protocol_service_port` defaults to `8765` (zero requests an available port). Apply changes with `service restart`. This does not enable automatic approvals. Connection details and generated tokens go to the private `config.service/service.log`. See [starting with the service](../advanced/a2a-mcp.md).
+
 Interactive startup also listens on `0.0.0.0:9999`, choosing another available port if occupied. Use the actual URL in startup output. **There is no login: anyone reaching the page can view data, edit configuration, and submit tasks. Use a trusted network.** ADB forwarding does not disable LAN listening.
 
 ## MCP / A2A connections
 
 The left vertical menu’s “MCP / A2A” button opens a connection dialog. Refresh the protocol-process status and copy actual MCP Streamable HTTP, A2A JSON-RPC, and public Agent Card URLs, HTTP/stdio client configuration, device startup commands, and an A2A request example. Discovery needs no model, starts no service, and exposes neither token values nor protocol approval buttons. Mutations still require an interactive device terminal using the same UID and configuration.
 
-Web and protocols start separately; Web `ready` does not mean MCP/A2A is running. Human-readable `service status` and its JSON `connections` field provide the same information. `/api/connections` is lightweight read-only discovery; `/api/info` also includes `connections`. States are `running/stopped/unknown`: running verifies local process identity and the exclusive lock, not remote reachability. Without confirmed HTTP endpoints, default local examples are clearly labeled. 127.0.0.1 works only on the same device; HTTP is enabled by default with automatic device IPv4 advertisement; multiple interfaces/VPN/proxies can override it, preferably using HTTPS. Without `NL2SH_PROTOCOL_TOKEN`, startup generates and prints a token; the dialog shows only its variable name. See [device MCP/A2A](../advanced/a2a-mcp.md).
+By default, Web and protocols start separately; Web `ready` does not mean MCP/A2A is running. Human-readable `service status` and its JSON `connections` field provide the same information. `/api/connections` is lightweight read-only discovery; `/api/info` also includes `connections`. States are `running/stopped/unknown`: running verifies local process identity and the exclusive lock, not remote reachability. Without confirmed HTTP endpoints, default local examples are clearly labeled. 127.0.0.1 works only on the same device; HTTP is enabled by default with automatic device IPv4 advertisement; multiple interfaces/VPN/proxies can override it, preferably using HTTPS. Without `NL2SH_PROTOCOL_TOKEN`, startup generates and prints a token; the dialog shows only its variable name. See [device MCP/A2A](../advanced/a2a-mcp.md).
 
 ## Background startup without a terminal
 

@@ -198,3 +198,118 @@ async fn native_service_is_idempotent_uses_actual_port_and_private_authorized_sh
     );
     assert!(occupied.local_addr().is_ok());
 }
+
+#[tokio::test]
+async fn managed_protocol_follows_config_start_restart_stop_and_startup_failure() {
+    let fixture = Fixture::new();
+    let occupied = tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0))
+        .await
+        .unwrap();
+    let protocol_port = occupied.local_addr().unwrap().port();
+    std::fs::write(
+        &fixture.config,
+        format!("protocol_start_with_service=true\nprotocol_service_port={protocol_port}\n"),
+    )
+    .unwrap();
+    assert!(!fixture
+        .call(&["start", "--port", "0", "--json"])
+        .await
+        .status
+        .success());
+    assert_eq!(
+        fixture.status(&["status", "--json"]).await["state"],
+        "stopped"
+    );
+    drop(occupied);
+    let first = fixture.status(&["start", "--port", "0", "--json"]).await;
+    assert_eq!(first["state"], "ready");
+    assert_eq!(first["connections"]["state"], "running");
+    assert_eq!(
+        fixture.status(&["start", "--json"]).await["pid"],
+        first["pid"]
+    );
+    let log_path = fixture.config.with_extension("service").join("service.log");
+    let token = || {
+        let log = std::fs::read_to_string(&log_path).unwrap();
+        log.lines()
+            .filter_map(|line| {
+                line.strip_prefix("Token (generated for this run; changes after restart): ")
+            })
+            .last()
+            .unwrap()
+            .to_owned()
+    };
+    let first_token = token();
+    assert!(!first.to_string().contains(&first_token));
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let mcp_url = format!("http://127.0.0.1:{protocol_port}/mcp");
+    assert_eq!(client.post(&mcp_url).send().await.unwrap().status(), 401);
+    let initialize = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"managed-test","version":"1"}}});
+    assert!(client
+        .post(&mcp_url)
+        .bearer_auth(&first_token)
+        .header("accept", "application/json, text/event-stream")
+        .json(&initialize)
+        .send()
+        .await
+        .unwrap()
+        .status()
+        .is_success());
+    let second = fixture.status(&["restart", "--port", "0", "--json"]).await;
+    assert_eq!(second["connections"]["state"], "running");
+    assert_ne!(first["pid"], second["pid"]);
+    let second_token = token();
+    assert_ne!(first_token, second_token);
+    assert_eq!(
+        client
+            .post(&mcp_url)
+            .bearer_auth(&first_token)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert!(client
+        .post(&mcp_url)
+        .bearer_auth(&second_token)
+        .header("accept", "application/json, text/event-stream")
+        .json(&initialize)
+        .send()
+        .await
+        .unwrap()
+        .status()
+        .is_success());
+    let stopped = fixture.status(&["stop", "--json"]).await;
+    assert_eq!(stopped["connections"]["state"], "stopped");
+    assert!(client
+        .get(format!(
+            "http://127.0.0.1:{protocol_port}/.well-known/agent-card.json"
+        ))
+        .send()
+        .await
+        .is_err());
+    // Failure after protocol initialization must release its listener and announcement.
+    let web_port = tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0))
+        .await
+        .unwrap();
+    let port = web_port.local_addr().unwrap().port().to_string();
+    assert!(!fixture
+        .call(&["start", "--port", &port, "--port-strict", "--json"])
+        .await
+        .status
+        .success());
+    assert_eq!(
+        fixture.status(&["status", "--json"]).await["connections"]["state"],
+        "stopped"
+    );
+    assert!(
+        tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, protocol_port))
+            .await
+            .is_ok()
+    );
+    std::fs::write(&fixture.config, "protocol_start_with_service=false\n").unwrap();
+    let disabled = fixture.status(&["start", "--port", "0", "--json"]).await;
+    assert_eq!(disabled["state"], "ready");
+    assert_eq!(disabled["connections"]["state"], "stopped");
+}

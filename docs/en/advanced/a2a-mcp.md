@@ -10,6 +10,21 @@ The TUI startup page, `nl2sh --config <config-path> service status` (including J
 
 Discovery uses private `protocol/connection.json`, process start identity, and the exclusive lock. It reads no token and makes no requests to the advertised URL. Stale records do not report a stopped process as running. Discovery verifies only a process with the same UID and configuration, not remote reachability. TUI shows a startup snapshot; Web and CLI refresh the current state. None of these display entry points starts protocols automatically.
 
+## Start with the managed service
+
+Set this in the configuration:
+
+```toml
+protocol_start_with_service = true
+protocol_service_port = 8765
+```
+
+The switch defaults to `false`. The Web configuration editor exposes it and the protocol port in the Service group. `nl2sh service start` or `service restart` starts Web and MCP/A2A in the same background process; `service stop` cancels tasks and closes both listeners. Changes require `service restart`; repeated `start` retains the current process. This applies only to the managed background service, without starting other services from TUI or standalone `protocol serve/stdio`.
+
+Protocols listen on `0.0.0.0` with automatic device IPv4 and an independent Bearer token. `protocol_service_port` defaults to `8765`; set another port to avoid conflicts, or `0` to request an available port. Generated tokens and connection details go to the private `config.service/service.log` beside the configuration. The log contains credentials: share only with trusted callers. `service status` and the Web connection dialog show actual addresses without token values. Set `NL2SH_PROTOCOL_TOKEN` at startup for a fixed token; otherwise service restarts rotate it. This switch does not enable `protocol_auto_approve`.
+
+An occupied protocol port or a standalone protocol process for the same configuration makes startup fail and clean up resources created by this attempt. Standalone processes are neither adopted nor stopped. Web startup failure also closes the new protocol listener. For custom advertised origins or bind addresses, disable the switch and run `protocol serve` separately.
+
 ## Start device HTTP with one command
 
 In a device shell/root terminal:

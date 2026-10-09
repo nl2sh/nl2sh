@@ -25,6 +25,8 @@ fn normal_toml_and_defaults() -> anyhow::Result<()> {
     assert!(cfg.show_buddha_ascii_art);
     assert!(cfg.show_train_ascii_art);
     assert!(!cfg.protocol_auto_approve);
+    assert!(!cfg.protocol_start_with_service);
+    assert_eq!(cfg.protocol_service_port, 8765);
     Ok(())
 }
 
@@ -34,6 +36,17 @@ fn protocol_auto_approve_round_trips() -> anyhow::Result<()> {
     assert!(cfg.protocol_auto_approve);
     let saved = toml::to_string(&cfg)?;
     assert!(toml::from_str::<Config>(&saved)?.protocol_auto_approve);
+    Ok(())
+}
+
+#[test]
+fn protocol_start_with_service_round_trips_independently_of_approval() -> anyhow::Result<()> {
+    let cfg: Config = toml::from_str("protocol_start_with_service=true")?;
+    assert!(cfg.protocol_start_with_service);
+    assert!(!cfg.protocol_auto_approve);
+    let saved = toml::to_string(&cfg)?;
+    assert!(toml::from_str::<Config>(&saved)?.protocol_start_with_service);
+    assert!(!Config::default().protocol_start_with_service);
     Ok(())
 }
 

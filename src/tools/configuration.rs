@@ -749,6 +749,8 @@ mod tests {
         for key in [
             "security_level",
             "execute_confirm_policy",
+            "protocol_start_with_service",
+            "protocol_service_port",
             "protocol_auto_approve",
             "execute_user_mode",
             "security_rules",

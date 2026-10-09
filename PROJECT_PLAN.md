@@ -2,6 +2,8 @@
 
 ## 设备端内置 MCP/A2A
 
+- [x] 默认关闭的 protocol_start_with_service、可选协议端口、Web 设置与受管服务共享启停/失败清理。
+
 - [x] 共享设备执行入口；MCP 直接调用 Tool Runtime，A2A 委派内置 Agent。
 - [x] HTTP/stdio MCP、独立鉴权监听器及 A2A 1.0 JSON-RPC。
 - [x] 设备私有 SQLite 任务库、上下文串行、协作取消、退出等待与重启不重放。

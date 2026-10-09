@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增 `protocol_start_with_service` 与 `protocol_service_port` 配置及 Web 设置，默认关闭；后台服务可在同一进程中一并启停 Web 与 MCP/A2A，启动失败清理、独立进程不接管、重启轮换自动令牌。
+
 - 修复旧配置阻止启动：自动忽略废弃的 `bridge_auto_approve`，不迁移其审批权限；配置向导和 Web 编辑同步处理，保存后清理旧字段，保留其他未知字段校验。
 
 - 简化 `nl2sh protocol serve`：默认所有 IPv4 接口与 HTTP，自动获取公告 IP 和实际端口；无环境令牌时生成每次启动独立的系统随机令牌，打印外部 Agent 连接信息与客户端配置，令牌仅在启动输出显示并从任务快照脱敏。保留固定令牌、监听与公告地址覆盖。

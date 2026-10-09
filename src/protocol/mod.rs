@@ -257,6 +257,47 @@ pub async fn serve(
     advertised: Option<&str>,
     insecure: bool,
 ) -> Result<()> {
+    let mut server = start_http(path, host, port, advertised, insecure).await?;
+    tokio::select! {
+        _ = shutdown_signal() => server.shutdown().await,
+        result = server.wait() => result,
+    }
+}
+
+pub(crate) struct HttpServer {
+    shutdown: CancellationToken,
+    task: Option<tokio::task::JoinHandle<Result<()>>>,
+}
+
+impl HttpServer {
+    pub(crate) async fn wait(&mut self) -> Result<()> {
+        let Some(task) = self.task.as_mut() else {
+            return Ok(());
+        };
+        let result = task.await;
+        self.task = None;
+        result.context("protocol server task failed")?
+    }
+
+    pub(crate) async fn shutdown(&mut self) -> Result<()> {
+        self.shutdown.cancel();
+        self.wait().await
+    }
+}
+
+impl Drop for HttpServer {
+    fn drop(&mut self) {
+        self.shutdown.cancel();
+    }
+}
+
+pub(crate) async fn start_http(
+    path: PathBuf,
+    host: IpAddr,
+    port: u16,
+    advertised: Option<&str>,
+    insecure: bool,
+) -> Result<HttpServer> {
     let (token, generated) = protocol_token(std::env::var("NL2SH_PROTOCOL_TOKEN"))?;
     // Validate before opening the listener or modifying persistent state.
     settings(host, port, advertised, insecure, &token)?;
@@ -266,7 +307,7 @@ pub async fn serve(
     let port = listener.local_addr()?.port();
     let access = settings(host, port, advertised, insecure, &token)?;
     let tasks = Tasks::open_with_token(path, Some(token.clone()))?;
-    let _connection = connections::Registration::publish(&tasks.path, Some(&access.origin))?;
+    let connection = connections::Registration::publish(&tasks.path, Some(&access.origin))?;
     let cancellation = CancellationToken::new();
     let app = router(tasks.clone(), access.clone(), cancellation.clone());
     {
@@ -280,15 +321,24 @@ pub async fn serve(
             .context("cannot flush protocol connection information")?;
     }
     let drain = tasks.clone();
-    let result = axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            shutdown_signal().await;
-            drain.shutdown().await;
-            cancellation.cancel();
-        })
-        .await;
-    tasks.shutdown().await;
-    result.context("protocol HTTP server failed")
+    let shutdown = CancellationToken::new();
+    let stopped = shutdown.clone();
+    let task = tokio::spawn(async move {
+        let _connection = connection;
+        let result = axum::serve(listener, app)
+            .with_graceful_shutdown(async move {
+                stopped.cancelled().await;
+                drain.shutdown().await;
+                cancellation.cancel();
+            })
+            .await;
+        tasks.shutdown().await;
+        result.context("protocol HTTP server failed")
+    });
+    Ok(HttpServer {
+        shutdown,
+        task: Some(task),
+    })
 }
 async fn shutdown_signal() {
     #[cfg(unix)]

@@ -358,6 +358,37 @@ impl Service {
     /// Foreground implementation used by a detached child. Accepts SIGTERM/Ctrl+C and private shutdown.
     pub async fn serve(&self, port: u16, strict: bool) -> Result<()> {
         let _running = self.lock("running.lock").await?;
+        let config = crate::config::load_or_default_unvalidated(&self.config)?;
+        config.validate_runtime()?;
+        let mut protocol = if config.protocol_start_with_service {
+            Some(
+                crate::protocol::start_http(
+                    self.config.clone(),
+                    std::net::Ipv4Addr::UNSPECIFIED.into(),
+                    config.protocol_service_port,
+                    None,
+                    true,
+                )
+                .await
+                .context("cannot start MCP/A2A with the managed service")?,
+            )
+        } else {
+            None
+        };
+        let result = self.serve_web(port, strict, &mut protocol).await;
+        let stopped = match protocol.as_mut() {
+            Some(server) => server.shutdown().await,
+            None => Ok(()),
+        };
+        result.and(stopped)
+    }
+
+    async fn serve_web(
+        &self,
+        port: u16,
+        strict: bool,
+        protocol: &mut Option<crate::protocol::HttpServer>,
+    ) -> Result<()> {
         // Android shell SELinux domains may reject filesystem Unix sockets. Keep control local
         // and authorize it with a private random token; no unauthenticated HTTP stop endpoint.
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
@@ -395,13 +426,19 @@ impl Service {
         };
         let mut terminate =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-        tokio::select! {
-            result = tokio::signal::ctrl_c() => { result?; },
-            _ = terminate.recv() => {},
-            result = authorized_shutdown(listener, &record.token) => { result?; },
+        let result = tokio::select! {
+            result = tokio::signal::ctrl_c() => result.context("cannot receive service shutdown signal"),
+            _ = terminate.recv() => Ok(()),
+            result = authorized_shutdown(listener, &record.token) => result,
             result = web.wait() => { return result.context("service web server stopped"); },
-        }
-        web.shutdown().await
+            result = async {
+                match protocol.as_mut() {
+                    Some(server) => server.wait().await,
+                    None => std::future::pending::<Result<()>>().await,
+                }
+            } => result.and_then(|()| anyhow::bail!("managed MCP/A2A server stopped unexpectedly")),
+        };
+        result.and(web.shutdown().await)
     }
 }
 

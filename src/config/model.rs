@@ -175,6 +175,10 @@ pub struct Config {
     pub execute_confirm_policy: ConfirmPolicy,
     /// Safety posture.
     pub security_level: SecurityLevel,
+    /// Start device HTTP MCP/A2A together with the managed background Web service.
+    pub protocol_start_with_service: bool,
+    /// MCP/A2A port for the managed service; zero requests an available ephemeral port.
+    pub protocol_service_port: u16,
     /// Automatically approve operations received through the device MCP/A2A service.
     pub protocol_auto_approve: bool,
     /// Enabled state of optional tool groups. `jadx` and `tailcat` default off.
@@ -267,6 +271,8 @@ impl Default for Config {
             interactive_execute_timeout_secs: 0,
             execute_confirm_policy: ConfirmPolicy::RiskOnly,
             security_level: SecurityLevel::Balanced,
+            protocol_start_with_service: false,
+            protocol_service_port: 8765,
             protocol_auto_approve: false,
             tool_groups: BTreeMap::new(),
             tool_overrides: BTreeMap::new(),

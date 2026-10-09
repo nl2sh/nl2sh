@@ -10,6 +10,21 @@ TUI 启动页、`nl2sh --config <配置路径> service status`（含 `--json` �
 
 查询使用私有 `protocol/connection.json`、进程启动身份和独占锁，不读取令牌或向公告地址发出请求。停止后的遗留记录不会报告运行中。它只确认同 UID、同配置进程，不保证远端网络可达；TUI 为启动时快照，Web 与 CLI 查询刷新当前状态。三个展示入口不自动启动协议服务。
 
+## 随后台服务启动
+
+在配置中设置：
+
+```toml
+protocol_start_with_service = true
+protocol_service_port = 8765
+```
+
+默认 `false`，也可在 Web 配置页“服务”分组切换。执行 `nl2sh service start` 或 `service restart` 时，后台进程一并启动 Web 和 MCP/A2A；`service stop` 一并取消任务并关闭两个监听器。开关在启动时读取，修改后需 `service restart`，重复 `start` 保持当前进程。只影响受管后台服务，不会让 TUI 或单独的 `protocol serve/stdio` 自动启动其他服务。
+
+协议监听 `0.0.0.0`，使用自动设备 IP 和独立 Bearer 令牌。`protocol_service_port` 默认 `8765`；可改用其他端口避免占用，或设为 `0` 自动分配端口。自动令牌和完整连接信息写入配置相邻私有 `config.service/service.log`；日志含凭据，仅给可信调用者读取。`service status` 与 Web 连接窗口可查看实际地址，但不显示令牌。设置 `NL2SH_PROTOCOL_TOKEN` 可在启动时提供固定令牌；未设置时服务重启会更换令牌。此开关不启用 `protocol_auto_approve`。
+
+协议端口占用或同一配置已有独立协议进程时，后台启动报错并清理本次启动的资源，不接管或停止独立进程；Web 启动失败也会关闭本次新建的协议监听器。需自定义公告地址/监听参数时，关闭此开关并单独运行 `protocol serve`。
+
 ## 一条命令启动设备 HTTP 服务
 
 在设备 shell/root 终端运行：

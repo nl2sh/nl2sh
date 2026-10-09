@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add default-off `protocol_start_with_service`, `protocol_service_port`, and Web settings. Managed services can start and stop Web and MCP/A2A in one process, clean up failed starts, preserve standalone processes, and rotate generated tokens on restart.
+
 - Fix startup with old configurations: ignore the retired `bridge_auto_approve` setting without transferring approval permissions. Configuration wizards and Web editors apply the same handling; saving removes the old field while retaining validation of other unknown settings.
 
 - Simplify `nl2sh protocol serve`: default all IPv4 interfaces and HTTP, automatic advertised IP/actual port, and a system-random token per startup when no environment override exists. Print external Agent connection details/client configuration; generated tokens appear only in startup output and are redacted from task snapshots. Retain fixed-token, bind-address and advertised-origin overrides.
