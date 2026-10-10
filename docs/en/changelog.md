@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add read-only `session_list`, `session_search` and `session_read` for the built-in Agent, direct MCP calls and A2A delegation. Bounded pagination preserves tool evidence links, detects snapshot changes and redacts credentials; history and checkpoints grant no execution authority.
+
 - TUI and Web settings add a dedicated “MCP / A2A” category for startup, port, masked tokens, and default-off auto-approval, with environment precedence, restart rules, and dangerous-operation scope explained.
 
 - Add read-only `android_background_work`, which returns bounded JobScheduler, AlarmManager, app standby bucket, and DeviceIdle evidence for one exact package without changing scheduling or power state.

@@ -4,6 +4,8 @@ Last Updated: 2026-10-10
 
 ## Recent Changes
 
+- 新增只读 session_list/session_search/session_read；共享当前配置的已保存 TUI/Web/协议会话，字面量搜索、稳定 ID 和条目分页、SHA-256 revision、call_id/成功状态/截断及诊断检查点标记。持有目录 fd 的 no-follow 文件读取、私有权限与快照身份校验、有界扫描和阻塞 worker；读取再次脱敏已知凭据与活动协议令牌。内置 Agent 提示、MCP 直调与 A2A 委派共用同一安全边界；不恢复旧审批/调度，不修改 Android PTY 或终端恢复。双语会话指南、工具参考与更新记录同步。 验证：`cargo fmt --all -- --check`、`cargo check`、Rust 库/集成测试按权限分组共 462 项通过（4 项显式忽略）、文档派生参考检查、50 对双语页面检查、严格 MkDocs 构建及渲染检查通过。Android API 26 ARMv7 release 构建与 API 34 ARMv7 真机运行 ELF 身份校验通过；原生 MCP 的列表、搜索、分页读取、路径拒绝和 revision 变化拒绝五项断言通过；真实已保存调查会话按固定 revision 读取全部条目，保留失败工具与内容截断标记。MCP 直调与 A2A Agent 共用 session 查询的离线协议回归通过。
+
 - TUI/Web 新增独立 MCP/A2A 配置分类，集中现有启动开关、端口、掩码 token 和默认关闭的自动审批；说明环境变量优先、自动生成、重启和新任务生效规则，明确危险/严重风险范围。TUI 端口支持文本编辑与 u16 校验，Web 复用 Rust 配置校验与私有原子保存；双语指南与更新记录同步。无新增公共配置字段，不改变 Android、安全分类、协议确认器、PTY 或终端恢复路径。 验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`（456 项通过、4 项显式忽略）、40 项 Web 测试与生产构建、Android API 26 AArch64 `cargo check --no-default-features`、派生参考检查、50 对双语页面检查、严格 MkDocs 构建与渲染后检查通过。真实浏览器验证四字段保存/回读、密码框、非法 token 禁止保存、恢复关闭及 390px/320px 无页面横向溢出。
 
 - 新增只读 `android_background_work`：精确包名校验后，有界聚合 JobScheduler、AlarmManager、应用待机分组和 DeviceIdle 证据，用于后台任务延迟/未唤醒诊断。工具是 Android 只读并行调度，不需审批、不提权，不改动 PTY 与终端恢复路径。验证：`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features`、工具注册/参数注入回归、代码派生中英文参考检查、50 对双语页面检查、严格 MkDocs 构建与渲染后链接检查通过。

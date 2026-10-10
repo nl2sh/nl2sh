@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增只读 `session_list`、`session_search`、`session_read`，供内置 Agent、MCP 直调和 A2A 委派查询已保存会话；支持有界分页、工具证据关联、快照版本校验与凭据脱敏，历史与检查点不授予执行权限。
+
 - TUI 与 Web 设置新增独立“MCP / A2A”分类，集中启动、端口、掩码 token 与默认关闭的自动审批；标明环境优先、重启规则和危险操作范围。
 
 - 新增只读 `android_background_work`：按精确包名有界汇总 JobScheduler、AlarmManager、应用待机分组与 DeviceIdle 证据，不修改后台调度或省电状态。

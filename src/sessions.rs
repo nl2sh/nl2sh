@@ -11,6 +11,8 @@ use std::{
 const MAX_SESSION_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_SESSIONS: usize = 200;
 
+pub(crate) mod query;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct SessionDocument {
     version: u32,

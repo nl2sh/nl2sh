@@ -538,3 +538,98 @@ fn mcp_screenshot_uses_native_image_content_and_refuses_invalid_contract() -> Re
     .is_err());
     Ok(())
 }
+
+#[tokio::test]
+async fn session_queries_are_shared_by_mcp_direct_and_a2a_agent() -> Result<()> {
+    use crate::{
+        llm::{ConversationItem, ConversationMessage, Role},
+        sessions::SessionStore,
+    };
+    let provider = MockServer::start().await;
+    Mock::given(method("POST")).respond_with(|request: &wiremock::Request| {
+        let body: Value = serde_json::from_slice(&request.body).unwrap_or_default();
+        let messages = body["messages"].as_array().cloned().unwrap_or_default();
+        let last = messages.last().cloned().unwrap_or_default();
+        let delta = if last["role"] == "tool" && last["tool_call_id"] == "read" {
+            json!({"content": "Saved crash evidence read; current state remains unverified."})
+        } else {
+            let (id, name, arguments) = if last["role"] == "tool" {
+                ("read", "session_read", json!({"session_id": "archived-1"}))
+            } else {
+                ("search", "session_search", json!({"query": "com.konka.athena"}))
+            };
+            json!({"tool_calls": [{"index": 0, "id": id, "type": "function", "function": {"name": name, "arguments": arguments.to_string()}}]})
+        };
+        ResponseTemplate::new(200).insert_header("content-type", "text/event-stream")
+            .set_body_string(format!("data: {}\n\ndata: [DONE]\n\n", json!({"choices": [{"delta": delta, "finish_reason": if delta.get("tool_calls").is_some() { "tool_calls" } else { "stop" }}]})))
+    }).mount(&provider).await;
+    let root = tempfile::tempdir()?;
+    let cfg = Config {
+        endpoint: format!("{}/v1", provider.uri()),
+        api_type: ApiType::ChatCompletions,
+        api_key: "archive-secret".into(),
+        ..Config::default()
+    };
+    let path = configuration(root.path(), &toml::to_string(&cfg)?)?;
+    SessionStore::open(&path)?.save_redacted_with_title(
+        "archived-1",
+        "Crash diagnosis",
+        &[vec![
+            ConversationItem::Message(ConversationMessage::new(
+                Role::User,
+                "com.konka.athena archive-secret",
+            )),
+            ConversationItem::Message(ConversationMessage::new(
+                Role::Assistant,
+                "saved hypothesis",
+            )),
+        ]],
+        1000,
+        &[],
+    )?;
+    let tasks = Tasks::open(path)?;
+    let (url, job) = server(tasks.clone()).await?;
+    let client = client()?;
+    let reply = client.post(format!("{url}/mcp")).bearer_auth("t".repeat(32))
+        .header("accept", "application/json, text/event-stream").header("mcp-protocol-version", "2025-11-25")
+        .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "nl2sh_invoke", "arguments": {"tool": "session_search", "arguments": {"query": "com.konka.athena"}}}}))
+        .send().await?.error_for_status()?.json::<Value>().await?;
+    assert_eq!(
+        reply["result"]["structuredContent"]["success"], true,
+        "{reply}"
+    );
+    let output: Value = serde_json::from_str(
+        reply["result"]["structuredContent"]["output"]
+            .as_str()
+            .context("missing query output")?,
+    )?;
+    assert_eq!(output["sessions"][0]["session_id"], "archived-1");
+    assert!(!reply.to_string().contains("archive-secret"));
+    // Direct MCP lookup must not call the provider or add an Agent conversation.
+    assert!(provider
+        .received_requests()
+        .await
+        .is_some_and(|requests| requests.is_empty()));
+    assert_eq!(
+        SessionStore::open(root.path().join("config.toml").as_path())?
+            .list()?
+            .len(),
+        1
+    );
+    let answer = rpc(&client, &url, "SendMessage", json!({"message": {"messageId": "history-query", "role": "ROLE_USER", "parts": [{"text": "Find the previous crash investigation"}]}})).await?;
+    let artifact = result(&answer["result"]["task"])?;
+    assert_eq!(artifact["failed_tools"], json!([]), "{answer}");
+    let observations = artifact["evidence"]["observations"]
+        .as_array()
+        .context("missing evidence")?;
+    assert!(observations
+        .iter()
+        .any(|item| item["tool"] == "session_search"));
+    assert!(observations
+        .iter()
+        .any(|item| item["tool"] == "session_read"));
+    assert!(!answer.to_string().contains("archive-secret"));
+    tasks.shutdown().await;
+    job.abort();
+    Ok(())
+}

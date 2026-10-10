@@ -33,6 +33,7 @@ mod ima;
 pub mod memory;
 pub mod network;
 pub mod runtime;
+mod sessions;
 mod shell;
 pub mod system_trace;
 pub mod tailcat;
@@ -504,6 +505,9 @@ fn all_adapters() -> Vec<Box<dyn Tool>> {
         Box::new(SearchTextTool),
         Box::new(ApplyPatchTool),
         Box::new(ChartTool),
+        Box::new(sessions::ListTool),
+        Box::new(sessions::SearchTool),
+        Box::new(sessions::ReadTool),
         Box::new(system_trace::StartTool),
         Box::new(system_trace::StopTool),
         Box::new(system_trace::AnalyzeTool),
@@ -659,7 +663,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 58);
+        assert_eq!(names.len(), 61);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()
@@ -672,6 +676,9 @@ mod tests {
             "android_background_work",
             "android_clipboard",
             "agent_memory",
+            "session_list",
+            "session_search",
+            "session_read",
             "nl2sh_config",
             "inspect_tls",
         ] {

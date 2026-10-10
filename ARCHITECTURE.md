@@ -149,6 +149,8 @@ Web 会话侧栏支持直接删除单个会话或确认后删除全部会话：�
 
 `src/tools/configuration` 注册 `nl2sh_config`（Configuration 类）：list/get 只读展示默认、磁盘、解析及当前任务快照；set/reset 使用强类型动作与原生 JSON 值，仅操作 `Config.source`。loader 的 TOML 解析、预算预设及环境覆盖由内置加载与工具共享。工具保存通过 toml_edit 保留其他字段/注释，不序列化运行快照；审批后复核有界原始内容，稳定侧文件锁串行化工具写入，私有临时文件原子替换并同步。凭据仅展示配置状态且拒绝模型写入，解析诊断不回显原文；安全/Root/桥接/工具/网络/审计字段升至 Dangerous。写入不改变当前任务、客户端、工具目录或审批器；新 Web/协议任务加载，TUI 重启应用，不涉及 shell 或 PTY。
 
+`src/sessions/query` 与 `src/tools/sessions` 提供当前配置存储域的只读会话列表、字面量搜索和分页读取，覆盖 TUI/Web/协议快照但不合并活动上下文。阻塞 worker 中通过持有目录 fd 和 no-follow 相对文件打开、有界读取及身份/私有权限验证取证；返回稳定 ID、SHA-256 revision、关联 call_id、失败与截断标记，Web checkpoint 单列为诊断。查询再次脱敏当前已知凭据和已验证协议令牌；历史不恢复审批或后台调度、不作为系统指令或当前设备状态。MCP 复用 nl2sh_invoke，A2A 通过内置 Agent 查询，不新增远端审批、配置或 PTY 路径。
+
 ## Agent 执行流程
 
 只读操作在 balanced/risk_only 下自动执行；普通修改必须确认；Dangerous/Critical 需要二次确认。root 只是执行属性，不改变分类。审批界面提供固定编号与快捷键，可仅允许本次、拒绝、编辑或选择执行模式；对非 Root、非强确认且最高为 Mutating 的命令，还可在当前 Agent 任务内记住完整命令的精确许可。该许可不持久化、不按前缀匹配，Runner 会在每次复用前重新检查当前评估仍满足条件。拒绝、失败或超时都会生成明确的失败 Tool Result。
