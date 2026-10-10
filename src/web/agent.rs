@@ -231,6 +231,7 @@ pub(in crate::web) async fn generate_title_after_reply(
         let mut secrets = vec![
             cfg.api_key,
             cfg.proxy_password,
+            cfg.protocol_token,
             cfg.ima_client_id,
             cfg.ima_api_key,
             cfg.jev_api_key,

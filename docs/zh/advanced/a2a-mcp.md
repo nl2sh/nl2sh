@@ -4,6 +4,15 @@
 
 MCP 与 A2A 已内置在 nl2sh 的 Rust 可执行文件中。外部 Agent 直接连接设备，不需要 Python、Docker、主机网关或运行时 ADB。MCP 直接调用 Tool Runtime，A2A 向内置 Agent 委派任务。直接工具调用不需要模型；Agent 委派需要配置设备模型。协议和限制见 [协议参考](../reference/a2a-mcp.md)。
 
+固定连接令牌可写入配置文件：
+
+```toml
+# 32–256 个无空格可打印 ASCII 字符；空字符串表示每次启动自动生成
+protocol_token = "replace-with-your-private-token-at-least-32-chars"
+```
+
+优先级为 `NL2SH_PROTOCOL_TOKEN` 环境变量 > 配置 `protocol_token` > 自动生成。适用于独立 `protocol serve`、TUI/Web 和后台受管服务；修改后重启协议服务。固定令牌不在协议启动输出打印，已验证的 TUI/Web 所有者连接详情仍可显示它。配置文件包含凭据，应保持私有 `0600`；模型配置工具只返回是否已设置，不允许读写该凭据。固定令牌不会启用自动审批。
+
 ## 查看连接方式
 
 TUI 启动页、`nl2sh --config <配置路径> service status`（含 `--json` 的 `connections` 字段）、Web 左侧垂直菜单“MCP / A2A”均提供连接方式。HTTP 运行时显示实际公告 origin，即使端口或 HTTPS 地址不同于默认值；stdio 运行只显示本地进程，不宣称 HTTP 可用。未启动或未知时，TUI 仅显示一行状态；CLI 和 Web 保留明确标记的默认 loopback 示例。Web 窗口可以刷新并复制客户端配置、启动命令与 A2A 请求体。
@@ -21,7 +30,7 @@ protocol_service_port = 8765
 
 默认 `false`，也可在 Web 配置页“服务”分组切换。执行 `nl2sh service start` 或 `service restart` 时，后台进程一并启动 Web 和 MCP/A2A；`service stop` 一并取消任务并关闭两个监听器。开关在启动时读取，修改后需 `service restart`，重复 `start` 保持当前进程。同一开关也作用于直接 TUI 和 `--web-only` 启动；UI 退出时关闭自己启动的协议。已有同配置协议时 UI 复用连接信息，不停止独立进程。单独 `protocol serve/stdio` 不启动 UI。
 
-协议监听 `0.0.0.0`，使用自动设备 IP 和独立 Bearer 令牌。`protocol_service_port` 默认 `8765`；可改用其他端口避免占用，或设为 `0` 自动分配端口。自动令牌和完整连接信息写入配置相邻私有 `config.service/service.log`；日志含凭据，仅给可信调用者读取。TUI/Web 显示运行版本、实际地址和令牌，并可复制带鉴权的 MCP 配置；普通 `service status` 不输出令牌。设置 `NL2SH_PROTOCOL_TOKEN` 可在启动时提供固定令牌；未设置时服务重启会更换令牌。此开关不启用 `protocol_auto_approve`。
+协议监听 `0.0.0.0`，使用自动设备 IP 和独立 Bearer 令牌。`protocol_service_port` 默认 `8765`；可改用其他端口避免占用，或设为 `0` 自动分配端口。自动令牌和完整连接信息写入配置相邻私有 `config.service/service.log`；日志含凭据，仅给可信调用者读取。TUI/Web 显示运行版本、实际地址和令牌，并可复制带鉴权的 MCP 配置；普通 `service status` 不输出令牌。设置配置 `protocol_token` 或环境变量 `NL2SH_PROTOCOL_TOKEN` 可提供固定令牌；两者均未设置时服务重启会更换令牌。此开关不启用 `protocol_auto_approve`。
 
 配置端口（默认 `8765`）被占用时，自动在同一监听地址选择系统分配的空闲端口；启动输出、连接窗口及 `service status --json` 公告实际端口。同一配置已有独立协议进程时，后台启动仍报错并清理本次启动的资源，不接管或停止独立进程；Web 启动失败也会关闭本次新建的协议监听器。需自定义公告地址/监听参数时，关闭此开关并单独运行 `protocol serve`；其请求端口被占用时也会自动选择空闲端口。
 

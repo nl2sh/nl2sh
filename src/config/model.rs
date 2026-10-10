@@ -179,6 +179,8 @@ pub struct Config {
     pub protocol_start_with_service: bool,
     /// Preferred MCP/A2A port with Web/TUI; occupied ports fall back to an available port, zero assigns one directly.
     pub protocol_service_port: u16,
+    /// Fixed MCP/A2A HTTP token; empty generates one at startup, NL2SH_PROTOCOL_TOKEN overrides it.
+    pub protocol_token: String,
     /// Automatically approve operations received through the device MCP/A2A service.
     pub protocol_auto_approve: bool,
     /// Enabled state of optional tool groups. `jadx` and `tailcat` default off.
@@ -273,6 +275,7 @@ impl Default for Config {
             security_level: SecurityLevel::Balanced,
             protocol_start_with_service: false,
             protocol_service_port: 8765,
+            protocol_token: String::new(),
             protocol_auto_approve: false,
             tool_groups: BTreeMap::new(),
             tool_overrides: BTreeMap::new(),
@@ -325,6 +328,15 @@ impl Config {
     /// Validates runtime settings while allowing provider credentials to be
     /// completed later from the TUI.
     pub fn validate_runtime(&self) -> Result<()> {
+        if !self.protocol_token.is_empty()
+            && (!(32..=256).contains(&self.protocol_token.len())
+                || !self
+                    .protocol_token
+                    .bytes()
+                    .all(|byte| byte.is_ascii_graphic()))
+        {
+            bail!("protocol_token must contain 32–256 printable ASCII characters without spaces");
+        }
         let url = Url::parse(&self.endpoint).context("endpoint is not a valid URL")?;
         if !matches!(url.scheme(), "http" | "https") {
             bail!("endpoint must use http or https")

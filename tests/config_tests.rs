@@ -225,3 +225,34 @@ fn jev_is_optional_and_validated_only_when_configured() {
     assert!(cfg.jev_is_configured());
     assert!(cfg.validate_runtime().is_ok());
 }
+
+#[test]
+fn fixed_protocol_token_round_trips_and_rejects_invalid_values() -> anyhow::Result<()> {
+    let token = "config-fixed-token-01234567890123456789";
+    let cfg: Config = toml::from_str(&format!("protocol_token = '{token}'"))?;
+    cfg.validate_runtime()?;
+    assert_eq!(
+        toml::from_str::<Config>(&toml::to_string(&cfg)?)?.protocol_token,
+        token
+    );
+    for invalid in [
+        "short".to_owned(),
+        "x".repeat(257),
+        "x".repeat(31) + " ",
+        "x".repeat(31) + "\n",
+        "x".repeat(31) + "中",
+    ] {
+        let cfg = Config {
+            protocol_token: invalid.clone(),
+            ..Config::default()
+        };
+        let error = cfg
+            .validate_runtime()
+            .expect_err("invalid protocol credential accepted")
+            .to_string();
+        assert!(error.contains("protocol_token"));
+        assert!(!error.contains(&invalid));
+    }
+    assert!(Config::default().protocol_token.is_empty());
+    Ok(())
+}

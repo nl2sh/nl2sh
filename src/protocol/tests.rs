@@ -131,8 +131,16 @@ fn auto_origin_uses_device_ip_actual_port_or_loopback_fallback() -> Result<()> {
 }
 #[test]
 fn generated_tokens_are_unique_and_only_generated_values_appear_in_startup() -> Result<()> {
-    let (first, generated) = protocol_token(Err(std::env::VarError::NotPresent))?;
-    let (second, _) = protocol_token(Err(std::env::VarError::NotPresent))?;
+    let (first, generated) = protocol_token(Err(std::env::VarError::NotPresent), "")?;
+    let (second, _) = protocol_token(Err(std::env::VarError::NotPresent), "")?;
+    assert_eq!(
+        protocol_token(Err(std::env::VarError::NotPresent), &first)?,
+        (first.clone(), false)
+    );
+    assert_eq!(
+        protocol_token(Ok(second.clone()), &first)?,
+        (second.clone(), false)
+    );
     assert!(generated);
     assert_eq!(first.len(), 64);
     assert!(first.bytes().all(|byte| byte.is_ascii_hexdigit()));
@@ -146,7 +154,7 @@ fn generated_tokens_are_unique_and_only_generated_values_appear_in_startup() -> 
     assert!(generated.contains("[mcp_servers.nl2sh]"));
     let configured = startup_info(&access, host, 8765, &first, false)?;
     assert!(!configured.contains(&first));
-    assert_eq!(protocol_token(Ok(first.clone()))?, (first, false));
+    assert_eq!(protocol_token(Ok(first.clone()), "")?, (first, false));
     Ok(())
 }
 #[tokio::test]

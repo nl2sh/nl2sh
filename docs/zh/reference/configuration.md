@@ -67,6 +67,7 @@
 | `security_level` | `"balanced"` | strict/balanced/unsafe 安全偏好 |
 | `protocol_start_with_service` | `false` | 默认关闭；Web/TUI 与后台 service 启停时管理 MCP/A2A，重启生效 |
 | `protocol_service_port` | `8765` | Web/TUI 随服务启动 MCP/A2A 的首选端口，默认 8765；占用时选择空闲端口，0 直接自动分配 |
+| `protocol_token` | `""` | 固定 MCP/A2A HTTP 令牌，32–256 个无空格可打印 ASCII 字符；空值启动时自动生成，NL2SH_PROTOCOL_TOKEN 优先覆盖 |
 | `protocol_auto_approve` | `false` | 默认关闭；显式自动批准设备 MCP/A2A 全部风险操作 |
 | `tool_groups` | `{}` | 可选组开关，jadx/tailcat 未设置时关闭 |
 | `tool_overrides` | `{}` | 按名覆盖组开关 |

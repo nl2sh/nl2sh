@@ -89,6 +89,7 @@ impl Tasks {
         let mut secrets = vec![
             cfg.api_key,
             cfg.proxy_password,
+            cfg.protocol_token,
             cfg.ima_api_key,
             cfg.jev_api_key,
         ];

@@ -179,6 +179,7 @@ pub(super) async fn ask(
         &[
             cfg.api_key,
             cfg.proxy_password,
+            cfg.protocol_token,
             cfg.ima_api_key,
             cfg.jev_api_key,
         ],

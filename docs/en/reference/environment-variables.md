@@ -22,7 +22,7 @@ Device runtime, host installation, and builds are separate processes. Set variab
 | `ANDROID_HOME / ANDROID_SDK_ROOT / JAVA_HOME` | SDK / JDK for optional Android modules |
 | `NL2SH_PACKAGE_MANAGER_BUILD` | Build-time 1 disables in-app self-update |
 | `ANDROID_TMP_DIR / TERMUX_SSH_LOCAL_PORT / TERMUX_SSH_REMOTE_PORT / TERMUX_TMUX_SESSION` | Termux SSH/tmux development deployment |
-| `NL2SH_PROTOCOL_TOKEN` | Optional fixed HTTP MCP/A2A token, 32–256 printable ASCII characters; unset generates and prints a new token per startup |
+| `NL2SH_PROTOCOL_TOKEN` | Optional fixed HTTP MCP/A2A token, 32–256 printable ASCII characters; overrides configured `protocol_token`; when neither is set, generates and prints a new token per startup |
 | `NL2SH_APT_GPG_KEY_ID / TERMUX_APT_GPG_PRIVATE_KEY` | APT key ID / CI secret; private keys never enter source |
 | `NL2SH_WEB_DIST` | Embedded asset directory set by build.rs; not a user setting |
 | `NL2SH_TAILCAT_TEST_BINARY / NL2SH_TAILCAT_TEST_PROXY` | Explicit Tailcat live tests |

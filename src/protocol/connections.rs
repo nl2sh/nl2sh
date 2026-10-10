@@ -138,7 +138,7 @@ impl ConnectionInfo {
                 format!("Agent Card: {DEFAULT_ORIGIN}/.well-known/agent-card.json"),
             ]);
         }
-        lines.push(if zh { "HTTP 鉴权：Authorization: Bearer <token>；未设 NL2SH_PROTOCOL_TOKEN 时启动自动生成并打印，设置该变量可复用固定令牌。" } else { "HTTP auth: Authorization: Bearer <token>; generated and printed at startup unless NL2SH_PROTOCOL_TOKEN is set." }.into());
+        lines.push(if zh { "HTTP 鉴权：Authorization: Bearer <token>；NL2SH_PROTOCOL_TOKEN 优先于配置 protocol_token；两者均未设置时启动自动生成并打印。" } else { "HTTP auth: Authorization: Bearer <token>; NL2SH_PROTOCOL_TOKEN overrides protocol_token in configuration; generated and printed at startup when neither is set." }.into());
         lines.push(format!(
             "{}{}",
             if zh {

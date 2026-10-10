@@ -49,9 +49,15 @@ struct Access {
     authorities: Vec<String>,
     origin: String,
 }
-fn protocol_token(value: Result<String, std::env::VarError>) -> Result<(String, bool)> {
+fn protocol_token(
+    value: Result<String, std::env::VarError>,
+    configured: &str,
+) -> Result<(String, bool)> {
     match value {
         Ok(token) => Ok((token, false)),
+        Err(std::env::VarError::NotPresent) if !configured.is_empty() => {
+            Ok((configured.to_owned(), false))
+        }
         Err(std::env::VarError::NotPresent) => {
             let mut random = [0u8; 32];
             std::fs::File::open("/dev/urandom")
@@ -78,7 +84,8 @@ fn startup_info(
     let token_line = if generated {
         format!("Token (generated for this run; changes after restart): {token}")
     } else {
-        "Token: using NL2SH_PROTOCOL_TOKEN (configured value hidden)".into()
+        "Token: using fixed token from environment or configuration (configured value hidden)"
+            .into()
     };
     Ok(format!(
         "nl2sh device MCP / A2A\nListen: http://{}\nMCP (Streamable HTTP): {}/mcp\nA2A (JSON-RPC 1.0): {}/a2a\nAgent Card (public): {}/.well-known/agent-card.json\nAuthentication: Authorization: Bearer <token>\n{token_line}\n\nMCP client configuration (set NL2SH_PROTOCOL_TOKEN on the client to the token above):\n[mcp_servers.nl2sh]\nurl = {}\nbearer_token_env_var = \"NL2SH_PROTOCOL_TOKEN\"\ntool_timeout_sec = 210\n\nA2A requests: POST application/json, A2A-Version: 1.0, Authorization: Bearer <token>.\nDevice mutations require local protocol approvals/approve unless explicitly auto-approved.\nHTTP transmits the token in plaintext; protect this startup output and use a trusted network or HTTPS.\n",
@@ -112,7 +119,7 @@ fn settings(
     token: &str,
 ) -> Result<Access> {
     if token.len() < 32 || token.len() > 256 || !token.bytes().all(|byte| byte.is_ascii_graphic()) {
-        bail!("NL2SH_PROTOCOL_TOKEN must contain 32–256 printable ASCII characters");
+        bail!("protocol token must contain 32–256 printable ASCII characters without spaces");
     }
     if !host.is_loopback() && !insecure {
         bail!("non-loopback HTTP binding requires --allow-insecure-http; use a trusted network or HTTPS reverse proxy");
@@ -300,7 +307,11 @@ pub(crate) async fn start_http(
     advertised: Option<&str>,
     insecure: bool,
 ) -> Result<HttpServer> {
-    let (token, generated) = protocol_token(std::env::var("NL2SH_PROTOCOL_TOKEN"))?;
+    let config = execution::load(&path)?;
+    let (token, generated) = protocol_token(
+        std::env::var("NL2SH_PROTOCOL_TOKEN"),
+        &config.protocol_token,
+    )?;
     // Validate before opening the listener or modifying persistent state.
     settings(host, port, advertised, insecure, &token)?;
     let listener = bind_http_listener(host, port).await?;

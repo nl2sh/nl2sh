@@ -118,6 +118,9 @@ pub fn load_or_default_unvalidated(path: &Path) -> Result<Config> {
     if let Ok(key) = env::var("NL2SH_API_KEY") {
         config.api_key = key;
     }
+    if let Ok(token) = env::var("NL2SH_PROTOCOL_TOKEN") {
+        config.protocol_token = token;
+    }
     apply_ima_environment(&mut config);
     apply_jev_environment(&mut config);
     Ok(config)
@@ -159,6 +162,9 @@ pub(crate) fn parse_unvalidated(text: &str, path: &Path) -> Result<Config> {
     }
     if let Ok(key) = env::var("NL2SH_API_KEY") {
         config.api_key = key;
+    }
+    if let Ok(token) = env::var("NL2SH_PROTOCOL_TOKEN") {
+        config.protocol_token = token;
     }
     apply_ima_environment(&mut config);
     apply_jev_environment(&mut config);

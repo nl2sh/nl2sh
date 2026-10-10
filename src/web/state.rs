@@ -263,6 +263,7 @@ pub(in crate::web) fn remember_redaction_secrets(inner: &mut SessionState, cfg: 
     for secret in [
         &cfg.api_key,
         &cfg.proxy_password,
+        &cfg.protocol_token,
         &cfg.ima_client_id,
         &cfg.ima_api_key,
         &cfg.jev_api_key,
@@ -303,6 +304,7 @@ pub(in crate::web) async fn persist_web_session(
         let mut secrets = vec![
             cfg.api_key,
             cfg.proxy_password,
+            cfg.protocol_token,
             cfg.ima_client_id,
             cfg.ima_api_key,
             cfg.jev_api_key,

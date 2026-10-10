@@ -171,3 +171,75 @@ async fn single_command_generates_usable_token_redacts_tasks_and_rotates_on_rest
     restarted.kill().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn configured_fixed_token_authenticates_after_restart_and_environment_overrides() -> Result<()>
+{
+    let root = tempfile::tempdir()?;
+    let config = root.path().join("config.toml");
+    let fixed = "config-fixed-token-01234567890123456789";
+    let override_token = "environment-token-01234567890123456789";
+    std::fs::write(&config, format!("protocol_token = '{fixed}'\n"))?;
+    let client = reqwest::Client::builder().no_proxy().build()?;
+    for override_env in [false, false, true] {
+        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_nl2sh"));
+        command
+            .arg("--config")
+            .arg(&config)
+            .args(["protocol", "serve", "--host", "127.0.0.1", "--port", "0"])
+            .env_remove("NL2SH_PROTOCOL_TOKEN")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        if override_env {
+            command.env("NL2SH_PROTOCOL_TOKEN", override_token);
+        }
+        let mut child = command.spawn()?;
+        let mut lines = BufReader::new(child.stdout.take().context("stdout missing")?).lines();
+        let mut url = None;
+        tokio::time::timeout(std::time::Duration::from_secs(15), async {
+            while let Some(line) = lines.next_line().await? {
+                assert!(!line.contains(fixed));
+                assert!(!line.contains(override_token));
+                if let Some(value) = line.strip_prefix("MCP (Streamable HTTP): ") {
+                    url = Some(value.to_owned());
+                }
+                if line.starts_with("HTTP transmits the token") {
+                    return anyhow::Ok(());
+                }
+            }
+            anyhow::bail!("startup output incomplete")
+        })
+        .await??;
+        let url = url.context("missing MCP URL")?;
+        let selected = if override_env { override_token } else { fixed };
+        let body = json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixed-token-test","version":"1"}}});
+        let request = |token: &str| {
+            client
+                .post(&url)
+                .bearer_auth(token)
+                .header("accept", "application/json, text/event-stream")
+                .json(&body)
+        };
+        request(selected).send().await?.error_for_status()?;
+        assert_eq!(
+            request(if override_env { fixed } else { "wrong-token" })
+                .send()
+                .await?
+                .status(),
+            reqwest::StatusCode::UNAUTHORIZED
+        );
+        let response: Value = client.post(&url).bearer_auth(selected)
+            .header("accept", "application/json, text/event-stream")
+            .json(&json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"nl2sh_invoke","arguments":{"tool":"execute_shell_command","arguments":{"command":format!("printf {selected}"),"reason":"verify credential redaction"}}}}))
+            .send().await?.error_for_status()?.json().await?;
+        assert_eq!(response["result"]["structuredContent"]["success"], true);
+        assert!(!response.to_string().contains(fixed));
+        assert!(!response.to_string().contains(selected));
+        assert!(response.to_string().contains("[REDACTED]"));
+        let connections = nl2sh::protocol::connection_details(&config).await;
+        assert_eq!(connections.token.as_deref(), Some(selected));
+        child.kill().await?;
+    }
+    Ok(())
+}

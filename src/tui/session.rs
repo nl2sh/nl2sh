@@ -63,6 +63,7 @@ fn session_secrets(config: &Config) -> Vec<String> {
     vec![
         config.api_key.clone(),
         config.proxy_password.clone(),
+        config.protocol_token.clone(),
         config.ima_client_id.clone(),
         config.ima_api_key.clone(),
         config.jev_api_key.clone(),

@@ -42,6 +42,9 @@ execute_confirm_policy = "risk_only"
 security_level = "balanced"
 # Explicitly auto-approve all device MCP/A2A service operations, including dangerous ones.
 # Only enable for device protocol clients whose token holders you fully trust.
+# Fixed MCP/A2A token: 32–256 printable ASCII characters without spaces.
+# Empty generates a token; NL2SH_PROTOCOL_TOKEN overrides this value.
+protocol_token = ""
 protocol_auto_approve = false
 # Optional tools are off until enabled here or in the Web tool catalog.
 tailcat_binary_path = "/data/local/tmp/tailcat"

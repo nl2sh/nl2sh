@@ -62,6 +62,7 @@ fn credentials() -> &'static [&'static str] {
         "jev_api_key",
         "proxy_username",
         "proxy_password",
+        "protocol_token",
     ]
 }
 
@@ -573,7 +574,7 @@ mod tests {
 
     #[tokio::test]
     async fn reads_show_persisted_and_current_snapshot_without_leaking_secrets() -> Result<()> {
-        let (dir,mut config) = setup("api_key = 'disk-secret'\nproxy_password = 'proxy-secret'\nmodel = 'disk-secret-model'\nendpoint = 'https://user:pass@example.com/v1?token=hidden'\n")?;
+        let (dir,mut config) = setup("api_key = 'disk-secret'\nproxy_password = 'proxy-secret'\nprotocol_token = 'fixed-protocol-secret-01234567890123456789'\nmodel = 'disk-secret-model'\nendpoint = 'https://user:pass@example.com/v1?token=hidden'\n")?;
         config.api_key = "active-secret".into();
         config.model = "current-model".into();
         let before = fs::read(dir.path().join("selected.toml"))?;
@@ -583,6 +584,7 @@ mod tests {
             "disk-secret",
             "active-secret",
             "proxy-secret",
+            "fixed-protocol-secret-01234567890123456789",
             "hidden",
             "user:pass",
         ] {
@@ -640,6 +642,8 @@ mod tests {
             json!({"action":"set","key":"api_type","value":"invalid"}),
             json!({"action":"set","key":"api_key","value":"never-secret"}),
             json!({"action":"reset","key":"proxy_password"}),
+            json!({"action":"set","key":"protocol_token","value":"never-secret"}),
+            json!({"action":"reset","key":"protocol_token"}),
             json!({"action":"set","key":"tool_groups.unknown","value":true}),
             json!({"action":"set","key":"tool_overrides.nl2sh_config","value":false}),
             json!({"action":"set","key":"model","value":"x".repeat(17000)}),
