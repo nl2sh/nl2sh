@@ -4,7 +4,7 @@
 
 `inspect_android_environment` 返回系统/API/ABI、命令可用性、内存和 `/data` 容量，不安装软件。`inspect_android_app` 查询指定或前台应用的 Activity、进程、内存、版本和位置。`android_dumpsys`、`android_logcat`、`android_settings`、`android_content_query` 接受受限参数，不提供写设置、service call 或 ContentProvider 写入。
 
-还提供通知、Crash/ANR、温控/功耗、流量、存储、Wi-Fi/以太网、Doze、权限与连接性聚合。默认有界定向查询；超时后先缩小范围。`android_connectivity` 的 ping 成功不代表 HTTPS 下载成功。
+还提供通知、Crash/ANR、温控/功耗、流量、存储、Wi-Fi/以太网、Doze、权限与连接性聚合。`android_background_work` 要求精确包名，同时返回有界的 JobScheduler、AlarmManager、应用待机分组和 DeviceIdle 证据，用于排查后台任务延迟或未唤醒；结果不证明任务必然执行，也可能看不到 OEM 省电策略。默认有界定向查询；超时后先缩小范围。`android_connectivity` 的 ping 成功不代表 HTTPS 下载成功。
 
 只读诊断使用当前进程身份，以非交互捕获模式运行，即使 Shell 配置了 root 模式。`android_dumpsys` 只接受经过审核的查询形式；`android_logcat` 接受标签/优先级过滤规则，不接受命令选项。原始 Shell 中未知或修改性的 `dumpsys`/`logcat` 选项要求强确认。独立诊断可并发执行，取消时等待子进程回收。
 

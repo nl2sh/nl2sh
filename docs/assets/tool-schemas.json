@@ -1517,6 +1517,33 @@
     }
   },
   {
+    "description": "Inspect bounded JobScheduler, AlarmManager, app-standby, and DeviceIdle evidence for one Android package.",
+    "name": "android_background_work",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": null,
+          "description": "Maximum matching lines retained from each Android service.",
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "package": {
+          "description": "Exact Android package whose scheduled background work should be inspected.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "package"
+      ],
+      "type": "object"
+    }
+  },
+  {
     "description": "Audit Android permissions and AppOps for a package or bounded app set.",
     "name": "android_permission_audit",
     "parameters": {

@@ -4,7 +4,7 @@
 
 `inspect_android_environment` returns system/API/ABI facts, command availability, memory, and `/data` capacity without installation. `inspect_android_app` queries foreground or specified app activity, processes, memory, version, and location. `android_dumpsys`, `android_logcat`, `android_settings`, and `android_content_query` accept restricted parameters without setting writes, service calls, or ContentProvider mutations.
 
-Aggregates cover notifications, crashes/ANRs, thermal/power, network statistics, storage, Wi-Fi/Ethernet, Doze, permissions, and connectivity. Prefer bounded targeted queries; narrow scope after timeout. Successful ping in `android_connectivity` does not prove HTTPS downloads work.
+Aggregates cover notifications, crashes/ANRs, thermal/power, network statistics, storage, Wi-Fi/Ethernet, Doze, permissions, and connectivity. `android_background_work` requires an exact package name and returns bounded JobScheduler, AlarmManager, app-standby-bucket, and DeviceIdle evidence for delayed or missing background work. Its output does not prove a task will run and may not expose OEM-specific power policies. Prefer bounded targeted queries; narrow scope after timeout. Successful ping in `android_connectivity` does not prove HTTPS downloads work.
 
 Read-only diagnostics run with the current process identity in captured, non-interactive mode, even when Shell root mode is configured. `android_dumpsys` accepts reviewed query forms; `android_logcat` accepts tag/priority filters rather than command options. Unknown or modifying `dumpsys`/`logcat` options in raw Shell require strong confirmation. Independent diagnostics may run concurrently; cancellation waits for their child processes to be reaped.
 

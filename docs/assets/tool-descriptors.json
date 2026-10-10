@@ -2188,6 +2188,44 @@
       "properties": {
         "limit": {
           "default": null,
+          "description": "Maximum matching lines retained from each Android service.",
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "package": {
+          "description": "Exact Android package whose scheduled background work should be inspected.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "package"
+      ],
+      "type": "object"
+    },
+    "policy": {
+      "category": "android",
+      "concurrency": "parallel",
+      "default_enabled": true,
+      "description": "Inspect bounded JobScheduler, AlarmManager, app-standby, and DeviceIdle evidence for one Android package.",
+      "group": null,
+      "lifetime": "call",
+      "name": "android_background_work",
+      "platform": "android",
+      "requires": [],
+      "risk": "read_only",
+      "runtime": "none"
+    }
+  },
+  {
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": null,
           "format": "uint",
           "minimum": 0,
           "type": [
