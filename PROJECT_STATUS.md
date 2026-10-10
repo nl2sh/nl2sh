@@ -4,6 +4,10 @@ Last Updated: 2026-10-10
 
 ## Recent Changes
 
+- TUI 欢迎页 MCP/A2A 仅在已验证运行中时展开详情；未启动或状态未知时保留一行状态，无发现快照时显示状态未知。同步双语说明；CLI/Web 连接说明、安全审批、Android 执行及 PTY 路径不变。验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`、双语页面检查、严格 MkDocs 构建与渲染后检查通过。
+
+- 新增独立微信公众号文章草稿 `articles/2026-10-10-nl2sh-mcp-a2a-device-loop.md`，介绍近期原生 MCP/A2A、服务连接管理与设备开发闭环；明确模拟器验证范围和后续方向，不改变产品行为或正式双语手册。
+
 - Codex × Android device lab 完成：新增仓库级 skill 与诊断契约；`nl2sh_inspect` 增加 Git/build ID/target/profile/UID 与运行中 ELF SHA-256，摘要在阻塞 worker 读取 `/proc/self/exe`，避免原子替换后将新路径误认作旧进程。Agent artifact 增加来自实际 Tool Round 的有界、关联调用 ID 的证据，区分失败、缺失结果和截断；不解析模型回答生成事实，不改变安全审批或 PTY。新增标准库主机脚本，绑定源码快照与构建 manifest，编排同步/异步案例、证据分析、前后比较及独立 ADB 部署恢复；同案例开始/结束均验证运行身份，私有凭据不进入仓库。同步双语说明与确定性/委派示例，P2 主动诊断及多设备对比另行规划。
   验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`（452 项通过、4 项显式忽略）、31 项 Python 脚本测试通过；Android API 26 三 ABI 交叉检查及 x86_64 release 构建通过。API 26 x86_64 模拟器以普通 shell UID 完成两次构建部署、同案例前后比较、真实模型委派及同上下文续问；覆盖未鉴权、身份不符、工具缺失、权限拒绝、任务取消、120 秒审批超时和 Agent 完成但内部工具失败。恢复路径、不可达及不完整证据另有主机回归。派生参考检查、50 对双语页面校验、严格 MkDocs 构建及渲染后检查通过；模拟器结果不代表其他 ABI 或厂商真机运行验收。
 

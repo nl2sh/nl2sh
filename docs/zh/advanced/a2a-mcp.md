@@ -6,7 +6,7 @@ MCP 与 A2A 已内置在 nl2sh 的 Rust 可执行文件中。外部 Agent 直接
 
 ## 查看连接方式
 
-TUI 启动页、`nl2sh --config <配置路径> service status`（含 `--json` 的 `connections` 字段）、Web 左侧垂直菜单“MCP / A2A”均提供连接方式。HTTP 运行时显示实际公告 origin，即使端口或 HTTPS 地址不同于默认值；stdio 运行只显示本地进程，不宣称 HTTP 可用。未启动或未知时，默认 loopback 地址仅作为明确标记的示例。Web 窗口可以刷新并复制客户端配置、启动命令与 A2A 请求体。
+TUI 启动页、`nl2sh --config <配置路径> service status`（含 `--json` 的 `connections` 字段）、Web 左侧垂直菜单“MCP / A2A”均提供连接方式。HTTP 运行时显示实际公告 origin，即使端口或 HTTPS 地址不同于默认值；stdio 运行只显示本地进程，不宣称 HTTP 可用。未启动或未知时，TUI 仅显示一行状态；CLI 和 Web 保留明确标记的默认 loopback 示例。Web 窗口可以刷新并复制客户端配置、启动命令与 A2A 请求体。
 
 查询使用私有 `protocol/connection.json`、进程启动身份和独占锁，只有 TUI/Web 所有者界面读取已验证运行进程的令牌，不向公告地址发出请求。停止后的遗留记录不会报告运行中。它只确认同 UID、同配置进程，不保证远端网络可达；TUI 为启动时快照，Web 与 CLI 查询刷新当前状态。状态查询不启动服务；`protocol_start_with_service=true` 时 TUI/Web 启动路径也一并启动协议。
 

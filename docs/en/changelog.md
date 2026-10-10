@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Expand MCP/A2A connection details on the TUI welcome page only while running; stopped or unknown states show one status line.
 - Add a repository Codex device lab skill, build identity and running-image digest, actual Agent tool evidence, and host repeatable cases/comparison/independent ADB deployment recovery without changing safety approval or PTY behavior.
 
 - MCP/A2A selects an available port when the configured or default port `8765` is occupied, preserving the bind address and announcing the actual port. Other bind errors still fail; unrelated services remain running.

@@ -6,7 +6,7 @@ MCP and A2A are built into the nl2sh Rust executable. External agents connect di
 
 ## Find connection methods
 
-The TUI startup page, `nl2sh --config <config-path> service status` (including JSON `connections`), and the Web left vertical menu’s “MCP / A2A” button provide connection guidance. Active HTTP uses the actual advertised origin, including custom ports or HTTPS. Active stdio shows a local process without claiming HTTP availability. Stopped/unknown states show clearly labeled default loopback examples. The Web dialog refreshes discovery and copies client configuration, startup commands, and an A2A request body.
+The TUI startup page, `nl2sh --config <config-path> service status` (including JSON `connections`), and the Web left vertical menu’s “MCP / A2A” button provide connection guidance. Active HTTP uses the actual advertised origin, including custom ports or HTTPS. Active stdio shows a local process without claiming HTTP availability. The TUI shows only one status line when stopped or unknown; CLI and Web guidance retain clearly labeled default loopback examples. The Web dialog refreshes discovery and copies client configuration, startup commands, and an A2A request body.
 
 Discovery uses private `protocol/connection.json`, process start identity, and the exclusive lock. Only the TUI/Web owner interfaces read the verified live process credential; no requests are made to the advertised URL. Stale records do not report a stopped process as running. Discovery verifies only a process with the same UID and configuration, not remote reachability. TUI shows a startup snapshot; Web and CLI refresh the current state. Status discovery does not start services; TUI/Web startup also starts protocols when `protocol_start_with_service=true`.
 

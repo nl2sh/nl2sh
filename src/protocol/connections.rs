@@ -81,6 +81,16 @@ impl ConnectionInfo {
         }
     }
 
+    /// Startup-page guidance, expanded only for a verified running protocol process.
+    pub(crate) fn welcome_text(&self, language: crate::config::UiLanguage) -> String {
+        let text = self.terminal_text(language);
+        if self.state == "running" {
+            text
+        } else {
+            text.lines().next().unwrap_or_default().to_owned()
+        }
+    }
+
     /// Connection guidance in the terminal's selected language.
     pub fn terminal_text(&self, language: crate::config::UiLanguage) -> String {
         let zh = language == crate::config::UiLanguage::ZhCn;
@@ -344,6 +354,34 @@ mod tests {
     use super::*;
     use crate::protocol::store::Store;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn welcome_details_only_expand_while_running() {
+        let mut info = ConnectionInfo::new(Path::new("config.toml"));
+        for language in [
+            crate::config::UiLanguage::ZhCn,
+            crate::config::UiLanguage::En,
+        ] {
+            for state in ["stopped", "unknown"] {
+                info.state = state.into();
+                let text = info.welcome_text(language);
+                assert_eq!(text.lines().count(), 1);
+                assert!(text.starts_with("MCP / A2A: "));
+                assert!(!text.contains("8765"));
+            }
+            info.state = "running".into();
+            info.transport = Some("http".into());
+            info.mcp_url = Some("https://device.example:9443/mcp".into());
+            info.a2a_url = Some("https://device.example:9443/a2a".into());
+            info.agent_card_url =
+                Some("https://device.example:9443/.well-known/agent-card.json".into());
+            info.token = Some("test-live-token".into());
+            let text = info.welcome_text(language);
+            assert!(text.contains("9443/mcp"));
+            assert!(text.contains("Bearer test-live-token"));
+            assert!(text.lines().count() > 1);
+        }
+    }
 
     #[tokio::test]
     async fn live_announcement_uses_actual_origin_and_stale_records_do_not_connect() -> Result<()> {

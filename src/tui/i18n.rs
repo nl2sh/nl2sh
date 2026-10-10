@@ -83,10 +83,10 @@ pub(crate) fn startup_history(
         history.push(format!("{WEB_WELCOME_PREFIX}{url}"));
     }
     let connections = crate::protocol::connections::welcome_connections()
-        .map(|info| info.terminal_text(language))
+        .map(|info| info.welcome_text(language))
         .unwrap_or_else(|| match language {
-            UiLanguage::ZhCn => "MCP / A2A：运行 nl2sh protocol serve 自动生成令牌；本地 MCP 使用 nl2sh protocol stdio。protocol_start_with_service=true 可随 TUI/Web 启动协议。".into(),
-            UiLanguage::En => "MCP / A2A: run nl2sh protocol serve to generate a token; local MCP uses nl2sh protocol stdio. protocol_start_with_service=true starts protocols with TUI/Web.".into(),
+            UiLanguage::ZhCn => "MCP / A2A: 状态未知".into(),
+            UiLanguage::En => "MCP / A2A: unknown".into(),
         });
     history.push(format!("{PROTOCOL_WELCOME_PREFIX}{connections}"));
     history
@@ -185,7 +185,7 @@ mod tests {
         assert!(english.iter().any(|line| line.contains("Shift+drag")));
         assert!(english.iter().any(|line| line.contains("Ctrl+Q")));
         assert!(chinese.iter().any(|line| line.contains("MCP / A2A")));
-        assert!(english.iter().any(|line| line.contains("protocol stdio")));
+        assert!(english.iter().any(|line| line.contains("MCP / A2A")));
         assert!(chinese.iter().any(|line| line.contains("nl2sh/nl2sh")));
         assert!(chinese.iter().any(|line| line.contains("点击支持 ->")));
         assert!(chinese.iter().any(|line| line.contains("点击赞赏 ->")));
