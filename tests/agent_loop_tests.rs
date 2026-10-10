@@ -1459,3 +1459,72 @@ async fn agent_prepared_grant_does_not_inherit_task_approval_after_exhaustion() 
     }
     Ok(())
 }
+
+struct BackgroundLlm(AtomicUsize);
+#[async_trait]
+impl LlmClient for BackgroundLlm {
+    async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
+        if self.0.fetch_add(1, Ordering::SeqCst) == 0 {
+            Ok(LlmResponse {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "background".into(),
+                    name: "execute_shell_command".into(),
+                    arguments: json!({"command":"sleep 30", "background":true, "background_timeout_secs":60}),
+                }],
+                usage: Usage::default(),
+                finish_reason: FinishReason::ToolCalls,
+            })
+        } else {
+            let result = request
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    ConversationItem::Tools(round) => round.results.first(),
+                    _ => None,
+                })
+                .ok_or_else(|| anyhow::anyhow!("background evidence missing"))?;
+            assert!(result.success);
+            let value: serde_json::Value = serde_json::from_str(&result.output)?;
+            assert_eq!(value["status"], "started");
+            assert_eq!(value["child_id"], "00000000-0000-4000-8000-000000000001");
+            assert!(value.get("exit_code").is_none());
+            Ok(LlmResponse {
+                text: Some("capture started".into()),
+                tool_calls: vec![],
+                usage: Usage::default(),
+                finish_reason: FinishReason::Stop,
+            })
+        }
+    }
+}
+struct BackgroundExec;
+#[async_trait]
+impl CommandExecutor for BackgroundExec {
+    async fn execute(&self, _: &str, _: bool, _: bool) -> Result<ExecutionResult> {
+        anyhow::bail!("background must not call foreground execution")
+    }
+    async fn spawn_background(&self, command: &str, root: bool, seconds: u64) -> Result<String> {
+        assert_eq!(command, "sleep 30");
+        assert!(!root);
+        assert_eq!(seconds, 60);
+        Ok("00000000-0000-4000-8000-000000000001".into())
+    }
+}
+#[tokio::test]
+async fn agent_background_start_returns_real_handle_without_foreground_wait_or_exit_claim(
+) -> Result<()> {
+    let config = Config::default();
+    let llm = BackgroundLlm(AtomicUsize::new(0));
+    let result = AgentRunner {
+        config: &config,
+        llm: &llm,
+        executor: &BackgroundExec,
+        confirmer: &Confirm(false),
+    }
+    .run("start capture")
+    .await?;
+    assert_eq!(result.final_text, "capture started");
+    assert_eq!(llm.0.load(Ordering::SeqCst), 2);
+    Ok(())
+}

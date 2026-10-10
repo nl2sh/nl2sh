@@ -308,3 +308,18 @@ Web `/api/tailcat` 与 TUI `/tailcat` 共用 `tools::tailcat::quick` 的进程�
 ## 有界后台续跑
 
 `src/agent/background` 提供任务绑定的具名结构化工具续跑队列，最多 16 个待决项、单次等待最多 125 秒；只有成功执行的内置工具通过类型化接口登记，模型回复或工具 JSON 文字不能生成调度权限。使用 Tokio 单调时钟，Runner 在下一模型请求前等待到期并通过 Registry、资源获取、prepare、统一风险/确认边界执行续跑，真实结果组成独立 Tool Round。等待期间释放 Android UI Lease，后续 UI 动作重新获取并复核状态；等待计入活跃时限，续跑计入工具预算，步骤/审批/配置快照不重置。等待可取消，队列 RAII 在任务退出时撤销，并记录 scheduled/waiting/resuming/completed/failed/cancelled 与任务/会话关联的元数据，不写参数。进程退出后不恢复调度，普通会话恢复也不重放。当前仅系统 Trace 注册到期只读分析；直接 invoke 的队列默认禁用。该机制是进程内有界延迟续跑，不是跨重启任务调度器，也不把定时到期视为后台操作成功证据。
+
+
+## 托管后台 Shell
+
+`execute_shell_command.background` 经原动态 Shell 分类、编辑重评估、确认与命令绑定 Broker 后，
+由 `src/shell/background` 创建独立 session/process group，stdin null、stdout/stderr 管道。
+启动返回随机进程内 `child_id`，不等退出；独立监督线程轮询非阻塞管道和
+`waitid(WNOHANG | WNOWAIT)`，保留未回收首领的 PID/PGID 身份，TERM/KILL 清理组后才 wait。
+每流保留 1 MiB 原始字节尾部，分页返回独立偏移/淘汰标记及过滤后的有损 UTF-8；
+捕获错误、退出码、信号、停止/超时与完成明确区分，读成功不代表命令成功。
+16 句柄全局上限只淘汰终态；每命令 1–86400 秒，默认 3600。配置 canonical 身份隔离访问，
+任务取消只影响启动前，句柄级 watch 单独停止；main 的正常退出等待全部回收，重启不恢复。
+Android 可能修改状态的后台命令共享 Arc UI Lease 至监督结束，只读采集不续持租约；
+Agent 将租约移交子进程，后续 UI/Shell 动作重新获取；读取/停止不需 UI 租约。非 root 通过 su 的后台计划明确拒绝，已 root 仍经过完整审批。
+不变更 PTY、终端恢复或前台执行；不保证 OOM/异常死亡、逃逸进程组或 daemonize 的存活/清理。

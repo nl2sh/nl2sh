@@ -2,7 +2,7 @@ use super::{pipeline, pty, resolve_invocation, RootProbe, SystemRootProbe};
 use crate::config::Config;
 #[cfg(target_os = "android")]
 use crate::runtime::{android_runtime, termux_prefix, AndroidRuntime};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use std::ffi::OsString;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -68,6 +68,32 @@ pub trait CommandExecutor: Send + Sync {
     /// Captures a validated diagnostic query in the current identity without elevation or PTY.
     async fn execute_readonly(&self, command: &str) -> Result<ExecutionResult> {
         self.execute_machine(command, false).await
+    }
+
+    /// Starts an already approved process-owned background command, returning its opaque handle.
+    async fn spawn_background(
+        &self,
+        _command: &str,
+        _needs_root: bool,
+        _timeout_secs: u64,
+    ) -> Result<String> {
+        anyhow::bail!("background execution is unavailable in this executor")
+    }
+
+    /// Reads independent byte-offset pages for a handle owned by this executor configuration.
+    async fn read_output(
+        &self,
+        _child_id: &str,
+        _offset: u64,
+        _stderr_offset: u64,
+        _max_bytes: usize,
+    ) -> Result<super::BackgroundOutput> {
+        anyhow::bail!("background output is unavailable in this executor")
+    }
+
+    /// Stops only a managed handle and waits for cleanup; never accepts arbitrary PIDs.
+    async fn kill(&self, _child_id: &str) -> Result<super::BackgroundOutput> {
+        anyhow::bail!("background stop is unavailable in this executor")
     }
 
     /// Executes an already assessed and approved command.
@@ -251,6 +277,53 @@ impl ShellExecutor {
 }
 #[async_trait]
 impl CommandExecutor for ShellExecutor {
+    async fn spawn_background(
+        &self,
+        command: &str,
+        needs_root: bool,
+        timeout_secs: u64,
+    ) -> Result<String> {
+        if self.cancel.as_ref().is_some_and(|cancel| *cancel.borrow()) {
+            anyhow::bail!("command cancelled before background execution")
+        }
+        let (program, args) = resolve_invocation(
+            command,
+            self.config.execute_user_mode,
+            needs_root,
+            self.probe.as_ref(),
+        )?;
+        if program == "su" {
+            anyhow::bail!("background su elevation cannot be reliably supervised; run nl2sh under root or use foreground execution")
+        }
+        let scope = super::background::scope(&self.config)?;
+        let lease = crate::runtime::resources::background_ui_lease();
+        tokio::task::spawn_blocking(move || {
+            super::background::spawn(scope, program, args, timeout_secs, lease)
+        })
+        .await
+        .context("background spawn worker failed")?
+    }
+
+    async fn read_output(
+        &self,
+        child_id: &str,
+        offset: u64,
+        stderr_offset: u64,
+        max_bytes: usize,
+    ) -> Result<super::BackgroundOutput> {
+        super::background::read(
+            &super::background::scope(&self.config)?,
+            child_id,
+            offset,
+            stderr_offset,
+            max_bytes,
+        )
+    }
+
+    async fn kill(&self, child_id: &str) -> Result<super::BackgroundOutput> {
+        super::background::stop(&super::background::scope(&self.config)?, child_id).await
+    }
+
     async fn execute_probe(&self, command: &str) -> Result<ExecutionResult> {
         let mut config = self.config.clone();
         config.execute_user_mode = crate::config::ExecuteUserMode::Normal;

@@ -1718,7 +1718,7 @@ DeviceIdle 与白名单证据。
 
 ## `execute_shell_command`
 
-本地安全检查与必要确认后执行 shell 命令。
+本地安全检查与必要确认后执行 shell；background=true 返回进程内托管 child_id，需 read_output 查询实际状态、kill 确认停止；不支持后台 su 提权。
 
 | 描述项 | 值 |
 | --- | --- |
@@ -1729,12 +1729,24 @@ DeviceIdle 与白名单证据。
 | 扩展要求 | `none` |
 | 风险下限 | `dynamic_shell` |
 | 调度策略声明 | `shell` |
-| 生命周期 | `call` |
+| 生命周期 | `process` |
 
 ```json
 {
   "additionalProperties": false,
   "properties": {
+    "background": {
+      "default": false,
+      "description": "Start a process-owned background capture and return child_id immediately; no PTY or stdin.",
+      "type": "boolean"
+    },
+    "background_timeout_secs": {
+      "default": 3600,
+      "description": "Background runtime limit in seconds, 1–86400 (default 3600).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
     "command": {
       "description": "Shell source to assess locally.",
       "type": "string"
@@ -2437,6 +2449,37 @@ DeviceIdle 与白名单证据。
 }
 ```
 
+## `kill`
+
+确认后通过托管 child_id 停止后台 shell 进程组并等待回收；仅接受随机句柄，不杀任意 PID，可重复停止保留的已结束项。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `process` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "child_id": {
+      "description": "Opaque managed child_id, never an arbitrary PID.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "child_id"
+  ],
+  "type": "object"
+}
+```
+
 ## `list_android_apps`
 
 有界列出应用包名、APK 路径及 UID。
@@ -2793,6 +2836,58 @@ DeviceIdle 与白名单证据。
   },
   "required": [
     "path"
+  ],
+  "type": "object"
+}
+```
+
+## `read_output`
+
+按托管 child_id 与独立 stdout/stderr 字节偏移读取有界输出和实际退出状态；检查 next_offset、truncated、finished 与 error，不接管其他进程或配置。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `process` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "child_id": {
+      "description": "Opaque child_id returned by a successful background start, not a PID.",
+      "type": "string"
+    },
+    "max_bytes": {
+      "default": 1024,
+      "description": "Maximum raw bytes per stream, 1–16384 (default 1024).",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "offset": {
+      "default": 0,
+      "description": "Raw stdout byte offset; follow stdout.next_offset.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "stderr_offset": {
+      "default": 0,
+      "description": "Raw stderr byte offset; follow stderr.next_offset independently.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "child_id"
   ],
   "type": "object"
 }

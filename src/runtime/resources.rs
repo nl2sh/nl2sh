@@ -193,3 +193,19 @@ mod tests {
         Ok(())
     }
 }
+
+tokio::task_local! { static BACKGROUND_UI_LEASE: Option<std::sync::Arc<UiLease>>; }
+
+pub(crate) async fn with_background_ui_lease<F: Future>(
+    lease: Option<std::sync::Arc<UiLease>>,
+    future: F,
+) -> F::Output {
+    BACKGROUND_UI_LEASE.scope(lease, future).await
+}
+pub(crate) fn background_ui_lease() -> Option<std::sync::Arc<UiLease>> {
+    BACKGROUND_UI_LEASE.try_with(Clone::clone).ok().flatten()
+}
+
+pub(crate) fn background_ui_scope_present() -> bool {
+    BACKGROUND_UI_LEASE.try_with(|_| ()).is_ok()
+}

@@ -179,10 +179,18 @@ async fn invoke_scoped(
                 if !assessment.requires_confirmation {
                     break (assessment, None);
                 }
+                let preview = if args.background {
+                    format!(
+                        "Background capture (no stdin/PTY; limit {} seconds; process-owned):\n{}",
+                        args.background_timeout_secs, command
+                    )
+                } else {
+                    command.clone()
+                };
                 let decision = crate::agent::confirm_assessed(
                     config,
                     confirmer,
-                    &crate::agent::ConfirmationRequest::shell(&command),
+                    &crate::agent::ConfirmationRequest::shell(&preview),
                     &assessment,
                 )
                 .await?;
@@ -206,6 +214,25 @@ async fn invoke_scoped(
             };
             let capability =
                 PrivilegeBroker::authorize(&command, &assessment, config, approved.as_deref())?;
+            if args.background {
+                let lease = (assessment.risk_level != crate::security::RiskLevel::ReadOnly)
+                    .then(|| runtime.background_ui_lease())
+                    .flatten();
+                let child_id = crate::runtime::resources::with_background_ui_lease(
+                    lease,
+                    ExecutionBroker::spawn_background(
+                        executor,
+                        capability,
+                        args.background_timeout_secs,
+                    ),
+                )
+                .await?;
+                return Ok(DirectToolResult {
+                    tool: name.into(), success: true,
+                    output: serde_json::json!({"status":"started", "child_id":child_id, "finished":false, "background_timeout_secs":args.background_timeout_secs}).to_string(),
+                    attachments: Vec::new(),
+                });
+            }
             let result = crate::runtime::resources::with_ui_lease(
                 held,
                 ExecutionBroker::execute(executor, capability, false),
@@ -401,5 +428,172 @@ mod tests {
         assert_eq!(result.attachments.len(), 1);
         assert_eq!(result.attachments[0].media_type, "image/png");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod background_tests {
+    use super::*;
+    use crate::{
+        agent::ConfirmationRequest,
+        config::ExecuteUserMode,
+        security::SecurityAssessment,
+        shell::{RootProbe, ShellExecutor},
+    };
+    use async_trait::async_trait;
+    use serde_json::json;
+
+    struct Reject;
+    #[async_trait]
+    impl Confirmer for Reject {
+        async fn confirm(
+            &self,
+            _: &ConfirmationRequest<'_>,
+            _: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
+            Ok(ConfirmationDecision::Reject)
+        }
+    }
+    struct EditThenReject(std::sync::atomic::AtomicUsize);
+    #[async_trait]
+    impl Confirmer for EditThenReject {
+        async fn confirm(
+            &self,
+            request: &ConfirmationRequest<'_>,
+            _: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
+            assert!(request.preview.contains("Background capture"));
+            if self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                Ok(ConfirmationDecision::Edit(
+                    "rm -rf /not-a-real-target".into(),
+                ))
+            } else {
+                Ok(ConfirmationDecision::Reject)
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn background_mutation_rejection_and_edit_never_start() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("unapproved");
+        let config = Config {
+            source: Some(directory.path().join("config.toml")),
+            execute_user_mode: ExecuteUserMode::Normal,
+            ..Config::default()
+        };
+        let executor = ShellExecutor::new(config.clone());
+        let result = invoke(
+            &config,
+            &executor,
+            &Reject,
+            "execute_shell_command",
+            json!({"command":format!("touch {}", path.display()),"background":true}),
+        )
+        .await?;
+        assert!(!result.success && !path.exists());
+        let confirmer = EditThenReject(std::sync::atomic::AtomicUsize::new(0));
+        let result = invoke(
+            &config,
+            &executor,
+            &confirmer,
+            "execute_shell_command",
+            json!({"command":format!("touch {}", path.display()),"background":true}),
+        )
+        .await?;
+        assert!(!result.success && !path.exists());
+        assert_eq!(confirmer.0.load(std::sync::atomic::Ordering::SeqCst), 2);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn handle_survives_call_executor_and_task_watch_but_kill_requires_confirmation(
+    ) -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let config = Config {
+            source: Some(dir.path().join("config.toml")),
+            execute_user_mode: ExecuteUserMode::Normal,
+            ..Config::default()
+        };
+        let (sender, receiver) = tokio::sync::watch::channel(false);
+        let executor = ShellExecutor::new(config.clone()).with_cancel(receiver);
+        let result = invoke(
+            &config,
+            &executor,
+            &Reject,
+            "execute_shell_command",
+            json!({"command":"sleep 30","background":true,"background_timeout_secs":30}),
+        )
+        .await?;
+        assert!(result.success);
+        let start: Value = serde_json::from_str(&result.output)?;
+        assert_eq!(start["status"], "started");
+        let id = start["child_id"].as_str().context("child_id missing")?;
+        sender.send_replace(true);
+        drop(sender);
+        drop(executor);
+        let other = ShellExecutor::new(config.clone());
+        let read = invoke(
+            &config,
+            &other,
+            &Reject,
+            "read_output",
+            json!({"child_id":id}),
+        )
+        .await?;
+        assert!(read.success);
+        let output: Value = serde_json::from_str(&read.output)?;
+        assert_eq!(output["finished"], false);
+        let result = invoke(&config, &other, &Reject, "kill", json!({"child_id":id})).await?;
+        assert!(!result.success);
+        assert!(!other.read_output(id, 0, 0, 100).await?.finished);
+        // Fixture cleanup uses the security-agnostic executor, without altering runtime policy.
+        assert!(other.kill(id).await?.finished);
+        assert!(
+            invoke(&config, &other, &Reject, "kill", json!({"child_id":"1"}))
+                .await
+                .is_err()
+        );
+        assert!(invoke(
+            &config,
+            &other,
+            &Reject,
+            "execute_shell_command",
+            json!({"command":"sleep 1","background":true,"interactive":true})
+        )
+        .await
+        .is_err());
+        assert!(invoke(
+            &config,
+            &other,
+            &Reject,
+            "execute_shell_command",
+            json!({"command":"sleep 1","background":true,"background_timeout_secs":0})
+        )
+        .await
+        .is_err());
+        Ok(())
+    }
+
+    struct NonRoot;
+    impl RootProbe for NonRoot {
+        fn uid(&self) -> u32 {
+            2000
+        }
+        fn su_available(&self) -> bool {
+            true
+        }
+    }
+    #[tokio::test]
+    async fn background_su_plan_is_rejected_before_spawning() {
+        let executor = ShellExecutor::with_probe(
+            Config {
+                execute_user_mode: ExecuteUserMode::Root,
+                ..Config::default()
+            },
+            Box::new(NonRoot),
+        );
+        let result = executor.spawn_background("sleep 30", true, 30).await;
+        assert!(result.is_err());
     }
 }

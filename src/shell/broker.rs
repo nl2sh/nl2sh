@@ -8,6 +8,31 @@ use anyhow::Result;
 pub struct ExecutionBroker;
 
 impl ExecutionBroker {
+    /// Starts exactly the approved command in the background, without a PTY.
+    pub async fn spawn_background(
+        executor: &dyn CommandExecutor,
+        approved: ApprovedShellCommand,
+        timeout_secs: u64,
+    ) -> Result<String> {
+        if crate::runtime::resources::privileged_android_process()
+            && !crate::runtime::resources::background_ui_scope_present()
+        {
+            let lease = std::sync::Arc::new(crate::runtime::resources::UiLease::acquire().await?);
+            return crate::runtime::resources::with_background_ui_lease(
+                Some(lease),
+                executor.spawn_background(
+                    approved.command(),
+                    approved.requires_root(),
+                    timeout_secs,
+                ),
+            )
+            .await;
+        }
+        executor
+            .spawn_background(approved.command(), approved.requires_root(), timeout_secs)
+            .await
+    }
+
     /// Executes exactly the command and root plan held by the capability.
     pub async fn execute(
         executor: &dyn CommandExecutor,

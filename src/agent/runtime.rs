@@ -42,7 +42,7 @@ pub struct TaskStats {
 
 pub(crate) struct TaskRuntime {
     pub(crate) background: super::background::BackgroundQueue,
-    ui_lease: Option<crate::runtime::resources::UiLease>,
+    ui_lease: Option<std::sync::Arc<crate::runtime::resources::UiLease>>,
     started: Instant,
     confirmation_time: Duration,
     pub(crate) steps_used: usize,
@@ -74,9 +74,17 @@ impl TaskRuntime {
             || (metadata.concurrency == ToolConcurrency::Shell
                 && crate::runtime::resources::privileged_android_process());
         if needs_ui && self.ui_lease.is_none() {
-            self.ui_lease = Some(crate::runtime::resources::UiLease::acquire().await?);
+            self.ui_lease = Some(std::sync::Arc::new(
+                crate::runtime::resources::UiLease::acquire().await?,
+            ));
         }
         Ok(())
+    }
+
+    pub(crate) fn background_ui_lease(
+        &self,
+    ) -> Option<std::sync::Arc<crate::runtime::resources::UiLease>> {
+        self.ui_lease.clone()
     }
 
     pub(crate) fn holds_ui_lease(&self) -> bool {

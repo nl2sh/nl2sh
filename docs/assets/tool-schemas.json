@@ -1,10 +1,22 @@
 [
   {
-    "description": "Execute a shell command in the Android shell environment after security evaluation and required user confirmation.",
+    "description": "Execute a shell command after local security evaluation and required confirmation. background=true returns a process-owned child_id immediately for bounded noninteractive capture; inspect read_output and stop with kill. Started does not mean succeeded. Background su elevation is unsupported.",
     "name": "execute_shell_command",
     "parameters": {
       "additionalProperties": false,
       "properties": {
+        "background": {
+          "default": false,
+          "description": "Start a process-owned background capture and return child_id immediately; no PTY or stdin.",
+          "type": "boolean"
+        },
+        "background_timeout_secs": {
+          "default": 3600,
+          "description": "Background runtime limit in seconds, 1–86400 (default 3600).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "command": {
           "description": "Shell source to assess locally.",
           "type": "string"
@@ -27,6 +39,61 @@
       },
       "required": [
         "command"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Read bounded stdout/stderr pages and actual status of a managed background shell. Follow each stream's next_offset; truncated means older bytes were evicted. Handles belong to the current nl2sh process and configuration. Empty output is not proof of completion.",
+    "name": "read_output",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "child_id": {
+          "description": "Opaque child_id returned by a successful background start, not a PID.",
+          "type": "string"
+        },
+        "max_bytes": {
+          "default": 1024,
+          "description": "Maximum raw bytes per stream, 1–16384 (default 1024).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "default": 0,
+          "description": "Raw stdout byte offset; follow stdout.next_offset.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stderr_offset": {
+          "default": 0,
+          "description": "Raw stderr byte offset; follow stderr.next_offset independently.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "child_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "After confirmation, stop only the background shell identified by child_id using TERM then KILL and wait for cleanup. Never accepts arbitrary PIDs. Idempotent for retained completed handles; inspect error and finished.",
+    "name": "kill",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "child_id": {
+          "description": "Opaque managed child_id, never an arbitrary PID.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "child_id"
       ],
       "type": "object"
     }

@@ -53,3 +53,8 @@ For `android-build-tmux-run.sh`, prepare Termux openssh/tmux, passwd, and sshd. 
 ## Device acceptance
 
 Cover terminal startup/exit restoration, read-only id/getprop, mutation approval, rejection of dangerous actions, normal/auto/root modes, timeout/Ctrl+C, full-screen return/resize, and both model protocols. Cross-compilation does not prove device behavior; record target platforms and commands.
+
+
+## Managed background shell regression
+
+`examples/background_shell_device_check.rs` is an interactive driver without a model. It uses the production Tool Runtime and `StdioConfirmer` and accepts only execute_shell_command/read_output/kill. Configure the same NDK linker/CC/AR used for cross-compilation and build this example for the device ABI. In a real device terminal, submit one line such as `{"tool":"execute_shell_command","arguments":{"command":"logcat -v threadtime -s nl2sh_background_regression:I","background":true,"background_timeout_secs":60}}`. Save the returned child_id, then read and stop it. Each required mutation/high-risk approval remains a local terminal decision. Enter `exit` to clean all children owned by this driver, without replacing an existing service. Regression cases cover independent stream offsets, the 16-active-handle limit, fd/process cleanup across repeated starts/stops, TERM resistance/timeouts and normal exit. Do not claim persistent daemon behavior from these tests: abnormal parent death, OOM and escaped process groups remain separate validation boundaries.

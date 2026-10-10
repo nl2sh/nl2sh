@@ -72,9 +72,19 @@ pub struct ShellToolArgs {
     /// Model interaction hint; local detection remains authoritative too.
     #[serde(default)]
     pub interactive: bool,
+    /// Start a process-owned background capture and return child_id immediately; no PTY or stdin.
+    #[serde(default)]
+    pub background: bool,
+    /// Background runtime limit in seconds, 1–86400 (default 3600).
+    #[serde(default = "default_background_timeout")]
+    pub background_timeout_secs: u64,
     /// Model privilege hint; never directly authorizes root elevation.
     #[serde(default)]
     pub requires_root: bool,
+}
+
+fn default_background_timeout() -> u64 {
+    3600
 }
 
 pub(super) fn definition<A: JsonSchema>(name: &str, description: &str) -> ToolDefinition {
@@ -490,6 +500,8 @@ impl PreparedToolCall {
 fn all_adapters() -> Vec<Box<dyn Tool>> {
     let mut tools: Vec<Box<dyn Tool>> = vec![
         Box::new(ShellTool),
+        Box::new(shell::ReadOutputTool),
+        Box::new(shell::KillTool),
         Box::new(apk::InspectApkTool),
         Box::new(apk::ListApkEntriesTool),
         Box::new(apk::ListDexClassesTool),
@@ -667,13 +679,15 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 61);
+        assert_eq!(names.len(), 63);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()
         );
         for name in [
             "execute_shell_command",
+            "read_output",
+            "kill",
             "apply_patch",
             "analyze_audio",
             "inspect_android_environment",

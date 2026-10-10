@@ -1,4 +1,5 @@
 mod ansi;
+mod background;
 mod broker;
 mod executor;
 mod interactive;
@@ -14,3 +15,5 @@ pub use executor::{
 };
 pub use interactive::is_interactive;
 pub use root::{resolve_invocation, RootProbe, RootStatus, SystemRootProbe};
+
+pub use background::{shutdown_background, BackgroundOutput, OutputPage};

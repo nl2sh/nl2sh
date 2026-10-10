@@ -53,3 +53,8 @@ $env:ANDROID_NDK_HOME = 'C:/Android/Sdk/ndk/28.2.13676358'
 ## 真机验收
 
 验证启动/退出终端恢复、只读 id/getprop、修改确认、危险拒绝、normal/auto/root、超时/Ctrl+C、全屏程序返回与 resize，以及两种模型协议。交叉编译成功不等于真机通过；验证记录写明目标平台与命令。
+
+
+## 托管后台 Shell 回归
+
+`examples/background_shell_device_check.rs` 是无模型的交互式驱动，使用生产 Tool Runtime 和 `StdioConfirmer`，只接受 execute_shell_command/read_output/kill。按目标 ABI 设置与交叉编译相同的 NDK linker/CC/AR 后构建该 example，在设备真实终端逐行输入 `{"tool":"execute_shell_command","arguments":{"command":"logcat -v threadtime -s nl2sh_background_regression:I","background":true,"background_timeout_secs":60}}`。保存返回 child_id，再读取和停止；修改/危险审批仍由本地终端逐次决定。输入 `exit` 清理本驱动所有后台命令，不替换现有服务。回归覆盖独立双流偏移、16 个活动句柄上限、重复启停的 fd/进程回收、TERM 抵抗/超时及正常退出；不要在异常父进程死亡、OOM 或逃逸进程组尚未验证时宣称持久守护能力。

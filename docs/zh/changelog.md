@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增托管后台 Shell：`background=true` 立即返回 `child_id`，`read_output` 按双流字节偏移读取，`kill` 经确认停止；有界输出/时限、进程组回收与正常退出清理，任务结束不停止，重启不恢复，非 root 后台 `su` 提权拒绝。
+
 - 新增作用域授权凭据、跨进程持久用量、到期/耗尽/撤销与独立审计；全入口共用分类后的授权边界，Root/Critical/强确认不可放行，Dangerous 需配置与显式启动开关。TUI 展示用量，Web 可刷新并撤销。Web 只读概览与应用枚举沿用配置的命令超时，取消额外 15 秒上限。
 
 - 新增只读 `session_list`、`session_search`、`session_read`，供内置 Agent、MCP 直调和 A2A 委派查询已保存会话；支持有界分页、工具证据关联、快照版本校验与凭据脱敏，历史与检查点不授予执行权限。

@@ -1718,7 +1718,7 @@ Download a bounded public HTTP(S) resource and atomically write it after confirm
 
 ## `execute_shell_command`
 
-Execute a shell command in the Android shell environment after security evaluation and required user confirmation.
+Execute a shell command after local security evaluation and required confirmation. background=true returns a process-owned child_id immediately for bounded noninteractive capture; inspect read_output and stop with kill. Started does not mean succeeded. Background su elevation is unsupported.
 
 | Descriptor | Value |
 | --- | --- |
@@ -1729,12 +1729,24 @@ Execute a shell command in the Android shell environment after security evaluati
 | Runtime prerequisite | `none` |
 | Risk floor | `dynamic_shell` |
 | Declared scheduling policy | `shell` |
-| Lifetime | `call` |
+| Lifetime | `process` |
 
 ```json
 {
   "additionalProperties": false,
   "properties": {
+    "background": {
+      "default": false,
+      "description": "Start a process-owned background capture and return child_id immediately; no PTY or stdin.",
+      "type": "boolean"
+    },
+    "background_timeout_secs": {
+      "default": 3600,
+      "description": "Background runtime limit in seconds, 1–86400 (default 3600).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
     "command": {
       "description": "Shell source to assess locally.",
       "type": "string"
@@ -2437,6 +2449,37 @@ Judge audio quality using the completed analysis cached in this task; cached fea
 }
 ```
 
+## `kill`
+
+After confirmation, stop only the background shell identified by child_id using TERM then KILL and wait for cleanup. Never accepts arbitrary PIDs. Idempotent for retained completed handles; inspect error and finished.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `-` |
+| Enabled by default | `true` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `mutating` |
+| Declared scheduling policy | `sequential` |
+| Lifetime | `process` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "child_id": {
+      "description": "Opaque managed child_id, never an arbitrary PID.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "child_id"
+  ],
+  "type": "object"
+}
+```
+
 ## `list_android_apps`
 
 List bounded installed Android applications with package, APK path, and UID.
@@ -2793,6 +2836,58 @@ Read a size-limited UTF-8 text file. Absolute paths, parent components, and syml
   },
   "required": [
     "path"
+  ],
+  "type": "object"
+}
+```
+
+## `read_output`
+
+Read bounded stdout/stderr pages and actual status of a managed background shell. Follow each stream's next_offset; truncated means older bytes were evicted. Handles belong to the current nl2sh process and configuration. Empty output is not proof of completion.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `-` |
+| Enabled by default | `true` |
+| Platform | `any` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `process` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "child_id": {
+      "description": "Opaque child_id returned by a successful background start, not a PID.",
+      "type": "string"
+    },
+    "max_bytes": {
+      "default": 1024,
+      "description": "Maximum raw bytes per stream, 1–16384 (default 1024).",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "offset": {
+      "default": 0,
+      "description": "Raw stdout byte offset; follow stdout.next_offset.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "stderr_offset": {
+      "default": 0,
+      "description": "Raw stderr byte offset; follow stderr.next_offset independently.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "child_id"
   ],
   "type": "object"
 }

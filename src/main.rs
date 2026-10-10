@@ -13,6 +13,12 @@ use nl2sh::{
 };
 #[tokio::main]
 async fn main() -> Result<()> {
+    let result = run().await;
+    let cleanup = nl2sh::shell::shutdown_background().await;
+    result.and(cleanup)
+}
+
+async fn run() -> Result<()> {
     let cli = Cli::parse();
     if cli.allow_dangerous_grants {
         nl2sh::security::grants::enable_dangerous_grants();
