@@ -4,6 +4,8 @@ Last Updated: 2026-10-10
 
 ## Recent Changes
 
+- TUI/Web 新增独立 MCP/A2A 配置分类，集中现有启动开关、端口、掩码 token 和默认关闭的自动审批；说明环境变量优先、自动生成、重启和新任务生效规则，明确危险/严重风险范围。TUI 端口支持文本编辑与 u16 校验，Web 复用 Rust 配置校验与私有原子保存；双语指南与更新记录同步。无新增公共配置字段，不改变 Android、安全分类、协议确认器、PTY 或终端恢复路径。 验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`（456 项通过、4 项显式忽略）、40 项 Web 测试与生产构建、Android API 26 AArch64 `cargo check --no-default-features`、派生参考检查、50 对双语页面检查、严格 MkDocs 构建与渲染后检查通过。真实浏览器验证四字段保存/回读、密码框、非法 token 禁止保存、恢复关闭及 390px/320px 无页面横向溢出。
+
 - 配置 `protocol_token` 支持固定 MCP/A2A HTTP 令牌，环境变量优先、空值自动生成；独立协议与 UI/受管服务共享启动路径，固定值启动输出隐藏。新增校验与凭据脱敏，模型配置工具禁止凭据读写，同步双语说明与派生参考；Android、安全审批与 PTY 路径不变。验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`（455 项通过、4 项显式忽略）、派生参考检查、50 对双语页面检查、严格 MkDocs 构建与渲染后检查通过；真实 CLI 进程覆盖固定令牌重启复用、环境覆盖、错误令牌拒绝、启动值隐藏及工具结果脱敏。
 
 - TUI 欢迎页 MCP/A2A 仅在已验证运行中时展开详情；未启动或状态未知时保留一行状态，无发现快照时显示状态未知。同步双语说明；CLI/Web 连接说明、安全审批、Android 执行及 PTY 路径不变。验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`、双语页面检查、严格 MkDocs 构建与渲染后检查通过。

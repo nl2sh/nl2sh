@@ -22,6 +22,17 @@ Ctrl+C 会取消正在等待的模型请求并返回空闲状态，可继续发�
 
 工具运行时显示有界实时输出，结束后折叠结果；最终回答支持 Markdown、围栏代码高亮、Unicode 表格和窄屏降级。状态栏显示真实 Token 与预算，未知用量显示未知；支持的 Provider 余额只保存在内存。
 
+## MCP / A2A 配置
+
+在设置的“MCP / A2A”分类集中编辑 `protocol_start_with_service`（随 Web/TUI 启动）、`protocol_service_port`（0–65535，0 自动分配）、`protocol_token` 和 `protocol_auto_approve`。Token 输入掩码显示；留空启动时自动生成，固定值必须为 32–256 个无空格可打印 ASCII 字符，`NL2SH_PROTOCOL_TOKEN` 环境变量优先。
+
+启动、端口和 token 修改后需重启协议：后台执行 `nl2sh --config <配置路径> service restart`，前台 TUI/Web 退出后重新启动；独立协议通过原入口重启。自动审批保存后作用于新协议任务，运行中任务保留原快照。
+
+!!! warning "自动审批默认关闭"
+
+    开启后 MCP/A2A 所有风险等级均自动批准，包括修改、危险和严重操作。只向完全信任的客户端提供 token；安全分类、参数校验、目标复核和 Root 能力检查继续执行。TUI/Web 对话审批策略独立。HTTP 明文传输 token，远程连接推荐 HTTPS。
+
+
 ## 本地命令
 
 `!id` 不调用模型，但经过完整安全分类、确认和执行链，输出不加入模型上下文。`/shell` 暂停 TUI 并打开普通系统 shell，`exit` / Ctrl+D 返回；此 shell 的输入输出不进模型或审计日志，属于用户直接控制的 shell。全屏命令临时挂起 TUI，结束后恢复终端与完整重绘。

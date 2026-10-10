@@ -4,6 +4,17 @@
 
 Interactive startup also listens on `0.0.0.0:9999`, choosing another available port if occupied. Use the actual URL in startup output. **There is no login: anyone reaching the page can view data, edit configuration, and submit tasks. Use a trusted network.** ADB forwarding does not disable LAN listening.
 
+## MCP / A2A settings
+
+The “MCP / A2A” settings category brings together `protocol_start_with_service` (start with Web/TUI), `protocol_service_port` (0–65535; zero selects an available port), `protocol_token`, and `protocol_auto_approve`. Token input is masked. Leave it empty to generate a token at startup, or enter 32–256 printable ASCII characters without spaces. The `NL2SH_PROTOCOL_TOKEN` environment variable takes priority.
+
+Restart protocols after changing startup, port, or token settings: use `nl2sh --config <config-path> service restart` for background services, exit and relaunch foreground TUI/Web, or restart a standalone protocol through its original entry point. Saved auto-approval settings apply to new protocol tasks; running tasks retain their snapshots.
+
+!!! warning "Auto-approval defaults off"
+
+    Enabling it approves every MCP/A2A risk level, including mutations and Dangerous/Critical operations. Give tokens only to fully trusted clients. Classification, parameter validation, target revalidation, and Root capability checks still run. TUI/Web conversation approval policies are independent. HTTP sends tokens in plaintext; prefer HTTPS remotely.
+
+
 ## MCP / A2A connections
 
 The left vertical menu’s “MCP / A2A” button opens a connection dialog. Refresh the protocol-process status and copy actual MCP Streamable HTTP, A2A JSON-RPC, and public Agent Card URLs, HTTP/stdio client configuration, device startup commands, and an A2A request example. Discovery needs no model, starts no service, and shows the running version, complete Bearer token and authenticated client configuration, without protocol approval buttons. Mutations still require an interactive device terminal using the same UID and configuration.

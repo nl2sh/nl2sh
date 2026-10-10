@@ -1290,6 +1290,10 @@ mod http_tests {
         let mut config = preview["config"].clone();
         config["model"] = serde_json::json!("web-editor-test");
         config["api_key"] = serde_json::json!("test-key");
+        config["protocol_start_with_service"] = serde_json::json!(true);
+        config["protocol_service_port"] = serde_json::json!(0);
+        config["protocol_token"] = serde_json::json!("web-editor-private-protocol-token-32");
+        config["protocol_auto_approve"] = serde_json::json!(true);
         let rendered = client
             .post(format!("{base}/api/config/render"))
             .json(&config)
@@ -1306,7 +1310,29 @@ mod http_tests {
             .send()
             .await?;
         assert!(saved.status().is_success());
-        assert_eq!(load_config(path).await?.model, "web-editor-test");
+        let stored = load_config(path).await?;
+        assert_eq!(stored.model, "web-editor-test");
+        assert!(stored.protocol_start_with_service);
+        assert_eq!(stored.protocol_service_port, 0);
+        assert_eq!(
+            stored.protocol_token,
+            "web-editor-private-protocol-token-32"
+        );
+        assert!(stored.protocol_auto_approve);
+        assert_eq!(stored.execute_confirm_policy, ConfirmPolicy::RiskOnly);
+        config["protocol_token"] = serde_json::json!("too-short");
+        let invalid: serde_json::Value = client
+            .post(format!("{base}/api/config/render"))
+            .json(&config)
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert_eq!(invalid["valid"], false);
+        assert!(!invalid["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("too-short"));
         let ready_quick: serde_json::Value = client
             .get(format!("{base}/api/quick-settings"))
             .send()

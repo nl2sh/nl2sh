@@ -28,7 +28,7 @@ protocol_start_with_service = true
 protocol_service_port = 8765
 ```
 
-默认 `false`，也可在 Web 配置页“服务”分组切换。执行 `nl2sh service start` 或 `service restart` 时，后台进程一并启动 Web 和 MCP/A2A；`service stop` 一并取消任务并关闭两个监听器。开关在启动时读取，修改后需 `service restart`，重复 `start` 保持当前进程。同一开关也作用于直接 TUI 和 `--web-only` 启动；UI 退出时关闭自己启动的协议。已有同配置协议时 UI 复用连接信息，不停止独立进程。单独 `protocol serve/stdio` 不启动 UI。
+默认 `false`，也可在 TUI 或 Web 设置的“MCP / A2A”分类切换。执行 `nl2sh service start` 或 `service restart` 时，后台进程一并启动 Web 和 MCP/A2A；`service stop` 一并取消任务并关闭两个监听器。开关在启动时读取，修改后需 `service restart`，重复 `start` 保持当前进程。同一开关也作用于直接 TUI 和 `--web-only` 启动；UI 退出时关闭自己启动的协议。已有同配置协议时 UI 复用连接信息，不停止独立进程。单独 `protocol serve/stdio` 不启动 UI。
 
 协议监听 `0.0.0.0`，使用自动设备 IP 和独立 Bearer 令牌。`protocol_service_port` 默认 `8765`；可改用其他端口避免占用，或设为 `0` 自动分配端口。自动令牌和完整连接信息写入配置相邻私有 `config.service/service.log`；日志含凭据，仅给可信调用者读取。TUI/Web 显示运行版本、实际地址和令牌，并可复制带鉴权的 MCP 配置；普通 `service status` 不输出令牌。设置配置 `protocol_token` 或环境变量 `NL2SH_PROTOCOL_TOKEN` 可提供固定令牌；两者均未设置时服务重启会更换令牌。此开关不启用 `protocol_auto_approve`。
 

@@ -1032,7 +1032,17 @@ async fn run_inner(
                         );
                     }
                     SettingsAction::Save => {
-                        let updated = editor.config.clone();
+                        let updated = match editor.config_with_protocol_port() {
+                            Ok(updated) => updated,
+                            Err(_) => {
+                                editor.model_error = Some(localized_status(
+                                    config.ui_language,
+                                    "MCP / A2A 端口必须为 0–65535",
+                                    "MCP / A2A port must be 0–65535",
+                                ));
+                                continue;
+                            }
+                        };
                         let Some(path) = updated.source.clone() else {
                             app.status = localized_status(
                                 config.ui_language,
@@ -1755,7 +1765,7 @@ fn format_balances(balances: &[AccountBalance]) -> String {
         .join(" / ")
 }
 
-const SETTINGS_TABS_ZH: [&str; 7] = [
+const SETTINGS_TABS_ZH: [&str; 8] = [
     "服务",
     "模型与智能体",
     "执行与安全",
@@ -1763,8 +1773,9 @@ const SETTINGS_TABS_ZH: [&str; 7] = [
     "网络",
     "知识库",
     "工具",
+    "MCP / A2A",
 ];
-const SETTINGS_TABS_EN: [&str; 7] = [
+const SETTINGS_TABS_EN: [&str; 8] = [
     "Provider",
     "Model & Agent",
     "Execution",
@@ -1772,6 +1783,7 @@ const SETTINGS_TABS_EN: [&str; 7] = [
     "Network",
     "Knowledge",
     "Tools",
+    "MCP / A2A",
 ];
 
 struct SessionPicker {
@@ -2011,6 +2023,7 @@ struct SettingsEditor {
     provider: usize,
     ollama_endpoint: String,
     custom_endpoint: String,
+    protocol_port: String,
     tab: usize,
     selected: usize,
     text_cursor: usize,
@@ -2045,7 +2058,8 @@ impl SettingsEditor {
             provider,
             ollama_endpoint,
             custom_endpoint: config.endpoint.clone(),
-            tab: tab.min(6),
+            protocol_port: config.protocol_service_port.to_string(),
+            tab: tab.min(SETTINGS_TABS_ZH.len() - 1),
             selected: 0,
             text_cursor: 0,
             models: Vec::new(),
@@ -2057,6 +2071,15 @@ impl SettingsEditor {
         editor
     }
 
+    fn config_with_protocol_port(&self) -> Result<Config> {
+        let mut config = self.config.clone();
+        config.protocol_service_port = self
+            .protocol_port
+            .parse::<u16>()
+            .context("MCP / A2A port must be 0–65535")?;
+        Ok(config)
+    }
+
     fn field_count(&self) -> usize {
         [
             4,
@@ -2066,6 +2089,7 @@ impl SettingsEditor {
             6,
             7,
             crate::tools::optional_groups().len() + crate::tools::optional_tool_names().len(),
+            4,
         ][self.tab]
     }
 
@@ -2143,6 +2167,19 @@ impl SettingsEditor {
             } else {
                 "Group switches reset overrides; enabled tools still require safety approval".into()
             });
+        }
+        if self.tab == 7 {
+            lines.extend(if self.config.ui_language == UiLanguage::ZhCn {
+                ["启动、端口和 token 修改后重启协议；后台用 service restart。",
+                 "Token 留空自动生成；固定值为 32–256 位无空格 ASCII。",
+                 "NL2SH_PROTOCOL_TOKEN 优先；固定 token 输入仅显示掩码。",
+                 "自动审批默认关闭；开启含危险/严重操作，仅影响 MCP/A2A。"]
+            } else {
+                ["Restart protocols after startup/port/token changes; service restart for background.",
+                 "Empty token generates one; fixed tokens: 32–256 non-space ASCII characters.",
+                 "NL2SH_PROTOCOL_TOKEN overrides this masked configuration field.",
+                 "Auto-approval defaults off; includes Dangerous/Critical, MCP/A2A only."]
+            }.into_iter().map(String::from));
         }
         if let Some(error) = &self.model_error {
             lines.push(format!("⚠ {error}"));
@@ -2400,6 +2437,36 @@ impl SettingsEditor {
                 }));
                 fields
             }
+            7 => vec![
+                (
+                    if zh {
+                        "随 Web / TUI 启动"
+                    } else {
+                        "Start with Web / TUI"
+                    },
+                    self.config.protocol_start_with_service.to_string(),
+                ),
+                (
+                    if zh {
+                        "HTTP 端口（0=自动）"
+                    } else {
+                        "HTTP port (0=auto)"
+                    },
+                    self.protocol_port.clone(),
+                ),
+                (
+                    "HTTP Bearer token",
+                    mask_secret(&self.config.protocol_token),
+                ),
+                (
+                    if zh {
+                        "自动审批所有风险（危险）"
+                    } else {
+                        "Auto-approve all risks (dangerous)"
+                    },
+                    self.config.protocol_auto_approve.to_string(),
+                ),
+            ],
             _ => vec![
                 (
                     if zh {
@@ -2459,16 +2526,21 @@ impl SettingsEditor {
             KeyCode::Esc => SettingsAction::Cancel,
             KeyCode::Tab => {
                 self.tab = if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    self.tab.checked_sub(1).unwrap_or(6)
+                    self.tab
+                        .checked_sub(1)
+                        .unwrap_or(SETTINGS_TABS_ZH.len() - 1)
                 } else {
-                    (self.tab + 1) % 7
+                    (self.tab + 1) % SETTINGS_TABS_ZH.len()
                 };
                 self.selected = 0;
                 self.sync_text_cursor();
                 SettingsAction::Continue
             }
             KeyCode::BackTab => {
-                self.tab = self.tab.checked_sub(1).unwrap_or(6);
+                self.tab = self
+                    .tab
+                    .checked_sub(1)
+                    .unwrap_or(SETTINGS_TABS_ZH.len() - 1);
                 self.selected = 0;
                 self.sync_text_cursor();
                 SettingsAction::Continue
@@ -2562,11 +2634,13 @@ impl SettingsEditor {
     fn is_text_field(&self) -> bool {
         matches!(
             (self.tab, self.selected),
-            (0, 1 | 2) | (1, 0) | (4, 2..=5) | (5, 1..=6)
+            (0, 1 | 2) | (1, 0) | (4, 2..=5) | (5, 1..=6) | (7, 1 | 2)
         )
     }
     fn text_mut(&mut self) -> &mut String {
         match (self.tab, self.selected) {
+            (7, 1) => &mut self.protocol_port,
+            (7, 2) => &mut self.config.protocol_token,
             (0, 1) => &mut self.config.endpoint,
             (0, 2) => &mut self.config.api_key,
             (1, 0) => &mut self.config.model,
@@ -2588,6 +2662,8 @@ impl SettingsEditor {
 
     fn selected_text(&self) -> &str {
         match (self.tab, self.selected) {
+            (7, 1) => &self.protocol_port,
+            (7, 2) => &self.config.protocol_token,
             (0, 1) => &self.config.endpoint,
             (0, 2) => &self.config.api_key,
             (1, 0) => &self.config.model,
@@ -2761,6 +2837,10 @@ impl SettingsEditor {
                     direction,
                 )
             }
+            (7, 0) => {
+                self.config.protocol_start_with_service = !self.config.protocol_start_with_service
+            }
+            (7, 3) => self.config.protocol_auto_approve = !self.config.protocol_auto_approve,
             (5, 0) => self.config.ima_enabled = !self.config.ima_enabled,
             (6, index) => {
                 if let Some(group) = crate::tools::optional_groups().get(index) {
@@ -3606,6 +3686,63 @@ mod tests {
     }
 
     #[test]
+    fn settings_protocol_edits_masked_credentials_and_independent_approval() -> Result<()> {
+        let config = Config {
+            protocol_token: "private-token-for-settings-at-least-32".into(),
+            ..Config::default()
+        };
+        let mut editor = SettingsEditor::new(&config, 7);
+        assert_eq!(editor.field_count(), 4);
+        assert!(!editor.config.protocol_auto_approve);
+        editor.selected = 2;
+        editor.sync_text_cursor();
+        let view = editor.view(true);
+        assert!(!view
+            .lines
+            .iter()
+            .any(|line| line.contains(&config.protocol_token)));
+        assert!(view.lines.iter().any(|line| line.contains("***")));
+        editor.handle_key(KeyEvent::new(KeyCode::Char('X'), KeyModifiers::NONE));
+        assert_eq!(
+            editor.config.protocol_token,
+            format!("{}X", config.protocol_token)
+        );
+        editor.selected = 1;
+        editor.protocol_port = "0".into();
+        assert_eq!(editor.config_with_protocol_port()?.protocol_service_port, 0);
+        for invalid in ["", "65536", "-1", "abc"] {
+            editor.protocol_port = invalid.into();
+            assert!(editor.config_with_protocol_port().is_err());
+        }
+        editor.protocol_port = "65535".into();
+        editor.sync_text_cursor();
+        editor.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        editor.handle_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE));
+        assert_eq!(
+            editor.config_with_protocol_port()?.protocol_service_port,
+            65534
+        );
+        editor.selected = 0;
+        editor.adjust(1);
+        assert!(editor.config.protocol_start_with_service);
+        assert!(!editor.config.protocol_auto_approve);
+        editor.selected = 3;
+        editor.adjust(1);
+        assert!(editor.config.protocol_auto_approve);
+        assert_eq!(
+            editor.config.execute_confirm_policy,
+            config.execute_confirm_policy
+        );
+        assert_eq!(editor.config.security_level, config.security_level);
+        let restored: Config =
+            toml::from_str(&toml::to_string(&editor.config_with_protocol_port()?)?)?;
+        assert_eq!(restored.protocol_token, editor.config.protocol_token);
+        assert!(restored.protocol_auto_approve);
+        assert!(!config.protocol_auto_approve);
+        Ok(())
+    }
+
+    #[test]
     fn settings_editor_masks_password_and_preserves_fields_when_disabled() {
         let config = Config {
             proxy_enabled: true,
@@ -3685,9 +3822,11 @@ mod tests {
             .any(|line| line.contains("> tailcat_stop")));
         assert!(!view.lines.iter().any(|line| line.contains("inspect_apk")));
         editor.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(editor.tab, 7);
+        editor.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
         assert_eq!(editor.tab, 0);
         editor.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE));
-        assert_eq!(editor.tab, 6);
+        assert_eq!(editor.tab, 7);
         Ok(())
     }
 

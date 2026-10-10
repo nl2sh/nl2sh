@@ -290,6 +290,7 @@ button:disabled { opacity: .45; }
 .config-fields { min-width: 0; overflow: auto; padding: 1rem 1.3rem; }
 .config-fields h3 { margin: 0 0 .7rem; color: var(--cyan); }
 .config-fields p { color: var(--text-secondary); }
+.config-fields p.bad { color: var(--error); }
 .config-row { display: grid; grid-template-columns: minmax(150px, 40%) minmax(0,1fr); align-items: center; gap: 1rem; padding: .65rem 0; border-bottom: 1px solid var(--border); }
 .config-row span { min-width: 0; }
 .config-row strong, .config-row small { display: block; }

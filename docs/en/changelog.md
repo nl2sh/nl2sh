@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- TUI and Web settings add a dedicated “MCP / A2A” category for startup, port, masked tokens, and default-off auto-approval, with environment precedence, restart rules, and dangerous-operation scope explained.
+
 - Support configured `protocol_token` for a fixed MCP/A2A HTTP credential; environment overrides, automatic generation when unset, validation and redaction remain in place.
 - Expand MCP/A2A connection details on the TUI welcome page only while running; stopped or unknown states show one status line.
 - Add a repository Codex device lab skill, build identity and running-image digest, actual Agent tool evidence, and host repeatable cases/comparison/independent ADB deployment recovery without changing safety approval or PTY behavior.

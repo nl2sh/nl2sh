@@ -4,6 +4,17 @@
 
 交互启动默认同时监听 `0.0.0.0:9999`；端口占用时选择其他可用端口，以启动日志中的实际地址为准。**页面无需登录，能访问页面的人可查看数据、编辑配置并提交任务。只在受信任网络使用。** `adb forward` 不会关闭局域网监听。
 
+## MCP / A2A 配置
+
+在设置的“MCP / A2A”分类集中编辑 `protocol_start_with_service`（随 Web/TUI 启动）、`protocol_service_port`（0–65535，0 自动分配）、`protocol_token` 和 `protocol_auto_approve`。Token 输入掩码显示；留空启动时自动生成，固定值必须为 32–256 个无空格可打印 ASCII 字符，`NL2SH_PROTOCOL_TOKEN` 环境变量优先。
+
+启动、端口和 token 修改后需重启协议：后台执行 `nl2sh --config <配置路径> service restart`，前台 TUI/Web 退出后重新启动；独立协议通过原入口重启。自动审批保存后作用于新协议任务，运行中任务保留原快照。
+
+!!! warning "自动审批默认关闭"
+
+    开启后 MCP/A2A 所有风险等级均自动批准，包括修改、危险和严重操作。只向完全信任的客户端提供 token；安全分类、参数校验、目标复核和 Root 能力检查继续执行。TUI/Web 对话审批策略独立。HTTP 明文传输 token，远程连接推荐 HTTPS。
+
+
 ## MCP / A2A 连接
 
 左侧垂直菜单“MCP / A2A”打开连接窗口，可刷新协议进程状态，复制实际 MCP Streamable HTTP、A2A JSON-RPC 与公开 Agent Card 地址，以及 HTTP/stdio 客户端配置、设备启动命令与 A2A 请求示例。查询无需模型，不启动服务，显示运行版本、完整 Bearer 令牌及可直接复制的带鉴权客户端配置，但不提供协议审批按钮。修改仍需设备同 UID、同配置的交互终端批准。

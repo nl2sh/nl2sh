@@ -22,6 +22,17 @@ Type `/` for suggestions, select with Up/Down, and complete with Enter. Unknown 
 
 Running tools show bounded live output, then collapse completed results. Replies support Markdown, fenced-code highlighting, Unicode tables, and narrow-screen fallback. The status bar reports observed token use and budgets; missing usage remains unknown. Supported provider balances stay in memory only.
 
+## MCP / A2A settings
+
+The “MCP / A2A” settings category brings together `protocol_start_with_service` (start with Web/TUI), `protocol_service_port` (0–65535; zero selects an available port), `protocol_token`, and `protocol_auto_approve`. Token input is masked. Leave it empty to generate a token at startup, or enter 32–256 printable ASCII characters without spaces. The `NL2SH_PROTOCOL_TOKEN` environment variable takes priority.
+
+Restart protocols after changing startup, port, or token settings: use `nl2sh --config <config-path> service restart` for background services, exit and relaunch foreground TUI/Web, or restart a standalone protocol through its original entry point. Saved auto-approval settings apply to new protocol tasks; running tasks retain their snapshots.
+
+!!! warning "Auto-approval defaults off"
+
+    Enabling it approves every MCP/A2A risk level, including mutations and Dangerous/Critical operations. Give tokens only to fully trusted clients. Classification, parameter validation, target revalidation, and Root capability checks still run. TUI/Web conversation approval policies are independent. HTTP sends tokens in plaintext; prefer HTTPS remotely.
+
+
 ## Local commands
 
 `!id` skips the model but retains security, confirmation, and execution checks. Output is omitted from model context. `/shell` suspends the TUI for an ordinary system shell; `exit` / Ctrl+D returns. Its input/output is omitted from model context and audit logs; this is a shell directly controlled by the user. Full-screen commands temporarily suspend the TUI, then restore the terminal and repaint it.
