@@ -8,7 +8,6 @@ pub(in crate::web) async fn get_device_overview(
         tokio::task::spawn_blocking(move || config::load_or_default_unvalidated(&path)).await??;
     cfg.execute_user_mode = ExecuteUserMode::Normal;
     cfg.enable_pty = false;
-    cfg.execute_timeout_secs = cfg.execute_timeout_secs.clamp(1, 15);
     let executor = ShellExecutor::new(cfg);
     let details = inspect_environment(&executor).await?;
     Ok(Json(serde_json::from_str(&details)?))
@@ -112,7 +111,6 @@ pub(in crate::web) async fn get_apps(
         tokio::task::spawn_blocking(move || config::load_or_default_unvalidated(&path)).await??;
     cfg.execute_user_mode = ExecuteUserMode::Normal;
     cfg.enable_pty = false;
-    cfg.execute_timeout_secs = cfg.execute_timeout_secs.clamp(1, 15);
     let executor = ShellExecutor::new(cfg);
     let output = list_android_apps(
         &executor,
