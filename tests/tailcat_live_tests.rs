@@ -15,7 +15,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 struct Approve;
 #[async_trait]
 impl Confirmer for Approve {
-    async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+    async fn confirm(
+        &self,
+        _: &nl2sh::agent::ConfirmationRequest<'_>,
+        _: &SecurityAssessment,
+    ) -> Result<ConfirmationDecision> {
         Ok(ConfirmationDecision::Approve)
     }
 }

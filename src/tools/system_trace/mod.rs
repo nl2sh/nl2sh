@@ -767,7 +767,7 @@ mod tests {
         impl Confirmer for Reject {
             async fn confirm(
                 &self,
-                _: &str,
+                _: &crate::agent::ConfirmationRequest<'_>,
                 _: &crate::security::SecurityAssessment,
             ) -> Result<ConfirmationDecision> {
                 Ok(ConfirmationDecision::Reject)

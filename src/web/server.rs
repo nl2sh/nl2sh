@@ -204,6 +204,8 @@ pub(in crate::web) fn router(state: Arc<Shared>) -> Router {
         .route("/api/version", get(|| async { env!("CARGO_PKG_VERSION") }))
         .route("/api/state", get(get_state))
         .route("/api/config", get(get_config).post(save_config))
+        .route("/api/config/approval-grants", get(get_approval_grants))
+        .route("/api/config/approval-grants/revoke", post(revoke_approval_grant))
         .route("/api/config/validate", post(validate_config))
         .route("/api/config/render", post(render_config))
         .route("/api/quick-settings", get(get_quick_settings).post(save_quick_settings))

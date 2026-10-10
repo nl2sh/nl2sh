@@ -32,6 +32,51 @@ pub struct UserQuestion {
 
 /// Answers returned from a structured user-question interface.
 pub type QuestionAnswers = BTreeMap<String, String>;
+/// Assessed operation and its trusted authorization scope.
+pub struct ConfirmationRequest<'a> {
+    /// Human-readable approval preview.
+    pub preview: &'a str,
+    /// Registered tool name; direct shell entries use `execute_shell_command`.
+    pub tool: Option<&'a str>,
+    /// Validated Android package or prepared UI target package, if known.
+    pub package: Option<&'a str>,
+}
+impl<'a> ConfirmationRequest<'a> {
+    /// Construct a shell request with no inferred Android package.
+    pub fn shell(preview: &'a str) -> Self {
+        Self {
+            preview,
+            tool: Some("execute_shell_command"),
+            package: None,
+        }
+    }
+}
+
+/// Resolve grants after assessment, then delegate unmatched requests to the existing UI.
+pub async fn confirm_assessed(
+    config: &crate::config::Config,
+    confirmer: &dyn Confirmer,
+    request: &ConfirmationRequest<'_>,
+    assessment: &SecurityAssessment,
+) -> Result<ConfirmationDecision> {
+    if confirmer.approval_cancelled() {
+        return Ok(ConfirmationDecision::Reject);
+    }
+    let grant_request = crate::security::grants::GrantRequest {
+        tool: request.tool,
+        package: request.package,
+        risk: assessment.risk_level,
+        blocked: assessment.requires_root || assessment.requires_double_confirmation,
+    };
+    if let Some(id) = crate::security::grants::try_release(config, &grant_request).await? {
+        if confirmer.approval_cancelled() {
+            return Ok(ConfirmationDecision::Reject);
+        }
+        return Ok(ConfirmationDecision::ApproveByGrant(id));
+    }
+    confirmer.confirm(request, assessment).await
+}
+
 #[async_trait]
 /// UI-independent approval interface invoked after every assessment.
 pub trait Confirmer: Send + Sync {
@@ -45,10 +90,15 @@ pub trait Confirmer: Send + Sync {
         None
     }
 
+    /// Whether cancellation already prevents an automatic authorization.
+    fn approval_cancelled(&self) -> bool {
+        false
+    }
+
     /// Requests approval, rejection, or an edited replacement command.
     async fn confirm(
         &self,
-        command: &str,
+        request: &ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision>;
 
@@ -62,6 +112,8 @@ pub trait Confirmer: Send + Sync {
 pub enum ConfirmationDecision {
     /// Execute the currently assessed command.
     Approve,
+    /// Execute using a consumed, scoped approval grant; never remember this decision.
+    ApproveByGrant(String),
     /// Execute using the bidirectional interactive terminal bridge.
     ApproveInteractive,
     /// Force captured execution inside the ordinary output stream.
@@ -96,7 +148,12 @@ impl Confirmer for StdioConfirmer {
     fn audit_source(&self) -> &'static str {
         "cli"
     }
-    async fn confirm(&self, command: &str, a: &SecurityAssessment) -> Result<ConfirmationDecision> {
+    async fn confirm(
+        &self,
+        command: &crate::agent::ConfirmationRequest<'_>,
+        a: &SecurityAssessment,
+    ) -> Result<ConfirmationDecision> {
+        let command = command.preview;
         if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
             eprintln!(
                 "Refusing {:?} command without an interactive TTY: {command}",
@@ -194,4 +251,174 @@ fn ask_exact_yes(prompt: &str) -> Result<bool> {
     let mut s = String::new();
     io::stdin().read_line(&mut s)?;
     Ok(s.trim() == "YES")
+}
+
+#[cfg(test)]
+mod grant_boundary_tests {
+    use super::*;
+    use crate::config::{ApprovalGrantConfig, Config};
+    use crate::security::{assess, RiskLevel};
+    use anyhow::Context;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct Reject(AtomicUsize);
+    #[async_trait]
+    impl Confirmer for Reject {
+        async fn confirm(
+            &self,
+            _: &ConfirmationRequest<'_>,
+            _: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(ConfirmationDecision::Reject)
+        }
+    }
+    fn configured(path: &std::path::Path) -> Result<Config> {
+        let config = Config {
+            source: Some(path.into()),
+            approval_grants: vec![ApprovalGrantConfig {
+                id: "one".into(),
+                tool: Some("android.*".into()),
+                package: Some("com.example.app".into()),
+                max_risk: "mutating".into(),
+                expires_at: None,
+                uses: Some(1),
+            }],
+            ..Config::default()
+        };
+        crate::config::save_config(path, &config)?;
+        Ok(config)
+    }
+    #[tokio::test]
+    async fn grant_boundary_preserves_scope_risk_root_and_strong_confirmation() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let config = configured(&directory.path().join("config.toml"))?;
+        let fallback = Reject(AtomicUsize::new(0));
+        let mut request = ConfirmationRequest {
+            preview: "launch",
+            tool: Some("android.launch_app"),
+            package: Some("com.other.app"),
+        };
+        let mut assessment = assess("touch result", &config);
+        assert_eq!(assessment.risk_level, RiskLevel::Mutating);
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        request.package = None;
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        request.package = Some("com.example.app");
+        request.tool = Some("apply_patch");
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        request.tool = Some("android.launch_app");
+        assessment.requires_root = true;
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        assessment.requires_root = false;
+        assessment.requires_double_confirmation = true;
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        assessment.requires_double_confirmation = false;
+        assessment.risk_level = RiskLevel::Dangerous;
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        assessment.risk_level = RiskLevel::Critical;
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        assessment.risk_level = RiskLevel::Mutating;
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::ApproveByGrant("one".into())
+        );
+        assert_eq!(fallback.0.load(Ordering::SeqCst), 7);
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        Ok(())
+    }
+    #[tokio::test]
+    async fn approval_grant_cannot_bypass_classifier_rule_escalation() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("config.toml");
+        let mut config = configured(&path)?;
+        config.approval_grants[0].tool = Some("execute_shell_command".into());
+        config.approval_grants[0].package = None;
+        config
+            .security_rules
+            .push(crate::config::SecurityRuleConfig {
+                id: "raise".into(),
+                pattern: "touch".into(),
+                risk: "dangerous".into(),
+                message: "raised by local rule".into(),
+            });
+        crate::config::save_config(&path, &config)?;
+        let fallback = Reject(AtomicUsize::new(0));
+        let assessment = assess("touch result", &config);
+        assert_eq!(assessment.risk_level, RiskLevel::Dangerous);
+        assert_eq!(
+            confirm_assessed(
+                &config,
+                &fallback,
+                &ConfirmationRequest::shell("touch result"),
+                &assessment
+            )
+            .await?,
+            ConfirmationDecision::Reject
+        );
+        let status = crate::security::grants::statuses(&config)?;
+        assert_eq!(status[0].uses_remaining, Some(1));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn expiry_revocation_and_template_removal_apply_to_running_snapshot() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let mut config = configured(&directory.path().join("config.toml"))?;
+        config.approval_grants[0].uses = None;
+        config.approval_grants[0].expires_at = Some("2000-01-01T00:00:00Z".into());
+        crate::config::save_config(config.source.as_deref().context("source")?, &config)?;
+        let fallback = Reject(AtomicUsize::new(0));
+        let request = ConfirmationRequest {
+            preview: "launch",
+            tool: Some("android.launch_app"),
+            package: Some("com.example.app"),
+        };
+        let assessment = assess("touch result", &config);
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        config.approval_grants[0].expires_at = None;
+        crate::config::save_config(config.source.as_deref().context("source")?, &config)?;
+        crate::security::grants::revoke(&config, "one")?;
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        config.approval_grants[0].id = "new".into();
+        crate::config::save_config(config.source.as_deref().context("source")?, &config)?;
+        let mut removed = config.clone();
+        removed.approval_grants.clear();
+        crate::config::save_config(config.source.as_deref().context("source")?, &removed)?;
+        assert_eq!(
+            confirm_assessed(&config, &fallback, &request, &assessment).await?,
+            ConfirmationDecision::Reject
+        );
+        Ok(())
+    }
 }

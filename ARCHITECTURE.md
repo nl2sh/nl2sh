@@ -207,6 +207,8 @@ ima 是这一通用 Provider 代理策略的显式例外：按产品边界使用
 
 ## 安全架构
 
+`ConfirmationRequest` 携带预览、工具及预备动作的可信包名；全部受管入口通过 `confirm_assessed` 在最终评估后求值授权凭据，再退回原 UI。`security::grants` 使用配置身份绑定的私有状态、跨进程 flock、原子替换与目录同步扣减次数，阻塞 I/O 位于 worker；每次确认重读模板，撤销持久化，批准不记忆为任务或运行许可。Critical、Root 与强确认始终排除；Dangerous 还需配置与显式 CLI 双开关。审计保留 approved_by_grant 与 grant_id。PTY/执行器路径不变。
+
 ```text
 LLM → Typed Tool → local Tool Policy ─────────────────────────────┐
   └→ Shell Tool → brush-parser → Shell AST → Semantic Effects ───┤

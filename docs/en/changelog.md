@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add scoped approval grants with persistent process-shared counters, expiry/exhaustion/revocation and distinct audits. All entries authorize after assessment; root/Critical/double-confirmation remain excluded, and Dangerous requires configuration plus an explicit startup flag. TUI shows counters; Web can refresh and revoke. Web read-only overview and app enumeration now respect the configured command timeout instead of an extra 15-second cap.
+
 - Add read-only `session_list`, `session_search` and `session_read` for the built-in Agent, direct MCP calls and A2A delegation. Bounded pagination preserves tool evidence links, detects snapshot changes and redacts credentials; history and checkpoints grant no execution authority.
 
 - TUI and Web settings add a dedicated “MCP / A2A” category for startup, port, masked tokens, and default-off auto-approval, with environment precedence, restart rules, and dangerous-operation scope explained.

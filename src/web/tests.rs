@@ -1128,6 +1128,46 @@ mod tests {
 
 #[cfg(test)]
 mod http_tests {
+    #[tokio::test]
+    async fn approval_grant_owner_api_shows_usage_and_revokes_without_editing_template(
+    ) -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[[approval_grants]]\nid='owner'\ntool='apply_patch'\nmax_risk='mutating'\nuses=2\n",
+        )?;
+        let original = std::fs::read_to_string(&path)?;
+        let server = start_on_port(path.clone(), 0, true).await?;
+        let base = format!("http://127.0.0.1:{}", server.port());
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let response = client
+            .get(format!("{base}/api/config/approval-grants"))
+            .send()
+            .await?;
+        assert!(response.status().is_success());
+        let status: serde_json::Value = response.json().await?;
+        assert_eq!(status[0]["grant"]["id"], "owner");
+        assert_eq!(status[0]["uses_remaining"], 2);
+        let response = client
+            .post(format!("{base}/api/config/approval-grants/revoke"))
+            .json(&serde_json::json!({"id":"owner"}))
+            .send()
+            .await?;
+        assert!(response.status().is_success());
+        let status: serde_json::Value = client
+            .get(format!("{base}/api/config/approval-grants"))
+            .send()
+            .await?
+            .json()
+            .await?;
+        assert_eq!(status[0]["inactive"], true);
+        assert_eq!(status[0]["uses_remaining"], 0);
+        assert_eq!(std::fs::read_to_string(&path)?, original);
+        server.shutdown().await?;
+        Ok(())
+    }
+
     use super::*;
     use futures_util::{SinkExt, StreamExt};
     use std::io::Read;

@@ -438,6 +438,18 @@ struct AndroidUiAction {
 
 #[async_trait]
 impl PreparedExecution for AndroidUiAction {
+    fn approval_package(&self) -> Option<&str> {
+        match self.name {
+            "android.launch_app" | "android.stop_app" => self.args.package.as_deref(),
+            "android.tap_text" | "android.tap_node" => self
+                .target
+                .as_ref()
+                .and_then(|node| node["package"].as_str())
+                .filter(|value| !value.is_empty()),
+            _ => None,
+        }
+    }
+
     async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput> {
         let executor = ctx.executor.context("Android executor unavailable")?;
         let content = match self.name {
@@ -695,7 +707,8 @@ fn screenshot_temp_base() -> Result<std::path::PathBuf> {
 mod tests {
     use super::{
         builtin_tools, check_result, checked_screen_dump, plan_unicode_input,
-        validate_argument_fields, verify_ime_target, verify_same_target, TextBackend,
+        validate_argument_fields, verify_ime_target, verify_same_target, AndroidUiAction,
+        TextBackend,
     };
     use crate::tools::android::automation::UiArgs;
     use crate::tools::android::companion::TextWriteMode;
@@ -704,7 +717,7 @@ mod tests {
         config::Config,
         security::SecurityAssessment,
         shell::{CommandExecutor, ExecutionResult},
-        tools::runtime::invoke,
+        tools::{runtime::invoke, PreparedExecution},
     };
     use anyhow::{Context, Result};
     use async_trait::async_trait;
@@ -869,10 +882,48 @@ mod tests {
         }
     }
 
+    #[test]
+    fn approval_package_uses_only_prepared_trusted_scope() {
+        let mut action = AndroidUiAction {
+            name: "android.launch_app",
+            args: UiArgs {
+                package: Some("com.example.app".into()),
+                ..UiArgs::default()
+            },
+            preview: "preview com.untrusted.text".into(),
+            accessibility: false,
+            target: Some(json!({"package":"com.example.node"})),
+            gesture: None,
+            backend: TextBackend::SetText,
+        };
+        assert_eq!(action.approval_package(), Some("com.example.app"));
+        action.name = "android.tap_text";
+        assert_eq!(action.approval_package(), Some("com.example.node"));
+        action.name = "android.tap_node";
+        assert_eq!(action.approval_package(), Some("com.example.node"));
+        action.target = Some(json!({"package":""}));
+        assert_eq!(action.approval_package(), None);
+        action.target = Some(json!({"package":"com.example.node"}));
+        for name in [
+            "android.tap",
+            "android.swipe",
+            "android.scroll",
+            "android.press_back",
+            "android.input_text",
+        ] {
+            action.name = name;
+            assert_eq!(action.approval_package(), None);
+        }
+    }
+
     struct Reject;
     #[async_trait]
     impl Confirmer for Reject {
-        async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+        async fn confirm(
+            &self,
+            _: &crate::agent::ConfirmationRequest<'_>,
+            _: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
             Ok(ConfirmationDecision::Reject)
         }
     }
@@ -880,7 +931,11 @@ mod tests {
     struct Approve;
     #[async_trait]
     impl Confirmer for Approve {
-        async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+        async fn confirm(
+            &self,
+            _: &crate::agent::ConfirmationRequest<'_>,
+            _: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
             Ok(ConfirmationDecision::Approve)
         }
     }

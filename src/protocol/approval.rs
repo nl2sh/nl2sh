@@ -107,9 +107,10 @@ impl Confirmer for LocalApprovalConfirmer {
     }
     async fn confirm(
         &self,
-        preview: &str,
+        preview: &crate::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        let preview = preview.preview;
         if preview.is_empty() || preview.len() > 64 * 1024 {
             bail!("approval preview must contain 1–65536 bytes")
         }
@@ -450,8 +451,14 @@ mod tests {
         let confirmer = LocalApprovalConfirmer::new(&config_path)?;
         let root = confirmer.root.clone();
         let assessment = crate::security::assess("touch expiry-test", &Config::default());
-        let task =
-            tokio::spawn(async move { confirmer.confirm("touch expiry-test", &assessment).await });
+        let task = tokio::spawn(async move {
+            confirmer
+                .confirm(
+                    &crate::agent::ConfirmationRequest::shell("touch expiry-test"),
+                    &assessment,
+                )
+                .await
+        });
         // Yield without advancing the virtual clock until publication is complete.
         for _ in 0..1000 {
             if fs::read_dir(&root)?

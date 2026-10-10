@@ -26,6 +26,8 @@
 
 以下区域由代码导出更新；所有凭据默认空。不要在示例中放真实密钥。
 
+授权凭据的作用域、用量、撤销与危险开关见[安全确认](../guide/security-confirmation.md)。
+
 <!-- generated:start -->
 
 | 字段 | 默认值 | 说明 |
@@ -85,5 +87,7 @@
 | `history_log_event_max_bytes` | `262144` | 单日志事件未编码消息字节上限 |
 | `history_log_max_bytes` | `10485760` | 日志文件字节上限 |
 | `security_rules` | `[]` | 仅提高风险的自定义规则 |
+| `approval_grants` | `[]` | 分类后按工具/可信包名/风险上限匹配的授权模板；可限制到期时间与次数，Root/Critical/强确认始终排除 |
+| `allow_dangerous_grants` | `false` | 默认关闭；危险凭据还需显式 --allow-dangerous-grants 启动开关，强确认排除规则不变 |
 
 <!-- generated:end -->

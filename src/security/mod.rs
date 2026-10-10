@@ -1,6 +1,7 @@
 mod android_queries;
 pub(crate) use android_queries::{readonly_dumpsys, readonly_log_filter, readonly_logcat};
 mod classifier;
+pub mod grants;
 mod legacy;
 mod policy;
 mod shell;

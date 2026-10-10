@@ -54,7 +54,17 @@ pub(crate) async fn execute_prepared_operation(
             bail!("mutating tool has no approval preview")
         }
         let started = Instant::now();
-        let decision = confirmer.confirm(preview, &assessment).await;
+        let decision = crate::agent::confirm_assessed(
+            ctx.config.context("tool configuration unavailable")?,
+            confirmer,
+            &crate::agent::ConfirmationRequest {
+                preview,
+                tool: Some(metadata.name),
+                package: operation.approval_package(),
+            },
+            &assessment,
+        )
+        .await;
         ctx.runtime
             .as_deref_mut()
             .context("tool runtime unavailable")?
@@ -62,7 +72,7 @@ pub(crate) async fn execute_prepared_operation(
         let decision = decision?;
         crate::audit::decision(&decision);
         match decision {
-            ConfirmationDecision::Approve | ConfirmationDecision::ApproveForTask
+            ConfirmationDecision::Approve | ConfirmationDecision::ApproveByGrant(_) | ConfirmationDecision::ApproveForTask
             | ConfirmationDecision::ApproveCaptured | ConfirmationDecision::ApproveInteractive => {}
             ConfirmationDecision::ApproveForRun if crate::agent::can_remember_approval(&assessment) => {}
             ConfirmationDecision::Edit(_) => return Ok(ToolOutput::refused(
@@ -169,10 +179,17 @@ async fn invoke_scoped(
                 if !assessment.requires_confirmation {
                     break (assessment, None);
                 }
-                let decision = confirmer.confirm(&command, &assessment).await?;
+                let decision = crate::agent::confirm_assessed(
+                    config,
+                    confirmer,
+                    &crate::agent::ConfirmationRequest::shell(&command),
+                    &assessment,
+                )
+                .await?;
                 crate::audit::decision(&decision);
                 match decision {
                     ConfirmationDecision::Approve
+                    | ConfirmationDecision::ApproveByGrant(_)
                     | ConfirmationDecision::ApproveForTask
                     | ConfirmationDecision::ApproveCaptured
                     | ConfirmationDecision::ApproveInteractive => {
@@ -236,11 +253,46 @@ mod tests {
     impl Confirmer for Reject {
         async fn confirm(
             &self,
-            _command: &str,
+            _command: &crate::agent::ConfirmationRequest<'_>,
             _assessment: &SecurityAssessment,
         ) -> Result<ConfirmationDecision> {
+            let _command = _command.preview;
             Ok(ConfirmationDecision::Reject)
         }
+    }
+
+    struct ScopeRecorder;
+    #[async_trait]
+    impl Confirmer for ScopeRecorder {
+        async fn confirm(
+            &self,
+            request: &crate::agent::ConfirmationRequest<'_>,
+            assessment: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
+            assert_eq!(request.tool, Some("apply_patch"));
+            assert_eq!(request.package, None);
+            assert!(request.preview.contains("+scope test"));
+            assert_eq!(assessment.risk_level, crate::security::RiskLevel::Mutating);
+            Ok(ConfirmationDecision::Reject)
+        }
+    }
+    #[tokio::test]
+    async fn prepared_confirmation_receives_registered_tool_scope() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("target");
+        let config = Config::default();
+        let executor = ShellExecutor::new(config.clone());
+        let result = invoke(
+            &config,
+            &executor,
+            &ScopeRecorder,
+            "apply_patch",
+            json!({"path":path,"old_text":"","new_text":"scope test"}),
+        )
+        .await?;
+        assert!(!result.success);
+        assert!(!path.exists());
+        Ok(())
     }
 
     #[tokio::test]

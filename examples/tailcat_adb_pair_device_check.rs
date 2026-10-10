@@ -26,9 +26,10 @@ struct LocalApproval;
 impl Confirmer for LocalApproval {
     async fn confirm(
         &self,
-        preview: &str,
+        preview: &nl2sh::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        let preview = preview.preview;
         eprintln!(
             "{preview}\nRisk: {:?}. Type CONFIRM to approve:",
             assessment.risk_level

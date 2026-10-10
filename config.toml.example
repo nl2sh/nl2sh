@@ -46,6 +46,12 @@ security_level = "balanced"
 # Empty generates a token; NL2SH_PROTOCOL_TOKEN overrides this value.
 protocol_token = ""
 protocol_auto_approve = false
+# Time-boxed approval grants release an assessed operation scope (tool + package)
+# without a human prompt until they expire or run out of uses. Grants only speed
+# up confirmation; they never lower the assessed risk. Critical operations are
+# never released, and dangerous operations need allow_dangerous_grants = true plus
+# the explicit CLI switch. Off by default.
+allow_dangerous_grants = false
 # Optional tools are off until enabled here or in the Web tool catalog.
 tailcat_binary_path = "/data/local/tmp/tailcat"
 execute_user_mode = "auto"
@@ -77,3 +83,12 @@ tailcat = false
 # tailcat_check = true
 # tailcat_install = true
 # decompile_apk_class = false
+
+# Approval grant array tables belong at the end: later keys would belong to the table.
+# [[approval_grants]]
+# id = "tv-ui-hour"                  # stable id recorded in audit events
+# tool = "android.*"                 # exact tool name or a single trailing-* wildcard
+# package = "com.konka.tv"           # optional Android package scope
+# max_risk = "mutating"              # read_only, mutating, dangerous, or critical
+# expires_at = "2030-01-01T00:00:00Z" # optional RFC 3339 expiry; omit to never expire
+# uses = 20                          # optional remaining uses; omit for unlimited

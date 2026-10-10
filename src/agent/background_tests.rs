@@ -133,9 +133,10 @@ struct Boundary {
 impl Confirmer for Boundary {
     async fn confirm(
         &self,
-        preview: &str,
+        preview: &crate::agent::ConfirmationRequest<'_>,
         assessment: &crate::security::SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        let preview = preview.preview;
         assert_eq!(preview, "test mutation preview");
         assert!(assessment.requires_confirmation);
         self.approvals.fetch_add(1, Ordering::SeqCst);

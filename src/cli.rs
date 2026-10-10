@@ -102,6 +102,9 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
     pub instruction: Option<String>,
+    /// DANGER: enable configured dangerous grants (root/strong/Critical still excluded).
+    #[arg(long, global = true)]
+    pub allow_dangerous_grants: bool,
     #[arg(long)]
     pub config: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "agent")]

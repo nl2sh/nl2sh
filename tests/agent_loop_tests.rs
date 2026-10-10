@@ -248,9 +248,10 @@ struct PatchConfirm {
 impl Confirmer for PatchConfirm {
     async fn confirm(
         &self,
-        preview: &str,
+        preview: &nl2sh::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        let preview = preview.preview;
         self.calls.fetch_add(1, Ordering::SeqCst);
         assert!(preview.contains("-before"));
         assert!(preview.contains("+after"));
@@ -554,7 +555,11 @@ impl CommandExecutor for Exec {
 struct Confirm(bool);
 #[async_trait]
 impl Confirmer for Confirm {
-    async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+    async fn confirm(
+        &self,
+        _: &nl2sh::agent::ConfirmationRequest<'_>,
+        _: &SecurityAssessment,
+    ) -> Result<ConfirmationDecision> {
         Ok(if self.0 {
             ConfirmationDecision::Approve
         } else {
@@ -572,7 +577,11 @@ struct RememberApproval {
 
 #[async_trait]
 impl Confirmer for RememberApproval {
-    async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+    async fn confirm(
+        &self,
+        _: &nl2sh::agent::ConfirmationRequest<'_>,
+        _: &SecurityAssessment,
+    ) -> Result<ConfirmationDecision> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Ok(ConfirmationDecision::ApproveForTask)
     }
@@ -581,7 +590,7 @@ impl Confirmer for RememberApproval {
 impl Confirmer for EditThenReject {
     async fn confirm(
         &self,
-        _: &str,
+        _: &nl2sh::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
         let call = self.calls.fetch_add(1, Ordering::SeqCst);
@@ -1157,7 +1166,11 @@ struct AudioQuestionConfirmer {
 
 #[async_trait]
 impl Confirmer for AudioQuestionConfirmer {
-    async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+    async fn confirm(
+        &self,
+        _: &nl2sh::agent::ConfirmationRequest<'_>,
+        _: &SecurityAssessment,
+    ) -> Result<ConfirmationDecision> {
         Ok(ConfirmationDecision::Reject)
     }
 
@@ -1399,5 +1412,50 @@ async fn parallel_reads_preserve_mutation_barriers_order_and_audit_correlation()
     assert!(!records
         .iter()
         .any(|event| event.to_string().contains(&llm.path)));
+    Ok(())
+}
+
+#[tokio::test]
+async fn agent_prepared_grant_does_not_inherit_task_approval_after_exhaustion() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("target.txt");
+    std::fs::write(&path, "before")?;
+    let config_path = directory.path().join("config.toml");
+    let config = Config {
+        source: Some(config_path.clone()),
+        approval_grants: vec![nl2sh::config::ApprovalGrantConfig {
+            id: "patch-once".into(),
+            tool: Some("apply_patch".into()),
+            package: None,
+            max_risk: "mutating".into(),
+            expires_at: None,
+            uses: Some(1),
+        }],
+        ..Config::default()
+    };
+    nl2sh::config::save_config(&config_path, &config)?;
+    let executor = Exec {
+        calls: Arc::new(AtomicUsize::new(0)),
+    };
+    let confirmer = Confirm(false);
+    for expected_success in [true, false] {
+        std::fs::write(&path, "before")?;
+        let llm = StructuredPatchLlm {
+            calls: AtomicUsize::new(0),
+            path: path.to_string_lossy().into_owned(),
+            expected_success,
+        };
+        let runner = AgentRunner {
+            config: &config,
+            llm: &llm,
+            executor: &executor,
+            confirmer: &confirmer,
+        };
+        runner.run("patch the file".into()).await?;
+        assert_eq!(
+            std::fs::read_to_string(&path)?,
+            if expected_success { "after" } else { "before" }
+        );
+    }
     Ok(())
 }

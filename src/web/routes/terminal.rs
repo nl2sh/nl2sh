@@ -83,10 +83,17 @@ pub(in crate::web) async fn run_terminal_command_scoped(
     crate::audit::record_assessment(&command, &assessment);
     let mut approved_command = None;
     while assessment.requires_confirmation {
-        let decision = confirmer.confirm(&command, &assessment).await?;
+        let decision = crate::agent::confirm_assessed(
+            cfg,
+            &confirmer,
+            &crate::agent::ConfirmationRequest::shell(&command),
+            &assessment,
+        )
+        .await?;
         crate::audit::record_decision(&decision);
         match decision {
             ConfirmationDecision::Approve
+            | ConfirmationDecision::ApproveByGrant(_)
             | ConfirmationDecision::ApproveCaptured
             | ConfirmationDecision::ApproveInteractive
             | ConfirmationDecision::ApproveForTask

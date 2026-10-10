@@ -269,6 +269,9 @@ impl Service {
         }
         let log = private_file(&self.dir.join("service.log"), true)?;
         let mut command = Command::new(std::env::current_exe()?);
+        if crate::security::grants::dangerous_grants_enabled() {
+            command.arg("--allow-dangerous-grants");
+        }
         command.arg("--config").arg(&self.config).args([
             "service",
             "run",

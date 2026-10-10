@@ -439,6 +439,10 @@ impl ToolMetadata {
 
 #[async_trait]
 pub(crate) trait PreparedExecution: Send {
+    /// Trusted package fixed during preparation, never inferred from previews.
+    fn approval_package(&self) -> Option<&str> {
+        None
+    }
     async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput>;
 }
 

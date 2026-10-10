@@ -1098,7 +1098,19 @@ async fn run_inner(
                         }
                         "/config" | "/setting" => {
                             log.record("local_command", input.trim())?;
-                            settings_editor = Some(SettingsEditor::new(config, 0));
+                            let grant_config = config.clone();
+                            let status = tokio::task::spawn_blocking(move || {
+                                crate::security::grants::statuses(&grant_config)
+                            })
+                            .await;
+                            let mut editor = SettingsEditor::new(config, 0);
+                            editor.grant_status = match status {
+                                Ok(Ok(status)) => status.into_iter().map(|status| format!("{} tool={} package={} risk={} remaining={} expires={} inactive={}",
+                                    status.grant.id, status.grant.tool.as_deref().unwrap_or("*"), status.grant.package.as_deref().unwrap_or("none"), status.grant.max_risk,
+                                    status.uses_remaining.map_or_else(|| "unlimited".into(), |n| n.to_string()), status.grant.expires_at.as_deref().unwrap_or("never"), status.inactive)).collect(),
+                                _ => vec!["Cannot read approval grant usage".into()],
+                            };
+                            settings_editor = Some(editor);
                             app.status = localized_status(
                                 config.ui_language,
                                 "配置设置",
@@ -1704,10 +1716,17 @@ async fn execute_direct_command_scoped(
     let mut interactive_override = None;
     let mut approved_command = None;
     while assessment.requires_confirmation {
-        let decision = confirmer.confirm(&command, &assessment).await?;
+        let decision = crate::agent::confirm_assessed(
+            config,
+            confirmer,
+            &crate::agent::ConfirmationRequest::shell(&command),
+            &assessment,
+        )
+        .await?;
         crate::audit::record_decision(&decision);
         match decision {
             ConfirmationDecision::Approve
+            | ConfirmationDecision::ApproveByGrant(_)
             | ConfirmationDecision::ApproveForTask
             | ConfirmationDecision::ApproveForRun => {
                 approved_command = Some(command.clone());
@@ -2024,6 +2043,7 @@ struct SettingsEditor {
     ollama_endpoint: String,
     custom_endpoint: String,
     protocol_port: String,
+    grant_status: Vec<String>,
     tab: usize,
     selected: usize,
     text_cursor: usize,
@@ -2059,6 +2079,7 @@ impl SettingsEditor {
             ollama_endpoint,
             custom_endpoint: config.endpoint.clone(),
             protocol_port: config.protocol_service_port.to_string(),
+            grant_status: Vec::new(),
             tab: tab.min(SETTINGS_TABS_ZH.len() - 1),
             selected: 0,
             text_cursor: 0,
@@ -2081,6 +2102,9 @@ impl SettingsEditor {
     }
 
     fn field_count(&self) -> usize {
+        if self.tab == 2 {
+            return 6 + self.grant_status.len();
+        }
         [
             4,
             6,
@@ -2285,37 +2309,50 @@ impl SettingsEditor {
                     .into(),
                 ),
             ],
-            2 => vec![
-                (
-                    if zh { "确认策略" } else { "Confirmation" },
-                    format!("{:?}", self.config.execute_confirm_policy),
-                ),
-                (
-                    if zh { "安全级别" } else { "Security" },
-                    format!("{:?}", self.config.security_level),
-                ),
-                (
-                    if zh { "执行用户" } else { "Execution user" },
-                    format!("{:?}", self.config.execute_user_mode),
-                ),
-                (
-                    if zh {
-                        "命令超时秒"
-                    } else {
-                        "Command timeout sec"
-                    },
-                    self.config.execute_timeout_secs.to_string(),
-                ),
-                (
-                    if zh {
-                        "交互超时秒（0=关闭）"
-                    } else {
-                        "Interactive timeout (0=off)"
-                    },
-                    self.config.interactive_execute_timeout_secs.to_string(),
-                ),
-                ("PTY", self.config.enable_pty.to_string()),
-            ],
+            2 => {
+                let mut fields = vec![
+                    (
+                        if zh { "确认策略" } else { "Confirmation" },
+                        format!("{:?}", self.config.execute_confirm_policy),
+                    ),
+                    (
+                        if zh { "安全级别" } else { "Security" },
+                        format!("{:?}", self.config.security_level),
+                    ),
+                    (
+                        if zh { "执行用户" } else { "Execution user" },
+                        format!("{:?}", self.config.execute_user_mode),
+                    ),
+                    (
+                        if zh {
+                            "命令超时秒"
+                        } else {
+                            "Command timeout sec"
+                        },
+                        self.config.execute_timeout_secs.to_string(),
+                    ),
+                    (
+                        if zh {
+                            "交互超时秒（0=关闭）"
+                        } else {
+                            "Interactive timeout (0=off)"
+                        },
+                        self.config.interactive_execute_timeout_secs.to_string(),
+                    ),
+                    ("PTY", self.config.enable_pty.to_string()),
+                ];
+                fields.extend(self.grant_status.iter().map(|value| {
+                    (
+                        if zh {
+                            "授权凭据（只读）"
+                        } else {
+                            "Approval grant (read only)"
+                        },
+                        value.clone(),
+                    )
+                }));
+                fields
+            }
             3 => vec![
                 (
                     if zh { "语言" } else { "Language" },
@@ -3058,9 +3095,10 @@ impl Confirmer for SessionConfirmer {
     }
     async fn confirm(
         &self,
-        command: &str,
+        command: &crate::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        let command = command.preview;
         if self.run_wide_approval.load(Ordering::Acquire) && can_remember_approval(assessment) {
             return Ok(ConfirmationDecision::Approve);
         }

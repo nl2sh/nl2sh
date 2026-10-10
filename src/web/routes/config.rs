@@ -270,3 +270,38 @@ pub(in crate::web) async fn check_model(
     }
     Ok(Json(ModelCheck { ok: true }))
 }
+
+/// Owner-facing read-only counters; editing templates remains in TOML settings.
+pub(in crate::web) async fn get_approval_grants(
+    State(state): State<Arc<Shared>>,
+) -> ApiResult<Json<Vec<crate::security::grants::GrantStatus>>> {
+    let path = state.path.clone();
+    Ok(Json(
+        tokio::task::spawn_blocking(move || -> Result<_> {
+            let config = config::load_or_default_unvalidated(&path)?;
+            config.validate_runtime()?;
+            crate::security::grants::statuses(&config)
+        })
+        .await??,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(in crate::web) struct GrantRevocation {
+    id: String,
+}
+
+pub(in crate::web) async fn revoke_approval_grant(
+    State(state): State<Arc<Shared>>,
+    Json(request): Json<GrantRevocation>,
+) -> ApiResult<String> {
+    let path = state.path.clone();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let config = config::load_or_default_unvalidated(&path)?;
+        config.validate_runtime()?;
+        crate::security::grants::revoke(&config, &request.id)
+    })
+    .await??;
+    Ok("授权已撤销；此 ID 不可再次启用，请为新授权使用新 ID。".into())
+}

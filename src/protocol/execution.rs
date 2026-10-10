@@ -36,6 +36,9 @@ struct ProtocolConfirmer {
 }
 #[async_trait]
 impl Confirmer for ProtocolConfirmer {
+    fn approval_cancelled(&self) -> bool {
+        *self.cancel.borrow()
+    }
     fn audit_source(&self) -> &'static str {
         if self.auto {
             "protocol_explicit_auto_approve"
@@ -45,7 +48,7 @@ impl Confirmer for ProtocolConfirmer {
     }
     async fn confirm(
         &self,
-        preview: &str,
+        request: &crate::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
         if *self.cancel.borrow() {
@@ -58,7 +61,7 @@ impl Confirmer for ProtocolConfirmer {
         tokio::select! {
             biased;
             _ = async { while !*cancel.borrow() { if cancel.changed().await.is_err() { break; } } } => Ok(ConfirmationDecision::Reject),
-            decision = self.local.confirm(preview, assessment) => decision,
+            decision = self.local.confirm(request, assessment) => decision,
         }
     }
 }
@@ -303,5 +306,70 @@ mod evidence_tests {
         })]);
         assert_eq!(evidence["observations"][0]["success"], true);
         assert_eq!(evidence["observations"][0]["output_status"], "partial");
+    }
+}
+
+#[cfg(test)]
+mod grant_execution_tests {
+    use super::*;
+    use crate::config::ApprovalGrantConfig;
+    #[tokio::test]
+    async fn granted_protocol_mutation_executes_without_pending_approval_and_audits_id(
+    ) -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("config.toml");
+        let config = Config {
+            approval_grants: vec![ApprovalGrantConfig {
+                id: "patch-once".into(),
+                tool: Some("apply_patch".into()),
+                package: None,
+                max_risk: "mutating".into(),
+                expires_at: None,
+                uses: Some(1),
+            }],
+            ..Config::default()
+        };
+        config::save_config(&path, &config)?;
+        let target = dir.path().join("approved.txt");
+        let (_cancel_tx, cancel) = watch::channel(false);
+        let result = invoke_tool(
+            &path,
+            "apply_patch",
+            json!({"path":target,"old_text":"","new_text":"approved"}),
+            cancel,
+        )
+        .await?;
+        assert_eq!(result["success"], true);
+        assert_eq!(std::fs::read_to_string(target)?, "approved");
+        let logs = std::fs::read_to_string(dir.path().join("nl2sh.log"))?;
+        assert!(logs.contains("approved_by_grant"));
+        assert!(logs.contains("patch-once"));
+        for entry in std::fs::read_dir(dir.path())? {
+            let entry = entry?.path();
+            if entry.is_dir() {
+                for child in std::fs::read_dir(entry)? {
+                    assert!(!child?.path().join("request.json").exists());
+                }
+            }
+        }
+        Ok(())
+    }
+    #[tokio::test]
+    async fn protocol_no_grant_waits_for_local_approval_then_cancellation_refuses() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("config.toml");
+        config::save_config(&path, &Config::default())?;
+        let target = dir.path().join("denied.txt");
+        let (tx, cancel) = watch::channel(false);
+        let args = json!({"path":target,"old_text":"","new_text":"denied"});
+        let task =
+            tokio::spawn(async move { invoke_tool(&path, "apply_patch", args, cancel).await });
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(!task.is_finished());
+        tx.send_replace(true);
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), task).await???;
+        assert_eq!(result["success"], false);
+        assert!(!target.exists());
+        Ok(())
     }
 }

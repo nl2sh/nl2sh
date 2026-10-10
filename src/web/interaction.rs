@@ -302,6 +302,9 @@ pub(in crate::web) fn approval_explanation(assessment: &SecurityAssessment) -> S
 
 #[async_trait]
 impl Confirmer for WebConfirmer {
+    fn approval_cancelled(&self) -> bool {
+        *self.session.cancel.borrow()
+    }
     fn audit_session(&self) -> Option<String> {
         self.session
             .inner
@@ -314,9 +317,10 @@ impl Confirmer for WebConfirmer {
     }
     async fn confirm(
         &self,
-        command: &str,
+        command: &crate::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        let command = command.preview;
         let pending = Pending::Approval {
             request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
             command: command.to_owned(),

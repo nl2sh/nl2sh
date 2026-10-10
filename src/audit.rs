@@ -34,6 +34,7 @@ pub(crate) struct AuditEvent {
     risk: String,
     preview_sha256: Option<String>,
     approval: &'static str,
+    grant_id: Option<String>,
     process_uid: u32,
     requested_root: bool,
     result: &'static str,
@@ -136,6 +137,7 @@ impl AuditGuard {
             risk: risk.into(),
             preview_sha256: None,
             approval: "not_requested",
+            grant_id: None,
             process_uid: unsafe { libc::geteuid() },
             requested_root: false,
             result: "cancelled",
@@ -216,7 +218,13 @@ pub(crate) fn decision(decision: &crate::agent::ConfirmationDecision) {
             event.result = "refused";
             event.completed = true;
         }
+        event.grant_id = if let ApproveByGrant(id) = decision {
+            Some(id.clone())
+        } else {
+            None
+        };
         event.approval = match decision {
+            ApproveByGrant(_) => "approved_by_grant",
             Reject => "rejected",
             Edit(_) => "edited",
             ApproveForTask => "approved_for_task",

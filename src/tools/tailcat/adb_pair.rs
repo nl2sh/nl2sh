@@ -820,9 +820,10 @@ mod tests {
     impl Confirmer for Reject {
         async fn confirm(
             &self,
-            preview: &str,
+            preview: &crate::agent::ConfirmationRequest<'_>,
             assessment: &SecurityAssessment,
         ) -> Result<ConfirmationDecision> {
+            let preview = preview.preview;
             assert_eq!(assessment.risk_level, RiskLevel::Dangerous);
             assert!(!preview.contains("123456"));
             self.0.fetch_add(1, Ordering::SeqCst);
@@ -865,7 +866,11 @@ mod tests {
     struct Rotate<'a>(&'a Fixture);
     #[async_trait]
     impl Confirmer for Rotate<'_> {
-        async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+        async fn confirm(
+            &self,
+            _: &crate::agent::ConfirmationRequest<'_>,
+            _: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
             *self
                 .0
                 .state

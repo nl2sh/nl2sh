@@ -3,9 +3,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use cli::{Cli, Command, Mode, ProtocolCommand, ServiceCommand};
 use nl2sh::{
-    agent::{
-        android_shell_constraints, AgentRunner, ConfirmationDecision, Confirmer, StdioConfirmer,
-    },
+    agent::{android_shell_constraints, AgentRunner, ConfirmationDecision, StdioConfirmer},
     config::{self},
     history::HistoryLog,
     llm::{build_client, ConversationMessage, LlmClient, LlmRequest, Role},
@@ -16,6 +14,10 @@ use nl2sh::{
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    if cli.allow_dangerous_grants {
+        nl2sh::security::grants::enable_dangerous_grants();
+        eprintln!("WARNING: dangerous approval grants enabled; matching operations may execute without a human prompt.");
+    }
     validate_cli(&cli)?;
     let path = match &cli.config {
         Some(p) => p.clone(),
@@ -545,10 +547,16 @@ async fn run_command_scoped(
     let mut interactive_override = None;
     let mut approved_command = None;
     while a.requires_confirmation {
-        let decision = confirmer.confirm(&command, &a).await?;
+        let decision = nl2sh::agent::confirm_assessed(
+            cfg,
+            &confirmer,
+            &nl2sh::agent::ConfirmationRequest::shell(&command),
+            &a,
+        )
+        .await?;
         nl2sh::audit::record_decision(&decision);
         match decision {
-            ConfirmationDecision::Approve => {
+            ConfirmationDecision::Approve | ConfirmationDecision::ApproveByGrant(_) => {
                 approved_command = Some(command.clone());
                 break;
             }

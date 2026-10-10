@@ -847,9 +847,10 @@ mod tests {
     impl Confirmer for RejectInstall {
         async fn confirm(
             &self,
-            preview: &str,
+            preview: &crate::agent::ConfirmationRequest<'_>,
             assessment: &SecurityAssessment,
         ) -> Result<ConfirmationDecision> {
+            let preview = preview.preview;
             assert_eq!(assessment.risk_level, RiskLevel::Mutating);
             assert!(preview.contains(TAILCAT_VERSION));
             assert!(preview.contains("SHA-256"));
@@ -1030,9 +1031,10 @@ mod tests {
         impl Confirmer for RejectServe {
             async fn confirm(
                 &self,
-                preview: &str,
+                preview: &crate::agent::ConfirmationRequest<'_>,
                 assessment: &SecurityAssessment,
             ) -> Result<ConfirmationDecision> {
+                let preview = preview.preview;
                 assert_eq!(assessment.risk_level, RiskLevel::Dangerous);
                 assert!(assessment.requires_double_confirmation);
                 assert!(preview.contains("existing localhost TCP service"));

@@ -1,6 +1,9 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::PathBuf,
+};
 use url::Url;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -215,6 +218,10 @@ pub struct Config {
     pub history_log_max_bytes: u64,
     /// Additional rules that can only raise risk.
     pub security_rules: Vec<SecurityRuleConfig>,
+    /// Time-boxed approvals that release assessed operations without a human prompt.
+    pub approval_grants: Vec<ApprovalGrantConfig>,
+    /// Allows grants to release `dangerous` operations. Off by default.
+    pub allow_dangerous_grants: bool,
     #[serde(skip)]
     /// File that produced this configuration.
     pub source: Option<PathBuf>,
@@ -232,6 +239,28 @@ pub struct SecurityRuleConfig {
     pub risk: String,
     /// User-facing explanation.
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// Time-boxed approval grant for an assessed operation scope.
+pub struct ApprovalGrantConfig {
+    /// Stable identifier recorded in audit events.
+    pub id: String,
+    /// Exact tool name or `prefix*` wildcard; `None` matches any tool.
+    #[serde(default)]
+    pub tool: Option<String>,
+    /// Android package scope; `None` matches operations without a package scope.
+    #[serde(default)]
+    pub package: Option<String>,
+    /// Highest risk this grant may release: `read_only`, `mutating`, `dangerous`, or `critical`.
+    pub max_risk: String,
+    /// RFC 3339 expiry; `None` never expires.
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    /// Remaining uses; `None` is unlimited until expiry.
+    #[serde(default)]
+    pub uses: Option<u32>,
 }
 
 impl Default for Config {
@@ -297,6 +326,8 @@ impl Default for Config {
             history_log_event_max_bytes: 256 * 1024,
             history_log_max_bytes: 10 * 1024 * 1024,
             security_rules: Vec::new(),
+            approval_grants: Vec::new(),
+            allow_dangerous_grants: false,
             source: None,
         }
     }
@@ -412,6 +443,68 @@ impl Config {
             regex::Regex::new(&rule.pattern)
                 .with_context(|| format!("invalid security rule {}", rule.id))?;
         }
+        let mut grant_ids = HashSet::new();
+        for grant in &self.approval_grants {
+            if grant.id.trim().is_empty() {
+                bail!("approval grant id must not be empty")
+            }
+            if grant.id.len() > 128
+                || !grant
+                    .id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+            {
+                bail!("approval grant id must use 1–128 ASCII letters, digits, '.', '_' or '-'")
+            }
+            if grant
+                .tool
+                .as_deref()
+                .is_some_and(|tool| tool.is_empty() || tool.len() > 128)
+            {
+                bail!("approval grant tool must contain 1–128 characters")
+            }
+            if grant.package.as_deref().is_some_and(|package| {
+                package.is_empty()
+                    || package.len() > 255
+                    || !package
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_'))
+            }) {
+                bail!("invalid approval grant package")
+            }
+            if !grant_ids.insert(grant.id.as_str()) {
+                bail!("duplicate approval grant id: {}", grant.id)
+            }
+            if !matches!(
+                grant.max_risk.as_str(),
+                "read_only" | "readonly" | "mutating" | "dangerous" | "critical"
+            ) {
+                bail!(
+                    "invalid max_risk for approval grant {}: {}",
+                    grant.id,
+                    grant.max_risk
+                )
+            }
+            if let Some(expires_at) = grant.expires_at.as_deref() {
+                time::OffsetDateTime::parse(
+                    expires_at,
+                    &time::format_description::well_known::Rfc3339,
+                )
+                .with_context(|| format!("invalid expires_at for approval grant {}", grant.id))?;
+            }
+            if let Some(tool) = grant.tool.as_deref() {
+                let wildcards = tool.matches('*').count();
+                if wildcards > 1 || (wildcards == 1 && !tool.ends_with('*')) {
+                    bail!(
+                        "approval grant {} tool wildcard must be a single trailing '*'",
+                        grant.id
+                    )
+                }
+            }
+            if grant.uses == Some(0) {
+                bail!("approval grant {} uses must be greater than zero", grant.id)
+            }
+        }
         if self.tailcat_binary_path.as_os_str().is_empty() {
             bail!("tailcat_binary_path must not be empty")
         }
@@ -475,5 +568,135 @@ impl Config {
     /// Reports whether the optional Jev judgment backend is enabled.
     pub fn jev_is_configured(&self) -> bool {
         !self.jev_api_key.trim().is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ApprovalGrantConfig, Config};
+    use anyhow::Result;
+
+    fn sample_grant() -> ApprovalGrantConfig {
+        ApprovalGrantConfig {
+            id: "g".into(),
+            tool: None,
+            package: None,
+            max_risk: "mutating".into(),
+            expires_at: None,
+            uses: None,
+        }
+    }
+
+    fn assert_rejected(config: &Config, needle: &str) -> Result<()> {
+        match config.validate_runtime() {
+            Ok(()) => anyhow::bail!("configuration accepted but should be rejected ({needle})"),
+            Err(error) => {
+                assert!(
+                    error.to_string().contains(needle),
+                    "expected error containing {needle:?}, got: {error}"
+                );
+                Ok(())
+            }
+        }
+    }
+
+    #[test]
+    fn approval_grants_parse_and_validate() -> Result<()> {
+        let cfg: Config = toml::from_str(
+            r#"
+[[approval_grants]]
+id = "tv-ui-hour"
+tool = "android.*"
+package = "com.konka.tv"
+max_risk = "mutating"
+expires_at = "2030-01-01T00:00:00Z"
+uses = 20
+"#,
+        )?;
+        cfg.validate_runtime()?;
+        assert_eq!(cfg.approval_grants.len(), 1);
+        assert_eq!(cfg.approval_grants[0].tool.as_deref(), Some("android.*"));
+        assert_eq!(
+            cfg.approval_grants[0].package.as_deref(),
+            Some("com.konka.tv")
+        );
+        assert_eq!(cfg.approval_grants[0].max_risk, "mutating");
+        assert_eq!(cfg.approval_grants[0].uses, Some(20));
+        assert!(!cfg.allow_dangerous_grants);
+        Ok(())
+    }
+
+    #[test]
+    fn approval_grants_default_to_empty_and_disallow_dangerous() -> Result<()> {
+        let cfg: Config = toml::from_str("")?;
+        assert!(cfg.approval_grants.is_empty());
+        assert!(!cfg.allow_dangerous_grants);
+        cfg.validate_runtime()?;
+        Ok(())
+    }
+
+    #[test]
+    fn allow_dangerous_grants_parses() -> Result<()> {
+        let cfg: Config = toml::from_str("allow_dangerous_grants = true\n")?;
+        assert!(cfg.allow_dangerous_grants);
+        Ok(())
+    }
+
+    #[test]
+    fn approval_grant_rejects_unknown_risk() -> Result<()> {
+        let mut cfg = Config::default();
+        cfg.approval_grants.push(ApprovalGrantConfig {
+            max_risk: "nope".into(),
+            ..sample_grant()
+        });
+        assert_rejected(&cfg, "max_risk")
+    }
+
+    #[test]
+    fn approval_grant_rejects_empty_id() -> Result<()> {
+        let mut cfg = Config::default();
+        cfg.approval_grants.push(ApprovalGrantConfig {
+            id: "   ".into(),
+            ..sample_grant()
+        });
+        assert_rejected(&cfg, "empty")
+    }
+
+    #[test]
+    fn approval_grant_rejects_duplicate_id() -> Result<()> {
+        let mut cfg = Config::default();
+        cfg.approval_grants.push(sample_grant());
+        cfg.approval_grants.push(sample_grant());
+        assert_rejected(&cfg, "duplicate")
+    }
+
+    #[test]
+    fn approval_grant_rejects_invalid_expiry() -> Result<()> {
+        let mut cfg = Config::default();
+        cfg.approval_grants.push(ApprovalGrantConfig {
+            expires_at: Some("not-a-timestamp".into()),
+            ..sample_grant()
+        });
+        assert_rejected(&cfg, "expires_at")
+    }
+
+    #[test]
+    fn approval_grant_rejects_zero_uses() -> Result<()> {
+        let mut cfg = Config::default();
+        cfg.approval_grants.push(ApprovalGrantConfig {
+            uses: Some(0),
+            ..sample_grant()
+        });
+        assert_rejected(&cfg, "uses")
+    }
+
+    #[test]
+    fn approval_grant_rejects_non_trailing_tool_wildcard() -> Result<()> {
+        let mut cfg = Config::default();
+        cfg.approval_grants.push(ApprovalGrantConfig {
+            tool: Some("android.*.tap".into()),
+            ..sample_grant()
+        });
+        assert_rejected(&cfg, "wildcard")
     }
 }

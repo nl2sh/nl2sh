@@ -546,7 +546,11 @@ mod tests {
     struct Decision(bool);
     #[async_trait]
     impl Confirmer for Decision {
-        async fn confirm(&self, _: &str, _: &SecurityAssessment) -> Result<ConfirmationDecision> {
+        async fn confirm(
+            &self,
+            _: &crate::agent::ConfirmationRequest<'_>,
+            _: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
             Ok(if self.0 {
                 ConfirmationDecision::Approve
             } else {

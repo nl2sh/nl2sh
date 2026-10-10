@@ -624,11 +624,23 @@ impl AgentRunner<'_> {
                         break (assessment, Some(command.clone()));
                     }
                     let confirmation_started = Instant::now();
-                    let decision = self.confirmer.confirm(&command, &assessment).await?;
+                    let decision = super::confirm_assessed(
+                        self.config,
+                        self.confirmer,
+                        &super::ConfirmationRequest {
+                            preview: &command,
+                            tool: Some(&call.name),
+                            package: None,
+                        },
+                        &assessment,
+                    )
+                    .await?;
                     crate::audit::decision(&decision);
                     runtime.add_confirmation_time(confirmation_started.elapsed());
                     match decision {
-                        ConfirmationDecision::Approve => break (assessment, Some(command.clone())),
+                        ConfirmationDecision::Approve | ConfirmationDecision::ApproveByGrant(_) => {
+                            break (assessment, Some(command.clone()))
+                        }
                         ConfirmationDecision::ApproveForTask => {
                             if super::can_remember_approval(&assessment) {
                                 task_approvals.insert(command.clone());
@@ -1483,7 +1495,7 @@ mod parallel_tests {
     impl Confirmer for Boundaries {
         async fn confirm(
             &self,
-            _: &str,
+            _: &crate::agent::ConfirmationRequest<'_>,
             _: &crate::security::SecurityAssessment,
         ) -> Result<ConfirmationDecision> {
             bail!("no approval expected")

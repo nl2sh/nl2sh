@@ -43,6 +43,9 @@ Arguments:
 
 
 Options:
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
       --config <CONFIG>
 
 
@@ -81,9 +84,12 @@ Options:
 ```text
 Check for and install the latest compatible GitHub Release
 
-Usage: update
+Usage: update [OPTIONS]
 
 Options:
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
   -h, --help
           Print help
 ```
@@ -91,7 +97,7 @@ Options:
 ```text
 Manage the native background Web service for this configuration
 
-Usage: service <COMMAND>
+Usage: service [OPTIONS] <COMMAND>
 
 Commands:
   start    Start or return the healthy existing service
@@ -101,6 +107,9 @@ Commands:
   help     Print this message or the help of the given subcommand(s)
 
 Options:
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
   -h, --help
           Print help
 ```
@@ -120,6 +129,9 @@ Options:
       --port-strict
 
 
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
   -h, --help
           Print help
 ```
@@ -132,6 +144,9 @@ Usage: stop [OPTIONS]
 Options:
       --json
 
+
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
   -h, --help
           Print help
@@ -152,6 +167,9 @@ Options:
       --port-strict
 
 
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
   -h, --help
           Print help
 ```
@@ -164,6 +182,9 @@ Usage: status [OPTIONS]
 Options:
       --json
 
+
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
   -h, --help
           Print help
@@ -182,7 +203,7 @@ Arguments:
 ```text
 Serve device-native MCP/A2A or manage local protocol approvals
 
-Usage: protocol <COMMAND>
+Usage: protocol [OPTIONS] <COMMAND>
 
 Commands:
   serve      Serve authenticated HTTP MCP and A2A on the device
@@ -192,6 +213,9 @@ Commands:
   help       Print this message or the help of the given subcommand(s)
 
 Options:
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
   -h, --help
           Print help
 ```
@@ -211,6 +235,9 @@ Options:
       --advertised-url <ADVERTISED_URL>
           Override the advertised origin; defaults to the detected device IPv4 and bound port
 
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
       --allow-insecure-http[=<ALLOW_INSECURE_HTTP>]
           Allow plaintext HTTP (default); use =false to require a loopback listener
 
@@ -224,9 +251,12 @@ Options:
 ```text
 Serve MCP over local stdin/stdout; never starts the TUI or Web UI
 
-Usage: stdio
+Usage: stdio [OPTIONS]
 
 Options:
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
   -h, --help
           Print help
 ```
@@ -234,9 +264,12 @@ Options:
 ```text
 List pending protocol approvals on this device
 
-Usage: approvals
+Usage: approvals [OPTIONS]
 
 Options:
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
   -h, --help
           Print help
 ```
@@ -244,13 +277,16 @@ Options:
 ```text
 Approve or reject one request in an interactive local terminal
 
-Usage: approve <ID>
+Usage: approve [OPTIONS] <ID>
 
 Arguments:
   <ID>
 
 
 Options:
+      --allow-dangerous-grants
+          DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
   -h, --help
           Print help
 ```

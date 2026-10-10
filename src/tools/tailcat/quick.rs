@@ -83,9 +83,10 @@ impl Confirmer for UserInitiatedConfirmer {
     }
     async fn confirm(
         &self,
-        _preview: &str,
+        _preview: &crate::agent::ConfirmationRequest<'_>,
         _assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        let _preview = _preview.preview;
         Ok(ConfirmationDecision::Approve)
     }
 }
@@ -241,7 +242,12 @@ mod tests {
             );
             assert_eq!(
                 UserInitiatedConfirmer
-                    .confirm("explicitly selected Tailcat operation", &assessment)
+                    .confirm(
+                        &crate::agent::ConfirmationRequest::shell(
+                            "explicitly selected Tailcat operation"
+                        ),
+                        &assessment
+                    )
                     .await?,
                 ConfirmationDecision::Approve
             );

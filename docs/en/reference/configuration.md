@@ -26,6 +26,8 @@ Custom `[[security_rules]]` contain `id/pattern/risk/message` and only raise ris
 
 This section is updated from code. Credentials default to empty; never add real keys to examples.
 
+See [approval grants](../guide/security-confirmation.md#approval-grants) for scope, counters, revocation and the dangerous startup flag.
+
 <!-- generated:start -->
 
 | Field | Default | Description |
@@ -85,5 +87,7 @@ This section is updated from code. Credentials default to empty; never add real 
 | `history_log_event_max_bytes` | `262144` | Maximum unencoded message bytes in one history event. |
 | `history_log_max_bytes` | `10485760` | Maximum bytes written to one history log file per process run. |
 | `security_rules` | `[]` | Additional rules that can only raise risk. |
+| `approval_grants` | `[]` | Time-boxed approvals that release assessed operations without a human prompt. |
+| `allow_dangerous_grants` | `false` | Allows grants to release `dangerous` operations. Off by default. |
 
 <!-- generated:end -->
