@@ -8,8 +8,8 @@ use super::{
             TopAndroidAppsArgs,
         },
         domain::{
-            self as android_tools, AndroidInputArgs, ClipboardArgs, ConnectivityArgs,
-            MediaControlArgs, MediaQueryArgs, PackageLimitArgs,
+            self as android_tools, AndroidBackgroundWorkArgs, AndroidInputArgs, ClipboardArgs,
+            ConnectivityArgs, MediaControlArgs, MediaQueryArgs, PackageLimitArgs,
         },
         environment,
     },
@@ -89,6 +89,7 @@ static METADATA: &[ToolMetadata] = &[
     meta!("android_storage", "Return filesystem usage and bounded per-app storage evidence.", Android, ReadOnly),
     meta!("android_wifi_eth", "Aggregate Wi-Fi, Ethernet, interface, IP, signal, and route evidence.", Android, ReadOnly),
     meta!("android_doze", "Return DeviceIdle state and whitelist evidence.", Android, ReadOnly),
+    meta!("android_background_work", "Inspect bounded JobScheduler, AlarmManager, app-standby, and DeviceIdle evidence for one Android package.", Android, ReadOnly, platform = Android, concurrency = Parallel),
     meta!("android_permission_audit", "Audit Android permissions and AppOps for a package or bounded app set.", Android, ReadOnly),
     meta!("android_clipboard", "Read clipboard text or, after confirmation, set bounded text.", Android, ReadOnly, platform = AndroidShell, concurrency = AndroidUi),
     meta!("android_media_control", "Read media status or, after confirmation, change playback or volume.", Android, ReadOnly, platform = AndroidShell, concurrency = AndroidUi),
@@ -157,6 +158,9 @@ impl Tool for ExtendedTool {
             "android_doze" => {
                 let _: EmptyArgs = parse_args(name, arguments)?;
                 ExtendedAction::Doze
+            }
+            "android_background_work" => {
+                ExtendedAction::BackgroundWork(parse_args(name, arguments)?)
             }
             "android_permission_audit" => {
                 ExtendedAction::PermissionAudit(parse_args(name, arguments)?)
@@ -274,6 +278,7 @@ enum ExtendedAction {
     Storage(PackageLimitArgs),
     WifiEth,
     Doze,
+    BackgroundWork(AndroidBackgroundWorkArgs),
     PermissionAudit(PackageLimitArgs),
     ClipboardRead,
     ClipboardWrite(String),
@@ -430,6 +435,9 @@ impl PreparedExecution for ExtendedAction {
             Self::Storage(args) => android_tools::storage(executor(ctx)?, &args).await?,
             Self::WifiEth => android_tools::wifi_eth(executor(ctx)?).await?,
             Self::Doze => android_tools::doze(executor(ctx)?).await?,
+            Self::BackgroundWork(args) => {
+                android_tools::background_work(executor(ctx)?, &args).await?
+            }
             Self::PermissionAudit(args) => {
                 android_tools::permission_audit(executor(ctx)?, &args).await?
             }
@@ -504,6 +512,7 @@ fn extended_schema(metadata: &ToolMetadata) -> serde_json::Value {
         "android_logcat" => definition::<AndroidLogcatArgs>(name, description),
         "android_settings" => definition::<AndroidSettingsArgs>(name, description),
         "android_content_query" => definition::<AndroidContentQueryArgs>(name, description),
+        "android_background_work" => definition::<AndroidBackgroundWorkArgs>(name, description),
         "http_request" => definition::<HttpRequestArgs>(name, description),
         "download_url" => definition::<DownloadUrlArgs>(name, description),
         "inspect_android_ui" => definition::<InspectAndroidUiArgs>(name, description),

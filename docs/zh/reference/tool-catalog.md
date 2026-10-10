@@ -844,6 +844,47 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 }
 ```
 
+## `android_background_work`
+
+有界读取指定应用的 JobScheduler、AlarmManager、待机分组与 DeviceIdle 证据；不修改调度、待机或省电状态。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `android` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `parallel` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": null,
+      "description": "Maximum matching lines retained from each Android service.",
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "package": {
+      "description": "Exact Android package whose scheduled background work should be inspected.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "package"
+  ],
+  "type": "object"
+}
+```
+
 ## `android_clipboard`
 
 读取剪贴板，或确认后写入有界文本。

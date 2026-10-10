@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 新增只读 `android_background_work`：按精确包名有界汇总 JobScheduler、AlarmManager、应用待机分组与 DeviceIdle 证据，不修改后台调度或省电状态。
+
 - 支持配置 `protocol_token` 固定 MCP/A2A HTTP 令牌；环境变量优先，未配置时自动生成，凭据校验与脱敏保持。
 - TUI 欢迎页仅在 MCP/A2A 运行中时展开连接详情；未启动或状态未知时只显示一行状态。
 - 新增仓库级 Codex device lab skill、构建身份与运行映像摘要、真实 Agent 工具证据及主机侧可重复案例/对比/独立 ADB 部署恢复流程；不改变安全审批或 PTY。

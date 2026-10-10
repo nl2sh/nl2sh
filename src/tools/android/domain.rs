@@ -70,6 +70,16 @@ pub struct ConnectivityArgs {
     pub host: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AndroidBackgroundWorkArgs {
+    /// Exact Android package whose scheduled background work should be inspected.
+    pub package: String,
+    /// Maximum matching lines retained from each Android service.
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
 /// Re-reads the current UI hierarchy and returns a generated input command only when the
 /// supplied point(s) remain inside an exactly matching, enabled control bounds rectangle.
 pub async fn prepare_input(
@@ -194,6 +204,49 @@ pub async fn wifi_eth(executor: &dyn CommandExecutor) -> Result<String> {
 
 pub async fn doze(executor: &dyn CommandExecutor) -> Result<String> {
     encode("doze", readonly(executor, "dumpsys deviceidle").await?)
+}
+
+/// Inspect bounded, read-only evidence about one package's scheduled jobs and alarms.
+pub async fn background_work(
+    executor: &dyn CommandExecutor,
+    args: &AndroidBackgroundWorkArgs,
+) -> Result<String> {
+    optional_package(Some(&args.package))?;
+    let limit = args.limit.unwrap_or(80).clamp(1, MAX_ROWS);
+    let package = shell_quote(&args.package);
+    let commands = [
+        (
+            "jobscheduler",
+            format!("dumpsys jobscheduler | grep -F -- {package} | head -n {limit}"),
+        ),
+        (
+            "alarms",
+            format!("dumpsys alarm | grep -F -- {package} | head -n {limit}"),
+        ),
+        (
+            "app_standby",
+            format!("dumpsys usagestats | grep -F -- {package} | head -n {limit}"),
+        ),
+        ("deviceidle", "dumpsys deviceidle".to_owned()),
+    ];
+    let mut sections = serde_json::Map::new();
+    for (name, command) in commands {
+        sections.insert(
+            name.into(),
+            result_value(readonly(executor, &command).await?),
+        );
+    }
+    serde_json::to_string_pretty(&json!({
+        "kind": "background_work",
+        "package": args.package,
+        "line_limit_per_service": limit,
+        "sections": sections,
+        "limitations": [
+            "matching dumpsys lines are evidence, not proof that a job or alarm will run",
+            "OEM power managers and app-internal schedulers may not appear in these services"
+        ]
+    }))
+    .context("cannot encode Android background-work result")
 }
 
 pub async fn permission_audit(
@@ -513,6 +566,7 @@ mod tests {
             text: Some("a\nb".into())
         })
         .is_err());
+        assert!(optional_package(Some("com.example.app;id")).is_err());
     }
     fn permission_package(value: &str) -> Result<()> {
         optional_package(Some(value))

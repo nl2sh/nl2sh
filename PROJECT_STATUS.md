@@ -4,6 +4,8 @@ Last Updated: 2026-10-10
 
 ## Recent Changes
 
+- 新增只读 `android_background_work`：精确包名校验后，有界聚合 JobScheduler、AlarmManager、应用待机分组和 DeviceIdle 证据，用于后台任务延迟/未唤醒诊断。工具是 Android 只读并行调度，不需审批、不提权，不改动 PTY 与终端恢复路径。验证：`cargo fmt --all -- --check`、`cargo check --workspace --all-targets`、Android API 26 AArch64 `cargo check --target aarch64-linux-android --no-default-features`、工具注册/参数注入回归、代码派生中英文参考检查、50 对双语页面检查、严格 MkDocs 构建与渲染后链接检查通过。
+
 - 配置 `protocol_token` 支持固定 MCP/A2A HTTP 令牌，环境变量优先、空值自动生成；独立协议与 UI/受管服务共享启动路径，固定值启动输出隐藏。新增校验与凭据脱敏，模型配置工具禁止凭据读写，同步双语说明与派生参考；Android、安全审批与 PTY 路径不变。验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`（455 项通过、4 项显式忽略）、派生参考检查、50 对双语页面检查、严格 MkDocs 构建与渲染后检查通过；真实 CLI 进程覆盖固定令牌重启复用、环境覆盖、错误令牌拒绝、启动值隐藏及工具结果脱敏。
 
 - TUI 欢迎页 MCP/A2A 仅在已验证运行中时展开详情；未启动或状态未知时保留一行状态，无发现快照时显示状态未知。同步双语说明；CLI/Web 连接说明、安全审批、Android 执行及 PTY 路径不变。验证：`cargo fmt --all -- --check`、`cargo check`、完整 `cargo test`、双语页面检查、严格 MkDocs 构建与渲染后检查通过。

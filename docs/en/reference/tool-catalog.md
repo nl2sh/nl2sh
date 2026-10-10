@@ -844,6 +844,47 @@ Wait for exact visible UI text, at most ten seconds.
 }
 ```
 
+## `android_background_work`
+
+Inspect bounded JobScheduler, AlarmManager, app-standby, and DeviceIdle evidence for one Android package.
+
+| Descriptor | Value |
+| --- | --- |
+| Group | `-` |
+| Enabled by default | `true` |
+| Platform | `android` |
+| Connector capabilities | `-` |
+| Runtime prerequisite | `none` |
+| Risk floor | `read_only` |
+| Declared scheduling policy | `parallel` |
+| Lifetime | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "default": null,
+      "description": "Maximum matching lines retained from each Android service.",
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "package": {
+      "description": "Exact Android package whose scheduled background work should be inspected.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "package"
+  ],
+  "type": "object"
+}
+```
+
 ## `android_clipboard`
 
 Read clipboard text or, after confirmation, set bounded text.
