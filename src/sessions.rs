@@ -571,7 +571,10 @@ fn redact_turns(turns: &mut [Vec<ConversationItem>], secrets: &[String]) {
     for turn in turns {
         for item in turn {
             match item {
-                ConversationItem::Message(message) => redact_text(&mut message.content, &secrets),
+                ConversationItem::Message(message) => {
+                    redact_text(&mut message.content, &secrets);
+                    message.attachments.clear();
+                }
                 ConversationItem::Tools(round) => {
                     for call in &mut round.calls {
                         redact_json(&mut call.arguments, &secrets);

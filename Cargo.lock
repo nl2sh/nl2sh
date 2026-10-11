@@ -2205,6 +2205,7 @@ dependencies = [
 name = "nl2sh"
 version = "1.1.0"
 dependencies = [
+ "aes",
  "anyhow",
  "async-trait",
  "axum",
@@ -2216,9 +2217,11 @@ dependencies = [
  "futures-util",
  "image",
  "libc",
+ "md-5",
  "nix",
  "nl2sh-tool-macros",
  "pgp",
+ "qrcode",
  "ratatui",
  "regex",
  "reqwest",
@@ -2229,6 +2232,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sha1",
  "sha2 0.10.9",
  "shell-words",
  "tar",
@@ -2769,6 +2773,12 @@ name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quick-error"
@@ -3967,8 +3977,12 @@ checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
 dependencies = [
  "futures-util",
  "log",
+ "rustls",
+ "rustls-pki-types",
  "tokio",
+ "tokio-rustls",
  "tungstenite",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -4152,6 +4166,8 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.5",
+ "rustls",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.19",
 ]

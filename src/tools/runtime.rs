@@ -61,6 +61,7 @@ pub(crate) async fn execute_prepared_operation(
                 preview,
                 tool: Some(metadata.name),
                 package: operation.approval_package(),
+                media_scope: operation.media_approval_scope(),
             },
             &assessment,
         )

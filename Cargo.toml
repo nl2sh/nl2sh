@@ -20,6 +20,8 @@ self-update = []
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
+aes = "0.8"
+md-5 = "0.10"
 axum = { version = "0.8", features = ["ws"] }
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
@@ -47,10 +49,13 @@ schemars = "1.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+sha1 = "0.10"
+qrcode = { version = "0.14", default-features = false }
 tempfile = "3"
 tar = "0.4"
 shell-words = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "signal", "sync", "time", "io-util", "net", "fs"] }
+tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-util = { version = "0.7", features = ["io"] }
 tower-http = { version = "0.6", features = ["set-header"] }
@@ -64,7 +69,6 @@ brush-parser = "0.4.0"
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
 rmcp = { version = "=3.5.1", default-features = false, features = ["client"] }
-tokio-tungstenite = "0.29"
 wiremock = "0.6"
 
 [profile.release]

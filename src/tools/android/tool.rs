@@ -1441,6 +1441,146 @@ mod tests {
                 .is_err()
         );
     }
+    #[derive(Default)]
+    struct ScreenDelivery {
+        sent: Mutex<Vec<Vec<u8>>>,
+        attachments: crate::channels::attachments::AttachmentStore,
+    }
+    #[async_trait]
+    impl crate::agent::FileDelivery for ScreenDelivery {
+        fn destination(&self) -> String {
+            "original conversation".into()
+        }
+        async fn stage_attachment(
+            &self,
+            attachment: &crate::llm::ToolAttachment,
+        ) -> Result<Option<String>> {
+            self.attachments.stage(attachment).map(Some)
+        }
+        fn attachment(&self, id: &str) -> Result<(String, Vec<u8>)> {
+            self.attachments.snapshot(id)
+        }
+        async fn send_file(&self, _: &str, kind: &str, bytes: Vec<u8>, _: &str) -> Result<()> {
+            assert_eq!(kind, "image");
+            self.sent
+                .lock()
+                .map_err(|_| anyhow::anyhow!("poisoned"))?
+                .push(bytes);
+            Ok(())
+        }
+    }
+    struct ScreenApproval {
+        delivery: Arc<ScreenDelivery>,
+        approve: bool,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+    #[async_trait]
+    impl Confirmer for ScreenApproval {
+        fn file_delivery(&self) -> Option<Arc<dyn crate::agent::FileDelivery>> {
+            Some(self.delivery.clone())
+        }
+        async fn confirm(
+            &self,
+            request: &crate::agent::ConfirmationRequest<'_>,
+            _: &SecurityAssessment,
+        ) -> Result<ConfirmationDecision> {
+            self.calls
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            assert!(
+                request.preview.contains("SHA-256")
+                    && request.preview.contains("original conversation")
+            );
+            Ok(if self.approve {
+                ConfirmationDecision::Approve
+            } else {
+                ConfirmationDecision::Reject
+            })
+        }
+    }
+    #[tokio::test]
+    async fn captured_attachment_uses_generic_delivery_with_one_approval_and_no_persistent_file(
+    ) -> Result<()> {
+        use crate::tools::{
+            channel_file::SendChannelFileTool, file::domain::FileToolExecutor, PreparedAction,
+        };
+        for approve in [false, true] {
+            let config = Config::default();
+            let executor = FakeScreen::default();
+            let delivery = Arc::new(ScreenDelivery::default());
+            let confirmer = ScreenApproval {
+                delivery: delivery.clone(),
+                approve,
+                calls: 0.into(),
+            };
+            let directory = tempfile::tempdir()?;
+            let files = FileToolExecutor::new(directory.path())?;
+            let mut runtime = crate::agent::TaskRuntime::new();
+            let mut ctx = ToolContext {
+                file_tools: &files,
+                ima: None,
+                config: Some(&config),
+                executor: Some(&executor),
+                llm: None,
+                confirmer: Some(&confirmer),
+                audio_tools: None,
+                runtime: Some(&mut runtime),
+                audio_cache: None,
+            };
+            let screenshot = super::capture_screen_attachment(&executor).await?;
+            use crate::agent::FileDelivery;
+            let id = delivery
+                .stage_attachment(&screenshot.attachments[0])
+                .await?
+                .context("attachment ID missing")?;
+            let tool = SendChannelFileTool;
+            assert!(tool.prepare(&ctx, json!({})).await.is_err());
+            assert!(tool
+                .prepare(&ctx, json!({"path":"/tmp/screen.png","attachment_id":id}))
+                .await
+                .is_err());
+            let prepared = tool
+                .prepare(&ctx, json!({"attachment_id":id,"kind":"image"}))
+                .await?;
+            let path = executor
+                .captured_path
+                .lock()
+                .map_err(|_| anyhow::anyhow!("poisoned"))?
+                .clone()
+                .context("capture missing")?;
+            assert!(!path.exists());
+            assert!(delivery
+                .sent
+                .lock()
+                .map_err(|_| anyhow::anyhow!("poisoned"))?
+                .is_empty());
+            let PreparedAction::Operation(operation) = prepared.action else {
+                anyhow::bail!("not an operation")
+            };
+            let result = crate::tools::runtime::execute_prepared_operation(
+                tool.metadata(),
+                prepared.risk,
+                &prepared.preview,
+                operation,
+                &mut ctx,
+                &confirmer,
+            )
+            .await?;
+            assert_eq!(result.success, approve);
+            assert_eq!(
+                confirmer.calls.load(std::sync::atomic::Ordering::Relaxed),
+                1
+            );
+            let sent = delivery
+                .sent
+                .lock()
+                .map_err(|_| anyhow::anyhow!("poisoned"))?;
+            assert_eq!(sent.len(), usize::from(approve));
+            if approve {
+                assert!(sent[0].starts_with(b"\x89PNG"));
+            }
+        }
+        Ok(())
+    }
 }
 
 fn android_schema(metadata: &ToolMetadata) -> serde_json::Value {

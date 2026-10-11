@@ -58,6 +58,7 @@ plugins:
         使用指南: User guide
         TUI: TUI
         Web: Web
+        消息渠道: Message channels
         会话与日志: Sessions and logs
         文件引用: File references
         Root: Root
@@ -134,6 +135,7 @@ nav:
 - 使用指南:
   - TUI: guide/tui.md
   - Web: guide/web.md
+  - 消息渠道: guide/channels.md
   - 会话与日志: guide/sessions.md
   - 文件引用: guide/file-reference.md
   - Root: guide/root.md

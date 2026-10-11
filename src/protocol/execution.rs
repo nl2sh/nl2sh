@@ -119,8 +119,31 @@ pub(super) async fn ask(
     message: &str,
     cancel: watch::Receiver<bool>,
 ) -> Result<Value> {
-    if message.trim().is_empty() || message.len() > 8192 {
-        bail!("message must contain 1–8192 UTF-8 bytes");
+    ask_with_policy(path, session, message, cancel, None, &[]).await
+}
+
+/// Run an isolated message-channel conversation with a route-scoped confirmer.
+pub(crate) async fn channel_ask(
+    path: &Path,
+    session: &str,
+    message: &str,
+    cancel: watch::Receiver<bool>,
+    confirmer: &dyn Confirmer,
+    secrets: &[String],
+) -> Result<Value> {
+    ask_with_policy(path, session, message, cancel, Some(confirmer), secrets).await
+}
+
+async fn ask_with_policy(
+    path: &Path,
+    session: &str,
+    message: &str,
+    cancel: watch::Receiver<bool>,
+    external: Option<&dyn Confirmer>,
+    secrets: &[String],
+) -> Result<Value> {
+    if message.trim().is_empty() || message.len() > if external.is_some() { 32768 } else { 8192 } {
+        bail!("message is empty or exceeds the Agent input limit");
     }
     let cfg = load(path)?;
     if !cfg.provider_is_configured() {
@@ -155,7 +178,7 @@ pub(super) async fn ask(
         config: &cfg,
         llm: &llm,
         executor: &executor,
-        confirmer: &confirmer,
+        confirmer: external.unwrap_or(&confirmer),
     };
     let outcome = runner
         .run_with_history_streaming_cancellable(message.into(), history.clone(), &Silent, cancel)
@@ -175,18 +198,15 @@ pub(super) async fn ask(
         .collect();
     let mut turns = history;
     turns.push(outcome.transcript);
-    store.save_redacted(
-        session,
-        &turns,
-        cfg.model_tool_output_max_bytes,
-        &[
-            cfg.api_key,
-            cfg.proxy_password,
-            cfg.protocol_token,
-            cfg.ima_api_key,
-            cfg.jev_api_key,
-        ],
-    )?;
+    let mut redaction = secrets.to_vec();
+    redaction.extend([
+        cfg.api_key,
+        cfg.proxy_password,
+        cfg.protocol_token,
+        cfg.ima_api_key,
+        cfg.jev_api_key,
+    ]);
+    store.save_redacted(session, &turns, cfg.model_tool_output_max_bytes, &redaction)?;
     Ok(
         json!({"session": session, "answer": outcome.final_text, "steps": outcome.steps, "tool_calls": outcome.tool_calls, "failed_tools": failed_tools, "evidence": evidence}),
     )

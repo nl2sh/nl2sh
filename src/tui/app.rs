@@ -13,6 +13,8 @@ const LOCAL_COMMANDS: &[&str] = &[
     "/tailcat",
     "/clear",
     "/config",
+    "/channels",
+    "/status",
     "/exit",
     "/help",
     "/new",
@@ -546,7 +548,10 @@ mod tests {
     fn slash_command_can_be_completed_without_hiding_exact_command() {
         let mut app = app_with_history(0);
         app.input.set("/c".into());
-        assert_eq!(app.command_suggestions(), vec!["/clear", "/config"]);
+        assert_eq!(
+            app.command_suggestions(),
+            vec!["/clear", "/config", "/channels"]
+        );
         assert!(app.complete_selected_command());
         assert_eq!(app.input.text, "/clear");
         assert!(!app.complete_selected_command());

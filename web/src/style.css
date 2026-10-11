@@ -455,3 +455,14 @@ button:disabled { opacity: .45; }
 .connection-value-heading{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
 .connection-value pre{white-space:pre;overflow:auto;max-width:100%;margin:.35rem 0;padding:.65rem;background:var(--background-alt);border-radius:6px}
 .connection-value small{color:var(--text-secondary)}
+
+.channels-panel {overflow:auto; min-width:0}
+.channel-card {border:1px solid var(--border);border-radius:8px;padding:12px;margin:12px 0;overflow-wrap:anywhere}
+.channel-card h3 {color:var(--cyan);margin:0 0 10px}
+.channel-card label {display:flex;flex-direction:column;gap:5px;margin:10px 0}
+.channel-card input {width:100%;min-width:0}
+.channel-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.channel-qr {display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.channel-qr a {overflow-wrap:anywhere;color:var(--accent)}
+
+.channel-invite-qr { display:block; width:min(100%,240px); height:auto; margin:12px auto; background:#fff; }

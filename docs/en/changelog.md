@@ -2,6 +2,12 @@
 
 ## 2026-10-11
 
+- Fix Android configuration-write locking; clarify channel approval commands, acknowledge saved grants, and let owners revoke individual permanent grants safely.
+
+- Optimize permanent channel media approval by requester/conversation, destination and media kind; changed file fingerprints do not prompt again. Immutable snapshots and legacy grant scopes are preserved; session grants cover all ordinary operations.
+
+- WeChat / QQ channels receive and send images, audio, video and files, with model image input, private staging and immutable file delivery after chat approval. Official QQ bots now provide a bot-number setting, local invitation QR and add-bot / group URL.
+
 Fix read-only classification of `input` / `cmd input`. Add compact UI navigation summaries with actual XML focus-descendant labels; empty trees no longer report completeness. Agent guidance requires observation between navigation steps, focus checks before activation, and adherence to requested information sources without assuming field equivalence.
 
 Device acceptance fixed the two-second UI baseline limit: baseline reads and post-action observation each use the caller’s bounded timeout. Added a permission-free UI/log fixture and reproducible acceptance instructions.
@@ -9,6 +15,18 @@ Device acceptance fixed the two-second UI baseline limit: baseline reads and pos
 Added optional UI action postconditions and directed device-clock log windows, preserving approval and identity checks; failed verification never replays actions, and partial trees cannot prove absence.
 
 ## [Unreleased]
+
+- Added shared Agent/MCP/A2A channel discovery and message sending, compatible WeChat Markdown, native QQ Markdown and interactive approval buttons; channel approval language follows ui_language and defaults to Chinese.
+
+- Unify path and attachment-ID delivery in `send_channel_file`, remove the screenshot-specific delivery tool, and separate WeChat captions/media into single-item requests.
+
+- Channel `/approve session` now grants all ordinary conversation operations while high risk / Root still prompt. Add generic tool-attachment delivery and suppress refused action aliases within a task.
+
+- Add TUI `/status` with a scrollable, refreshable module overview and asynchronous local readiness probes; credentials are hidden.
+
+- Channel approvals support bare `/approve` / `/deny`, session patterns and permanent exact-pattern grants, with conversation isolation, private persistence, initial dangerous confirmation and reassessment on risk changes.
+
+- Add a message-channel layer with WeChat iLink QR binding and official QQ Bot text conversations. TUI `/channels` and Web left-menu management share live status, start/stop and unbinding. Support route-bound one-shot approvals, dangerous confirmation phrases, questions, cancellation and isolated history, without a sender allowlist; platform delivery limits still apply.
 
 - Add managed background shell capture: `background=true` immediately returns `child_id`, `read_output` pages independent stream byte offsets, and `kill` stops through confirmation. Output/runtime bounds, process-group cleanup and normal-exit draining apply; task completion does not stop children, restart does not restore them, and non-root background `su` elevation is rejected.
 

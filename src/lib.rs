@@ -4,6 +4,8 @@ pub mod agent;
 /// Structured metadata for approved execution and refusal diagnostics.
 pub mod audit;
 pub mod build_identity;
+/// Message gateway, account management, and remote conversation adapters.
+pub mod channels;
 /// Validated TOML configuration and initialization wizard.
 pub mod config;
 pub mod file_references;

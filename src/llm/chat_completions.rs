@@ -6,9 +6,18 @@ pub fn request(req: &LlmRequest) -> Value {
     let mut messages = Vec::new();
     for item in &req.items {
         match item {
-            ConversationItem::Message(m) => messages.push(
-                json!({"role":role(&m.role),"content":m.content,"tool_call_id":m.tool_call_id}),
-            ),
+            ConversationItem::Message(m) => {
+                let content = if m.attachments.is_empty() {
+                    json!(m.content)
+                } else {
+                    let mut parts = vec![json!({"type":"text","text":m.content})];
+                    parts.extend(m.attachments.iter().map(|a| json!({"type":"image_url","image_url":{"url":format!("data:{};base64,{}",a.media_type,a.base64_data)}})));
+                    json!(parts)
+                };
+                messages.push(
+                    json!({"role":role(&m.role),"content":content,"tool_call_id":m.tool_call_id}),
+                );
+            }
             ConversationItem::Tools(round) => {
                 messages.push(json!({
                     "role": "assistant", "content": null,

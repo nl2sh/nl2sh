@@ -19,3 +19,6 @@ pub(super) use tailcat::*;
 
 mod update;
 pub(super) use update::*;
+
+mod channels;
+pub(super) use channels::*;

@@ -6,9 +6,9 @@ import {displayTerminalResponse} from './terminalOutput';
 import type {InstalledApp} from './types';
 import type {MemoryEntry} from './api';
 
-export type Panel = 'sessions'|'files'|'apps'|'tools'|'terminal'|'memory'|'config';
+export type Panel = 'sessions'|'files'|'apps'|'tools'|'terminal'|'memory'|'config'|'channels';
 
-export const panelWidths:Record<Panel,number>={sessions:280,files:350,apps:340,tools:390,terminal:500,memory:420,config:620};
+export const panelWidths:Record<Panel,number>={sessions:280,files:350,apps:340,tools:390,terminal:500,memory:420,config:620,channels:480};
 
 const panels:{id:Panel;label:string;path:string}[]=[
   {id:'sessions',label:'会话列表',path:'M3 4h18v13H8l-5 4V4Zm4 4h10M7 12h7'},
@@ -17,6 +17,7 @@ const panels:{id:Panel;label:string;path:string}[]=[
   {id:'tools',label:'工具列表',path:'M14 3a6 6 0 0 0 7 7l-9 9a3 3 0 0 1-4-4l9-9a6 6 0 0 0-3-3ZM4 4l5 5'},
   {id:'terminal',label:'终端',path:'M3 5h18v14H3V5Zm4 4 3 3-3 3m5 0h5'},
   {id:'memory',label:'记忆',path:'M5 5c0-2 2-3 4-2 1-2 4-2 5 0 2-1 5 1 4 3 2 1 2 4 0 5 1 2-1 4-3 4-1 2-4 3-6 1-2 2-5 1-5-2-2 1-5-1-4-3-2 0-4-2-3-4-2-1-1-4 1-5 3-2-1-4-3-3-5 0-1 0-2 0-3-1Z'},
+  {id:'channels',label:'渠道管理',path:'M4 5h16v10H9l-5 4V5Zm4 4h8M8 12h5'},
   {id:'config',label:'配置',path:'M4 6h16M4 12h16M4 18h16M9 4v4m6 2v4m-6 2v4'},
 ];
 

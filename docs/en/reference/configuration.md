@@ -79,7 +79,7 @@ See [approval grants](../guide/security-confirmation.md#approval-grants) for sco
 | `ascii_symbols` | `false` | Replaces Emoji labels with ASCII labels. |
 | `show_buddha_ascii_art` | `true` | Shows the Buddha ASCII art in startup and help content. |
 | `show_train_ascii_art` | `true` | Plays the one-shot ASCII train animation on startup. |
-| `ui_language` | `"zh_cn"` | Terminal interface language; Simplified Chinese is the default. |
+| `ui_language` | `"zh_cn"` | Terminal and channel approval language; Simplified Chinese is the default. |
 | `history_log_file` | `"nl2sh.log"` | JSON Lines interaction log, relative to the configuration directory by default. |
 | `ui_live_output_max_bytes` | `262144` | Maximum bytes retained from live command output in the TUI. |
 | `tool_output_max_bytes` | `1048576` | Maximum bytes captured for one command result. |

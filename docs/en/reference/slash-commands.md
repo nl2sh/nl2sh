@@ -4,10 +4,12 @@ Every TUI input starting with `/` after leading whitespace is local and excluded
 
 | Command | Purpose |
 | --- | --- |
+| `/status` | Module status dialog; scroll, R to refresh, Esc/Enter to close |
 | `/help` | Local help |
 | `/new` | New blank session, preserving snapshots/audit |
 | `/clear` | Clear current conversation, context, and input recall |
 | `/config`, `/setting` | Unified settings |
+| `/channels` | Channel settings, status and WeChat binding QR URL; see [message channels](../guide/channels.md) |
 | `/permission` | Inspect process ordinary-mutation grants |
 | `/permission allow`, `/permission ask` | Enable / disable that memory-only grant |
 | `/tailcat` | Model-free Web / ADB dialog with progress and copyable peer commands |

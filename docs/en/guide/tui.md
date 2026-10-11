@@ -50,3 +50,8 @@ Open `/config` (or `/setting`) and use Tab/Shift+Tab to select Tools. Up/Down se
 Enter `/tailcat`. The dialog selects the actual Web port and ADB connection port (automatically detected, falling back to editable 5555) by default. Confirming the selection starts installation and sharing without further safety prompts. It shows download and execution status, then stays open with copyable peer commands. No LLM is used; existing tools handle validation and execution. See [Tailcat](../tools/tailcat.md#tailcat-quick).
 
 Confirming or retrying automatically stops the previous managed Tailcat listener and starts sharing again. The dialog stays open after success or failure until explicitly closed.
+
+See [WeChat and QQ message channels](channels.md) for management. Channel tasks accept one-shot approvals in their originating conversation, independently of MCP/A2A local approvals and protocol auto-approval.
+
+
+`/status` opens a scrollable module overview: current task/session, execution policy, model configuration, MCP/A2A, Web, WeChat/QQ, Android Bridge, JADX and Tailcat readiness. Local probes run asynchronously with bounded timeouts. Configured credentials do not imply authenticated connectivity; the dialog makes no model request and hides credentials and provider URL paths/query strings. It also opens during an active task. Use arrows/PageUp/PageDown or the mouse wheel to scroll, R to refresh and Esc/Enter to close.

@@ -24,6 +24,9 @@ pub struct ConversationMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     /// Tool call identifier when this is a tool message.
     pub tool_call_id: Option<String>,
+    /// Bounded input images, omitted from saved sessions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<ToolAttachment>,
 }
 
 impl ConversationMessage {
@@ -33,6 +36,7 @@ impl ConversationMessage {
             role,
             content: content.into(),
             tool_call_id: None,
+            attachments: Vec::new(),
         }
     }
 }
@@ -114,7 +118,7 @@ pub struct ToolResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Provider-neutral binary content associated with a tool result.
 pub struct ToolAttachment {
-    /// MIME type, currently restricted by producers to image/png.
+    /// Image MIME type; producers validate and bound the encoded image.
     pub media_type: String,
     /// Base64 payload without a data-URL prefix.
     pub base64_data: String,

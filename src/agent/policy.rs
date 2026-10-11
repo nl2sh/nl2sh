@@ -32,6 +32,15 @@ pub struct UserQuestion {
 
 /// Answers returned from a structured user-question interface.
 pub type QuestionAnswers = BTreeMap<String, String>;
+/// Stable media-delivery scope produced by trusted tool preparation.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaApprovalScope {
+    /// Stable channel/account/conversation/sender destination, without runtime target IDs.
+    pub destination: String,
+    /// Resolved image, audio, video, or file kind.
+    pub kind: String,
+}
 /// Assessed operation and its trusted authorization scope.
 pub struct ConfirmationRequest<'a> {
     /// Human-readable approval preview.
@@ -40,6 +49,8 @@ pub struct ConfirmationRequest<'a> {
     pub tool: Option<&'a str>,
     /// Validated Android package or prepared UI target package, if known.
     pub package: Option<&'a str>,
+    /// Prepared media category and destination; never parsed from the approval preview.
+    pub media_scope: Option<MediaApprovalScope>,
 }
 impl<'a> ConfirmationRequest<'a> {
     /// Construct a shell request with no inferred Android package.
@@ -48,6 +59,7 @@ impl<'a> ConfirmationRequest<'a> {
             preview,
             tool: Some("execute_shell_command"),
             package: None,
+            media_scope: None,
         }
     }
 }
@@ -80,6 +92,16 @@ pub async fn confirm_assessed(
 #[async_trait]
 /// UI-independent approval interface invoked after every assessment.
 pub trait Confirmer: Send + Sync {
+    /// Input images for this task, never supplied by local text interfaces.
+    fn input_images(&self) -> Vec<crate::llm::ToolAttachment> {
+        Vec::new()
+    }
+
+    /// Route-bound delivery capability, available only inside message channels.
+    fn file_delivery(&self) -> Option<std::sync::Arc<dyn FileDelivery>> {
+        None
+    }
+
     /// Identifies the local approval interface in execution audits.
     fn audit_source(&self) -> &'static str {
         "internal"
@@ -298,6 +320,7 @@ mod grant_boundary_tests {
             preview: "launch",
             tool: Some("android.launch_app"),
             package: Some("com.other.app"),
+            media_scope: None,
         };
         let mut assessment = assess("touch result", &config);
         assert_eq!(assessment.risk_level, RiskLevel::Mutating);
@@ -397,6 +420,7 @@ mod grant_boundary_tests {
             preview: "launch",
             tool: Some("android.launch_app"),
             package: Some("com.example.app"),
+            media_scope: None,
         };
         let assessment = assess("touch result", &config);
         assert_eq!(
@@ -421,4 +445,41 @@ mod grant_boundary_tests {
         );
         Ok(())
     }
+}
+
+/// A route-bound file transport; only assessed and confirmed operations invoke it.
+#[async_trait]
+pub trait FileDelivery: Send + Sync {
+    /// Conversation destination shown before approval.
+    fn destination(&self) -> String;
+    /// Stable identity used for media authorization, excluding runtime target handles.
+    fn approval_destination(&self) -> String {
+        self.destination()
+    }
+    /// Retain a tool-produced attachment for this task and return an opaque reference.
+    async fn stage_attachment(
+        &self,
+        _attachment: &crate::llm::ToolAttachment,
+    ) -> Result<Option<String>> {
+        Ok(None)
+    }
+    /// Resolve a current-task reference into an immutable filename and byte snapshot.
+    fn attachment(&self, _id: &str) -> Result<(String, Vec<u8>)> {
+        anyhow::bail!("attachment references are unavailable in this delivery context")
+    }
+    /// Whether this destination accepts native command buttons.
+    fn supports_buttons(&self) -> bool {
+        false
+    }
+    /// Send assessed text/Markdown with optional native command buttons.
+    async fn send_message(
+        &self,
+        _text: &str,
+        _format: &str,
+        _buttons: &[crate::channels::outbound::MessageButton],
+    ) -> Result<serde_json::Value> {
+        anyhow::bail!("text delivery unavailable in this context")
+    }
+    /// Delivers the exact bytes captured before approval, without reopening a path.
+    async fn send_file(&self, name: &str, kind: &str, bytes: Vec<u8>, caption: &str) -> Result<()>;
 }

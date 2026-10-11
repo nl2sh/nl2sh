@@ -1,10 +1,12 @@
 mod app;
+mod channels;
 mod events;
 mod i18n;
 mod input;
 mod markdown;
 mod output;
 mod session;
+mod status;
 mod tailcat;
 mod terminal;
 mod theme;

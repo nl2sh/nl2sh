@@ -92,3 +92,5 @@ The tools panel derives optional groups from the runtime catalog and separates t
 Click the Tailcat icon and label at the top right. The dialog selects the actual Web port and ADB connection port (automatically detected, falling back to editable 5555) by default. Confirming the selection starts installation and sharing without further safety prompts. It shows download and execution status, then stays open with copyable peer commands. No LLM is used; existing tools handle validation and execution. See [Tailcat](../tools/tailcat.md#tailcat-quick).
 
 Confirming or retrying automatically stops the previous managed Tailcat listener and starts sharing again. The dialog stays open after success or failure until explicitly closed.
+
+See [WeChat and QQ message channels](channels.md) for management. Channel tasks accept one-shot approvals in their originating conversation, independently of MCP/A2A local approvals and protocol auto-approval.

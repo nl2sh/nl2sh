@@ -10,6 +10,27 @@ Android companion 与 JADX helper 源码分别由 `nl2sh/android-bridge` 和 `nl
 
 Android API 26+ 原生发行支持 `arm64-v8a`、`armeabi-v7a` 与 `x86_64`，分别映射 `aarch64-linux-android`、`armv7-linux-androideabi`、`x86_64-linux-android`。主机启动器优先选择 x86_64 原生 ABI，统一包、自更新资产与 Termux aarch64/arm/x86_64 deb/APT 使用相同发布矩阵；文档合并继续兼容既有双架构签名快照。
 
+## 消息渠道
+
+`channels/media.rs` 负责平台附件解析、可信 CDN 有界下载、微信 AES 解密和私有缓存；图片预览通过共享 ConversationMessage 附件传给模型，保存历史时清除字节。`FileDelivery` 将共享注册的 `send_channel_message` / `send_channel_file` 接入当前入口审批，原渠道或运行期已知目标由渠道所有者解析，准备阶段捕获不可变字节、大小与摘要，批准后上传。QQ 使用官方分片上传，微信使用加密 CDN 上传；不依赖原生音频编码器。`channels/qr.rs` 根据 AppID 和机器人 QQ 号本地生成官方邀请二维码，Web SVG 接口和 TUI 共用 URL。
+
+`src/channels/` 参考 Hermes 的消息网关分层，以 `MessageChannel` 分离协议收发，
+`ChannelManager` 统一凭据、生命周期、有界队列、重复消息 ID、会话隔离和状态。
+微信 iLink 扫码 + 长轮询；QQ 官方 API v2 令牌 + 出站 WebSocket + 被动 REST 回复，
+使用当前官方 `api.bot.qq.com`。TUI `/channels` 和 Web 左侧管理复用渠道服务；跨进程通过同 UID 本地 IPC 管理独占连接，
+关闭第二个界面不停止后台渠道。
+暂不重构现有 TUI/Web 对话交互为渠道，避免丢失流式显示、PTY 和浏览器审批能力。
+无发送者白名单，每个渠道/账号/会话/发送者组合隔离模型历史，群内审批绑定原成员。
+
+渠道复用共享 Agent 执行入口并传入独立 `ChannelConfirmer`，不读取协议自动审批来
+批准消息任务；安全分类后展示完整操作，120 秒一次性请求 ID、危险强确认短语、
+发送者/会话匹配、取消拒绝，不恢复旧审批。配置作用域授权仍按原边界匹配。
+渠道 `/approve` / `/deny` 消费原路由唯一 pending；`session` 将普通操作授权存入进程内原发送者/账号/会话路由表，风险逐次重评，危险/Root/Critical/强确认排除，`/new` 清除；`always` 经首次危险强确认后私有原子写入 Saved.command_allowlist，后续只匹配完整相同模式，Root / Critical 排除。多 pending 不隐式选择。
+协议 MCP/A2A 本地审批保持独立。接收与串行诊断 worker 分离，队列最多 32 条，
+心跳不等待 Agent；停用取消并等待任务，重启不自动重放。状态和凭据分离，
+私有 0700/0600 原子状态、跨进程独占锁、有界 2048 ID 账本，阻塞写入放 worker。
+Android 继续 rustls/Bionic/API 26+，未修改 PTY/终端恢复。双语用户说明在 guide/channels。
+
 ## 系统整体架构
 
 Codex 实机开发闭环使用仓库级 `.agents/skills/nl2sh-device-lab` 和主机
@@ -331,3 +352,15 @@ Agent 将租约移交子进程，后续 UI/Shell 动作重新获取；读取/停
 ## 电视导航取证与输入注入分类
 
 原始 Shell 的 input / cmd input 统一升至 Dangerous，包含方向键和确认键，继续由现有 AST、Broker 和强确认边界执行。UI shell 快照保存内部 XML 父节点关系，导航摘要列出焦点及其真实子孙标签，不按坐标或邻近文字猜目标；节点补充可聚焦、选中、启用与滚动属性，缺失为未知。空 hierarchy 不报告完整。Agent 导航提示逐步取证、激活前核对焦点与包名，并按用户指定的信息来源查证，不假定不同来源字段等价；提示不构成执行授权，不新增自动按键或 PTY 路径。
+
+TUI `status` viewer gathers bounded, asynchronous read-only runtime/channel/protocol snapshots independently of Agent execution; configuration and verified readiness are displayed separately.
+
+All media use `send_channel_file` with a local path or task-scoped opaque attachment ID. The Agent registers tool-produced attachments in a bounded in-memory store owned by ChannelConfirmer, then snapshots exact bytes for delivery approval; producers such as android.screenshot remain independent. WeChat captions and media each use one item per request. Channel task-local refusal fingerprints suppress retries through aliases without carrying refusal into later user tasks.
+
+## Shared outbound channels and interactions
+
+Runtime-only known targets bind opaque IDs to account/peer/sender and private context. Agent/MCP/A2A share registered list_channel_targets, send_channel_message and send_channel_file; source-config identity and same-UID bounded IPC reach the existing owner without starting another gateway. Preparation snapshots media before the caller’s independent confirmer; channel grants do not propagate into protocol calls. Stops invalidate targets. QQ sends native Markdown and command keyboards, consumes approval callbacks atomically with route/expiry/strong-phase checks, and acknowledges unique interaction events within a two-second intake budget. WeChat filters unsupported Markdown while preserving code. Approval language reads ui_language, default Chinese; PTY and Android API 26 boundaries are unchanged.
+
+媒体永久授权由 PreparedExecution 提供结构化 MediaApprovalScope，经过 ConfirmationRequest 传入渠道审批；不从预览文字推断范围。范围绑定原路由、稳定目的地和媒体类型，并保持工具/风险/规则匹配；运行期 target ID 不参与永久身份。旧记录保留精确预览。实际执行继续使用独立不可变字节快照；session 保留原会话所有普通操作语义。
+
+配置工具的 Unix 写入使用有界 flock RAII 锁，保留审批快照检查及原子替换。渠道命令上下文明确区分授权与 execute_confirm_policy；session/always 建立后发送单语言 Markdown 回执，所有者 revoke_permanent_approval 在内存/磁盘同步撤销指定 SHA-256 模式，不提供待处理请求审批接口。

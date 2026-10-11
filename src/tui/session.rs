@@ -240,6 +240,8 @@ async fn run_inner(
     let mut question_prompt: Option<QuestionUi> = None;
     let mut session_picker: Option<SessionPicker> = None;
     let mut settings_editor: Option<SettingsEditor> = None;
+    let mut channels_editor: Option<super::channels::Editor> = None;
+    let mut status_viewer: Option<super::status::Viewer> = None;
     let update_config = config.clone();
     let mut update_check: Option<UpdateFuture> = crate::update::self_update_enabled().then(|| {
         Box::pin(async move { crate::update::check(&update_config).await }) as UpdateFuture
@@ -348,11 +350,29 @@ async fn run_inner(
             if let Some(wizard) = tailcat_wizard.as_mut() {
                 wizard.poll();
             }
+            if let Some(editor) = channels_editor.as_mut() {
+                editor.poll().await;
+            }
+            if let Some(viewer) = status_viewer.as_mut() {
+                viewer.poll().await;
+            }
             app.popup = confirmation
                 .as_ref()
                 .map(ConfirmationUi::view)
                 .or_else(|| question_prompt.as_ref().map(QuestionUi::view))
                 .or_else(|| tailcat_wizard.as_ref().map(super::tailcat::Wizard::view))
+                .or_else(|| {
+                    status_viewer.as_ref().map(|viewer| {
+                        viewer.view(super::status::Live {
+                            busy: active.is_some(),
+                            phase: &app.status,
+                            session: &session_name,
+                            turns: model_history.len(),
+                            run_permission: run_wide_approval.load(Ordering::Acquire),
+                        })
+                    })
+                })
+                .or_else(|| channels_editor.as_ref().map(super::channels::Editor::view))
                 .or_else(|| session_picker.as_ref().map(SessionPicker::view))
                 .or_else(|| update_prompt.as_ref().map(UpdatePrompt::view))
                 .or_else(|| {
@@ -805,6 +825,14 @@ async fn run_inner(
                     }
                     continue;
                 }
+                if let Some(viewer) = status_viewer.as_mut() {
+                    match mouse.kind {
+                        MouseEventKind::ScrollUp => viewer.scroll(false),
+                        MouseEventKind::ScrollDown => viewer.scroll(true),
+                        _ => {}
+                    }
+                    continue;
+                }
                 match mouse.kind {
                     MouseEventKind::ScrollUp => app.scroll_conversation_up(3),
                     MouseEventKind::ScrollDown => app.scroll_conversation_down(3),
@@ -888,6 +916,12 @@ async fn run_inner(
                     question_prompt = None;
                     app.status =
                         localized_status(config.ui_language, "智能体运行中", "agent running");
+                }
+                continue;
+            }
+            if let Some(viewer) = status_viewer.as_mut() {
+                if viewer.key(key) {
+                    status_viewer = None;
                 }
                 continue;
             }
@@ -986,6 +1020,12 @@ async fn run_inner(
                 }
                 continue;
             }
+            if let Some(editor) = channels_editor.as_mut() {
+                if editor.key(key) {
+                    channels_editor = None;
+                }
+                continue;
+            }
             if let Some(editor) = settings_editor.as_mut() {
                 let Some(key) = fragmented_arrow.normalize(key) else {
                     continue;
@@ -1070,6 +1110,11 @@ async fn run_inner(
                 apply_windows_scroll_action(&mut app, windows_scroll_filter.push(key.code));
                 continue;
             }
+            if key.code == KeyCode::Enter && app.input.text.trim() == "/status" {
+                app.take_input();
+                status_viewer = Some(super::status::Viewer::new(config));
+                continue;
+            }
             if active.is_some() && key.code == KeyCode::Enter {
                 continue;
             }
@@ -1095,6 +1140,24 @@ async fn run_inner(
                         "/exit" => {
                             log.record("local_command", "/exit")?;
                             return Ok(SessionExit::Quit);
+                        }
+                        "/channels" => {
+                            if let Some(manager) = config
+                                .source
+                                .as_deref()
+                                .and_then(crate::channels::ChannelManager::lookup)
+                            {
+                                channels_editor = Some(
+                                    super::channels::Editor::new(manager, config.ui_language).await,
+                                );
+                            } else {
+                                app.status = localized_status(
+                                    config.ui_language,
+                                    "渠道服务不可用，请检查 Web 服务启动状态",
+                                    "Channel manager unavailable; check Web service startup",
+                                );
+                            }
+                            continue;
                         }
                         "/config" | "/setting" => {
                             log.record("local_command", input.trim())?;

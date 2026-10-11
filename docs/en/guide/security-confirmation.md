@@ -62,3 +62,13 @@ uses = 20
 Templates reload before each required confirmation; expiry, exhaustion and revocation need no restart. Counters live in a private grant directory under the configuration's state directory (0700 directory, 0600 files), with a process-shared file lock and atomic persistence. Corrupt or unsafe state cannot grant approval. TUI execution/security settings show a snapshot when opened; Web advanced rules provide a refreshable read-only list and immediate ID revocation. Revocation does not stop an already-approved or running action. Web management retains the existing owner-interface trust boundary; protocol clients gain no remote approval endpoint.
 
 Audits distinguish grants with `approval = "approved_by_grant"` and `grant_id`. Grant decisions never create remembered task or run permissions.
+
+See [WeChat and QQ message channels](channels.md) for management. Channel tasks accept one-shot approvals in their originating conversation, independently of MCP/A2A local approvals and protocol auto-approval.
+
+Channel attachments are untrusted data. File delivery requires approval in the originating chat, with destination, size and SHA-256 in the preview; delivery uses the immutable snapshot captured before approval. Image bytes, media keys and signed URLs are omitted from saved history, and cached paths may expire. See [channel management](channels.md).
+
+Channel `/approve session` grants all ordinary operations for the originating sender/conversation until `/new` or restart; Dangerous, Root, Critical and strong-confirmation operations still prompt individually. `/approve` releases once and `/deny` rejects. For ordinary media delivery, `/approve always` matches the original requester/conversation, destination and media kind, retaining tool/risk/rule checks and independent immutable snapshots. Other operations retain exact complete-preview matching and initial dangerous strong confirmation. Legacy records are never automatically broadened. Multiple pending requests require IDs. See [channel approvals](channels.md).
+
+QQ approval callbacks reuse originating-route pending checks; dangerous second confirmation still requires its complete phrase. Approval language follows ui_language, default Chinese. Generic channel tools invoked from MCP/A2A retain independent protocol approval and cannot inherit destination channel grants. See [Channels](channels.md).
+
+Configuration tool writes use a bounded cross-process `flock` lock on Android and other Unix platforms, revalidate the approved snapshot while locked, then save atomically. A busy lock or changed snapshot refuses the write. Channel approval commands do not modify global approval policy; `execute_confirm_policy="always"` only means asking every time.

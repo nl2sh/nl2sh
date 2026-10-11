@@ -3195,6 +3195,28 @@ DeviceIdle 与白名单证据。
 }
 ```
 
+## `list_channel_targets`
+
+只读列出当前配置的渠道已知会话及 Markdown、媒体和按钮能力；不返回凭据或 context_token。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `read_only` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "type": "object"
+}
+```
+
 ## `list_dex_classes`
 
 读取有界 DEX 类名索引，可按字面类名过滤。
@@ -3599,6 +3621,165 @@ DeviceIdle 与白名单证据。
   },
   "required": [
     "query"
+  ],
+  "type": "object"
+}
+```
+
+## `send_channel_file`
+
+审批后向原渠道会话或已发现目标发送本地路径/当前任务附件的图片、音频、视频或文件；发送前固定字节与摘要。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "attachment_id": {
+      "default": null,
+      "description": "Opaque ID returned by a tool in this channel task, such as android.screenshot without a path.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "caption": {
+      "default": "",
+      "description": "Optional accompanying text (maximum 1000 UTF-8 bytes).",
+      "type": "string"
+    },
+    "kind": {
+      "default": "auto",
+      "description": "auto, image, audio, video, or file; file preserves arbitrary binary formats.",
+      "type": "string"
+    },
+    "path": {
+      "default": null,
+      "description": "Existing local file. Provide exactly one of path or attachment_id; no URL is accepted.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "target": {
+      "default": null,
+      "description": "Opaque ID from list_channel_targets; omit only in a channel conversation.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "type": "object"
+}
+```
+
+## `send_channel_message`
+
+统一发送文本、Markdown、图片、音频、视频、文件及 QQ 指令按钮；支持原会话或已发现目标，所有发送保留调用入口的审批策略。
+
+| 描述项 | 值 |
+| --- | --- |
+| 工具组 | `-` |
+| 默认启用 | `true` |
+| 平台要求 | `any` |
+| 连接器能力 | `-` |
+| 扩展要求 | `none` |
+| 风险下限 | `mutating` |
+| 调度策略声明 | `sequential` |
+| 生命周期 | `call` |
+
+```json
+{
+  "$defs": {
+    "Kind": {
+      "enum": [
+        "text",
+        "markdown",
+        "image",
+        "audio",
+        "video",
+        "file",
+        "auto"
+      ],
+      "type": "string"
+    },
+    "MessageButton": {
+      "additionalProperties": false,
+      "description": "A native command button. Clicking inserts/sends this command through normal intake.",
+      "properties": {
+        "command": {
+          "description": "Text inserted in the conversation, at most 256 bytes.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Visible label, at most ten characters.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "command"
+      ],
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attachment_id": {
+      "default": null,
+      "description": "Reference produced in this channel Agent task; never reusable across MCP calls or tasks.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "buttons": {
+      "default": [],
+      "description": "QQ native command buttons; not available in WeChat or media messages.",
+      "items": {
+        "$ref": "#/$defs/MessageButton"
+      },
+      "type": "array"
+    },
+    "kind": {
+      "$ref": "#/$defs/Kind",
+      "description": "text/markdown use text; image/audio/video/file/auto use exactly one path or attachment_id."
+    },
+    "path": {
+      "default": null,
+      "description": "Local regular file; remote URLs are not accepted.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "target": {
+      "default": null,
+      "description": "Opaque ID from list_channel_targets; omit only to reply to the originating channel.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "text": {
+      "default": "",
+      "description": "Message body, or optional media caption (maximum 1000 bytes for media).",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind"
   ],
   "type": "object"
 }

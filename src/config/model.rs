@@ -202,7 +202,7 @@ pub struct Config {
     pub show_buddha_ascii_art: bool,
     /// Plays the one-shot ASCII train animation on startup.
     pub show_train_ascii_art: bool,
-    /// Terminal interface language; Simplified Chinese is the default.
+    /// Terminal and channel approval language; Simplified Chinese is the default.
     pub ui_language: UiLanguage,
     /// JSON Lines interaction log, relative to the configuration directory by default.
     pub history_log_file: PathBuf,

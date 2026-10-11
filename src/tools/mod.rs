@@ -25,6 +25,8 @@ macro_rules! define_tool {
 pub mod android;
 pub mod apk;
 pub mod audio;
+pub(crate) mod channel_file;
+mod channel_message;
 pub mod chart;
 mod configuration;
 mod extended;
@@ -453,6 +455,10 @@ pub(crate) trait PreparedExecution: Send {
     fn approval_package(&self) -> Option<&str> {
         None
     }
+    /// Stable media authorization supplied only by prepared delivery tools.
+    fn media_approval_scope(&self) -> Option<crate::agent::MediaApprovalScope> {
+        None
+    }
     async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput>;
 }
 
@@ -497,6 +503,11 @@ impl PreparedToolCall {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn channel_file_test_adapter() -> Box<dyn Tool> {
+    Box::new(channel_file::SendChannelFileTool)
+}
+
 fn all_adapters() -> Vec<Box<dyn Tool>> {
     let mut tools: Vec<Box<dyn Tool>> = vec![
         Box::new(ShellTool),
@@ -520,6 +531,9 @@ fn all_adapters() -> Vec<Box<dyn Tool>> {
         Box::new(ListDirTool),
         Box::new(SearchTextTool),
         Box::new(ApplyPatchTool),
+        Box::new(channel_file::SendChannelFileTool),
+        Box::new(channel_message::ListChannelTargetsTool),
+        Box::new(channel_message::SendChannelMessageTool),
         Box::new(ChartTool),
         Box::new(sessions::ListTool),
         Box::new(sessions::SearchTool),
@@ -679,7 +693,7 @@ mod tests {
             .into_iter()
             .map(|tool| tool.name)
             .collect::<Vec<_>>();
-        assert_eq!(names.len(), 63);
+        assert_eq!(names.len(), 66);
         assert_eq!(
             names.iter().collect::<std::collections::HashSet<_>>().len(),
             names.len()

@@ -4,10 +4,12 @@
 
 | 命令 | 用途 |
 | --- | --- |
+| `/status` | 模块状态对话框；滚动查看，R 刷新，Esc/Enter 关闭 |
 | `/help` | 本地帮助 |
 | `/new` | 新空白会话，保留快照和审计 |
 | `/clear` | 清空当前对话、模型上下文和输入历史 |
 | `/config`、`/setting` | 统一设置面板 |
+| `/channels` | 渠道设置、状态、微信绑定二维码 URL；详见[消息渠道](../guide/channels.md) |
 | `/permission` | 查看运行期普通修改许可 |
 | `/permission allow`、`/permission ask` | 开启 / 关闭该内存许可 |
 | `/tailcat` | 无需模型的 Web / ADB 共享弹窗，显示进度与可复制对端命令 |

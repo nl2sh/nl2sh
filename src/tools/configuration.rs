@@ -268,6 +268,41 @@ fn describe(
     result
 }
 
+// Android's std::fs::File::lock is unsupported on some Rust/NDK combinations.
+// Use the same Bionic-compatible flock protocol for every Unix writer.
+#[cfg(unix)]
+struct ConfigLock(File);
+#[cfg(unix)]
+impl ConfigLock {
+    fn acquire(file: File) -> Result<Self> {
+        use std::os::fd::AsRawFd;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+                return Ok(Self(file));
+            }
+            let error = std::io::Error::last_os_error();
+            if !matches!(
+                error.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+            ) {
+                return Err(error).context("cannot acquire configuration lock");
+            }
+            if std::time::Instant::now() >= deadline {
+                bail!("configuration is busy; request a new call");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+}
+#[cfg(unix)]
+impl Drop for ConfigLock {
+    fn drop(&mut self) {
+        use std::os::fd::AsRawFd;
+        unsafe { libc::flock(self.0.as_raw_fd(), libc::LOCK_UN) };
+    }
+}
+
 struct ConfigOperation {
     path: PathBuf,
     before: Option<String>,
@@ -301,6 +336,9 @@ impl PreparedExecution for ConfigOperation {
                 if !lock.metadata()?.is_file() {
                     bail!("configuration lock must be a regular file")
                 }
+                #[cfg(unix)]
+                let _lock = ConfigLock::acquire(lock)?;
+                #[cfg(not(unix))]
                 lock.lock().context("cannot acquire configuration lock")?;
                 if read_snapshot(&operation.path)? != operation.before {
                     bail!("configuration changed since approval preview; request a new call")
@@ -923,6 +961,35 @@ mod tests {
             fs::read_to_string(dir.path().join("selected.toml"))?,
             "model = 'old'\n"
         );
+        Ok(())
+    }
+    #[cfg(unix)]
+    #[test]
+    fn configuration_flock_excludes_other_writers_and_releases_on_drop() -> Result<()> {
+        use std::os::{fd::AsRawFd, unix::fs::OpenOptionsExt};
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("lock");
+        let first = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)?;
+        let guard = ConfigLock::acquire(first)?;
+        let second = OpenOptions::new().read(true).write(true).open(&path)?;
+        assert_eq!(
+            unsafe { libc::flock(second.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+            -1
+        );
+        assert_eq!(
+            std::io::Error::last_os_error().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        drop(guard);
+        let guard = ConfigLock::acquire(second)?;
+        drop(guard);
+        let third = OpenOptions::new().read(true).write(true).open(path)?;
+        let _guard = ConfigLock::acquire(third)?;
         Ok(())
     }
 }

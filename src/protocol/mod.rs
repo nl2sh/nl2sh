@@ -2,7 +2,7 @@
 mod a2a;
 mod approval;
 pub(crate) mod connections;
-mod execution;
+pub(crate) mod execution;
 mod mcp;
 mod store;
 mod tasks;

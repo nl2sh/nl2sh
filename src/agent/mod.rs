@@ -7,7 +7,8 @@ pub use crate::tools::{builtin_tools, command_tool, ShellToolArgs};
 pub use context::ConversationContext;
 pub use policy::{
     can_remember_approval, confirm_assessed, ConfirmationDecision, ConfirmationRequest, Confirmer,
-    QuestionAnswers, QuestionOption, StdioConfirmer, UserQuestion,
+    FileDelivery, MediaApprovalScope, QuestionAnswers, QuestionOption, StdioConfirmer,
+    UserQuestion,
 };
 pub use runner::{android_shell_constraints, AgentOutcome, AgentRunFailure, AgentRunner};
 pub(crate) use runner::{apply_audio_answers, audio_metadata_questions};

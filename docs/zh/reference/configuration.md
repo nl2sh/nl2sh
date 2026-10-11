@@ -14,7 +14,7 @@
 
 `api_type` 可选 `auto/responses/chat_completions`；auto 省略序列化但仍为默认。`security_level` 可选 `strict/balanced/unsafe`，`execute_confirm_policy` 可选 `always/risk_only/never`；宽松设置也不能解除强制修改或危险确认。`protocol_auto_approve` 是单独、默认关闭的显式协议设置，见 [安全确认](../guide/security-confirmation.md)。
 
-`execute_user_mode` 是 `auto/normal/root`；`ui_language` 是 `zh_cn/en`，终端默认中文，网站语言选择独立于此配置。预算 `fast/normal/deep` 与显式覆盖见 [Agent](../advanced/agent-mode.md)。
+`execute_user_mode` 是 `auto/normal/root`；`ui_language` 是 `zh_cn/en`，终端及渠道审批默认中文，网站语言选择独立于此配置。预算 `fast/normal/deep` 与显式覆盖见 [Agent](../advanced/agent-mode.md)。
 
 `tool_groups` 的 `jadx`、`tailcat` 未设置时关闭；`tool_overrides` 按名覆盖。`tailcat_binary_path` 在 Android 默认为 `/data/local/tmp/tailcat`，开发主机默认为 `tailcat`。下方生成默认值来自开发主机，不代表平台路径完全相同。
 
@@ -79,7 +79,7 @@
 | `ascii_symbols` | `false` | 用 ASCII 标签替代 Emoji |
 | `show_buddha_ascii_art` | `true` | 启动/帮助佛像装饰开关 |
 | `show_train_ascii_art` | `true` | 启动小火车装饰开关 |
-| `ui_language` | `"zh_cn"` | zh_cn/en 终端语言 |
+| `ui_language` | `"zh_cn"` | 终端界面和渠道审批语言，默认中文 |
 | `history_log_file` | `"nl2sh.log"` | JSONL 日志路径，相对状态目录 |
 | `ui_live_output_max_bytes` | `262144` | TUI 实时输出保留字节上限 |
 | `tool_output_max_bytes` | `1048576` | 单流执行捕获字节上限 |

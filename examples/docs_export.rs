@@ -27,12 +27,13 @@ fn main() -> Result<()> {
             help.push(clean_help(nested.render_long_help().to_string()));
         }
     }
+    let tools = configured_tools(&catalog_config);
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
             "defaults": defaults,
             "cli": help,
-            "tools": configured_tools(&catalog_config),
+            "tools": tools,
             "tool_descriptors": nl2sh::tools::builtin_descriptors().iter().map(|tool| serde_json::json!({"policy": tool, "parameters": (tool.schema)(tool)})).collect::<Vec<_>>(),
         }))?
     );

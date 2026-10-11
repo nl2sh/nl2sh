@@ -6,7 +6,14 @@ pub fn request(req: &LlmRequest) -> Value {
     for item in &req.items {
         match item {
             ConversationItem::Message(m) => {
-                input.push(json!({"role":role(&m.role),"content":m.content}))
+                let content = if m.attachments.is_empty() {
+                    json!(m.content)
+                } else {
+                    let mut parts = vec![json!({"type":"input_text","text":m.content})];
+                    parts.extend(m.attachments.iter().map(|a| json!({"type":"input_image","image_url":format!("data:{};base64,{}",a.media_type,a.base64_data)})));
+                    json!(parts)
+                };
+                input.push(json!({"role":role(&m.role),"content":content}));
             }
             ConversationItem::Tools(round) => {
                 input.extend(round.calls.iter().map(|call| {

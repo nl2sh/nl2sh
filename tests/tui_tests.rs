@@ -674,3 +674,75 @@ async fn tui_startup_honors_protocol_switch_and_displays_owner_connections() -> 
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn channel_settings_open_edit_secret_privately_and_close_without_model_request(
+) -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "api_key=''\nshow_buddha_ascii_art=false\nshow_train_ascii_art=false\nui_language='en'\n",
+    )?;
+    let mut process = spawn_tui(&config)?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(5)).await?;
+    process.master.write_all(b"/channels\r")?;
+    wait_for_text(
+        &mut process.master,
+        "Channel settings",
+        Duration::from_secs(5),
+    )
+    .await?;
+    // Tab moves over the first five rows to the masked AppSecret field.
+    process
+        .master
+        .write_all(b"\t\t\t\t\tprivate-channel-secret")?;
+    sleep(Duration::from_millis(150)).await;
+    let mut visible = String::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        match process.master.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => visible.push_str(&String::from_utf8_lossy(&buffer[..n])),
+            Err(e) if e.kind() == ErrorKind::WouldBlock => break,
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    assert!(!visible.contains("private-channel-secret"));
+    process.master.write_all(b"\x1b")?;
+    sleep(Duration::from_millis(100)).await;
+    process.master.write_all(&[0x11])?;
+    assert!(timeout(Duration::from_secs(5), process.child.wait())
+        .await??
+        .success());
+    let logs = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
+    assert!(!logs.contains("private-channel-secret"));
+    assert!(!logs.contains("\"kind\":\"user\""));
+    Ok(())
+}
+
+#[tokio::test]
+async fn module_status_opens_refreshes_and_closes_without_model_request() -> anyhow::Result<()> {
+    let directory = tempdir()?;
+    let config = directory.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "api_key=''\nshow_buddha_ascii_art=false\nshow_train_ascii_art=false\nui_language='en'\n",
+    )?;
+    let mut process = spawn_tui(&config)?;
+    wait_for_text(&mut process.master, "Ctrl+Q", Duration::from_secs(5)).await?;
+    process.master.write_all(b"/status\r")?;
+    wait_for_text(&mut process.master, "Module status", Duration::from_secs(5)).await?;
+    process.master.write_all(b"r")?;
+    sleep(Duration::from_millis(200)).await;
+    process.master.write_all(b"\x1b")?;
+    sleep(Duration::from_millis(100)).await;
+    process.master.write_all(&[0x11])?;
+    assert!(timeout(Duration::from_secs(5), process.child.wait())
+        .await??
+        .success());
+    let logs = std::fs::read_to_string(directory.path().join("nl2sh.log"))?;
+    assert!(!logs.contains("\"kind\":\"user\""));
+    Ok(())
+}

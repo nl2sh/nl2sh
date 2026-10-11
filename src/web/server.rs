@@ -15,6 +15,7 @@ pub fn welcome_url() -> Option<&'static str> {
 /// Handle of the embedded server; its task lives until the runtime exits.
 
 pub struct WebServer {
+    channels: Arc<crate::channels::ChannelManager>,
     pub(in crate::web) protocol: Option<crate::protocol::HttpServer>,
     pub(in crate::web) url: String,
     pub(in crate::web) task: tokio::task::JoinHandle<std::io::Result<()>>,
@@ -30,6 +31,7 @@ impl WebServer {
 
     /// Cancel active tasks and pending approvals, then drain HTTP connections.
     pub async fn shutdown(mut self) -> Result<()> {
+        self.channels.shutdown().await;
         let protocol_result = match self.protocol.as_mut() {
             Some(server) => server.shutdown().await,
             None => Ok(()),
@@ -133,11 +135,12 @@ pub(in crate::web) async fn start_with_listener(
 ) -> Result<WebServer> {
     let config = crate::config::load_or_default_unvalidated(&path)?;
     config.validate_runtime()?;
+    let channels = crate::channels::ChannelManager::start(path.clone()).await?;
     let protocol = if config.protocol_start_with_service
         && crate::protocol::connection_info(&path).await.state != "running"
     {
         Some(
-            crate::protocol::start_http(
+            match crate::protocol::start_http(
                 path.clone(),
                 Ipv4Addr::UNSPECIFIED.into(),
                 config.protocol_service_port,
@@ -145,7 +148,14 @@ pub(in crate::web) async fn start_with_listener(
                 true,
             )
             .await
-            .context("cannot start MCP/A2A with the UI service")?,
+            .context("cannot start MCP/A2A with the UI service")
+            {
+                Ok(server) => server,
+                Err(error) => {
+                    channels.shutdown().await;
+                    return Err(error);
+                }
+            },
         )
     } else {
         None
@@ -182,6 +192,7 @@ pub(in crate::web) async fn start_with_listener(
             .await
     });
     Ok(WebServer {
+        channels,
         protocol,
         url,
         task,
@@ -199,6 +210,8 @@ pub(in crate::web) fn router(state: Arc<Shared>) -> Router {
         .route("/healthz", get(|| async { Json(serde_json::json!({"status":"ok"})) }))
         .route("/api/info", get(get_info))
         .route("/api/connections", get(get_connections))
+        .route("/api/channels", get(get_channels).post(channel_action))
+        .route("/api/channels/qq/qr.svg", get(qq_invitation_qr))
         .route("/api/update", get(get_update).post(start_update))
         .route("/api/update/progress", get(update_progress))
         .route("/api/version", get(|| async { env!("CARGO_PKG_VERSION") }))

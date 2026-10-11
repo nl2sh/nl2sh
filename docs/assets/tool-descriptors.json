@@ -754,6 +754,178 @@
   },
   {
     "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "attachment_id": {
+          "default": null,
+          "description": "Opaque ID returned by a tool in this channel task, such as android.screenshot without a path.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caption": {
+          "default": "",
+          "description": "Optional accompanying text (maximum 1000 UTF-8 bytes).",
+          "type": "string"
+        },
+        "kind": {
+          "default": "auto",
+          "description": "auto, image, audio, video, or file; file preserves arbitrary binary formats.",
+          "type": "string"
+        },
+        "path": {
+          "default": null,
+          "description": "Existing local file. Provide exactly one of path or attachment_id; no URL is accepted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "default": null,
+          "description": "Opaque ID from list_channel_targets; omit only in a channel conversation.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "policy": {
+      "category": "file",
+      "concurrency": "sequential",
+      "default_enabled": true,
+      "description": "Send a local image, audio, video or arbitrary file, or a tool attachment by its current-task attachment_id, to the originating message-channel conversation, after approval of its destination, filename, size and SHA-256. Outside channel tasks, specify a target from list_channel_targets. Does not execute the file or follow remote URLs.",
+      "group": null,
+      "lifetime": "call",
+      "name": "send_channel_file",
+      "platform": "any",
+      "requires": [],
+      "risk": "mutating",
+      "runtime": "none"
+    }
+  },
+  {
+    "parameters": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "policy": {
+      "category": "file",
+      "concurrency": "sequential",
+      "default_enabled": true,
+      "description": "List runtime-known WeChat/QQ destinations and Markdown, media and button capabilities for the active configuration. IDs expire on channel stop/restart; no arbitrary peer or context token can be supplied. Read-only; the gateway must already be running.",
+      "group": null,
+      "lifetime": "call",
+      "name": "list_channel_targets",
+      "platform": "any",
+      "requires": [],
+      "risk": "read_only",
+      "runtime": "none"
+    }
+  },
+  {
+    "parameters": {
+      "$defs": {
+        "Kind": {
+          "enum": [
+            "text",
+            "markdown",
+            "image",
+            "audio",
+            "video",
+            "file",
+            "auto"
+          ],
+          "type": "string"
+        },
+        "MessageButton": {
+          "additionalProperties": false,
+          "description": "A native command button. Clicking inserts/sends this command through normal intake.",
+          "properties": {
+            "command": {
+              "description": "Text inserted in the conversation, at most 256 bytes.",
+              "type": "string"
+            },
+            "label": {
+              "description": "Visible label, at most ten characters.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "label",
+            "command"
+          ],
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "attachment_id": {
+          "default": null,
+          "description": "Reference produced in this channel Agent task; never reusable across MCP calls or tasks.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "buttons": {
+          "default": [],
+          "description": "QQ native command buttons; not available in WeChat or media messages.",
+          "items": {
+            "$ref": "#/$defs/MessageButton"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind",
+          "description": "text/markdown use text; image/audio/video/file/auto use exactly one path or attachment_id."
+        },
+        "path": {
+          "default": null,
+          "description": "Local regular file; remote URLs are not accepted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "default": null,
+          "description": "Opaque ID from list_channel_targets; omit only to reply to the originating channel.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "default": "",
+          "description": "Message body, or optional media caption (maximum 1000 bytes for media).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "policy": {
+      "category": "file",
+      "concurrency": "sequential",
+      "default_enabled": true,
+      "description": "Send text, native QQ Markdown, compatible WeChat Markdown, image, audio, video or arbitrary file to a known channel target, or the originating conversation. Always assessed and approved before transport; file bytes and SHA-256 are snapshotted before approval. QQ text/Markdown may include command buttons. Errors after partial delivery must not be automatically retried. MCP/A2A retain their own approval policy.",
+      "group": null,
+      "lifetime": "call",
+      "name": "send_channel_message",
+      "platform": "any",
+      "requires": [],
+      "risk": "mutating",
+      "runtime": "none"
+    }
+  },
+  {
+    "parameters": {
       "$defs": {
         "ChartType": {
           "description": "Supported presentation types.",
