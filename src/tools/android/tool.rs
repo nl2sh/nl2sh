@@ -466,16 +466,12 @@ impl PreparedExecution for AndroidUiAction {
     async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput> {
         let executor = ctx.executor.context("Android executor unavailable")?;
         // Read the baseline after approval, immediately before dispatch; never across user waits.
-        let baseline = if self
-            .args
-            .verification
-            .as_ref()
-            .is_some_and(|v| v.verify_change)
-        {
-            verification::baseline(executor).await
-        } else {
-            None
-        };
+        let baseline =
+            if let Some(request) = self.args.verification.as_ref().filter(|v| v.verify_change) {
+                verification::baseline(executor, request).await
+            } else {
+                None
+            };
         let content = match self.name {
             "android.screen_dump" => {
                 let snapshot = match companion::screen_dump(executor).await {

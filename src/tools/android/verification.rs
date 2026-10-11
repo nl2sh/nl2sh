@@ -25,7 +25,7 @@ pub struct UiVerification {
     pub text_present: Option<String>,
     /// Exact visible text or content description that must be absent from a complete current viewport tree.
     pub text_absent: Option<String>,
-    /// Overall post-action observation deadline, 100–10000 milliseconds (default 2000).
+    /// Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).
     pub timeout_ms: Option<u32>,
 }
 impl UiVerification {
@@ -108,11 +108,19 @@ fn signature(value: &Value) -> Result<String> {
         Sha256::digest(serde_json::to_vec(&stable)?)
     ))
 }
-pub(crate) async fn baseline(executor: &dyn CommandExecutor) -> Option<Value> {
-    timeout(Duration::from_secs(2), snapshot(executor))
-        .await
-        .ok()?
-        .ok()
+pub(crate) async fn baseline(
+    executor: &dyn CommandExecutor,
+    request: &UiVerification,
+) -> Option<Value> {
+    // Shell uiautomator reads can legitimately take more than two seconds. Let the
+    // caller's bounded observation budget apply to this pre-action read as well.
+    timeout(
+        Duration::from_millis(request.timeout_ms.unwrap_or(2000) as u64),
+        snapshot(executor),
+    )
+    .await
+    .ok()?
+    .ok()
 }
 fn contains(nodes: &[Value], text: &str) -> bool {
     let hash = automation::full_text_hash(text);
@@ -250,6 +258,17 @@ mod tests {
             tokio::time::sleep(Duration::from_secs(5)).await;
             bail!("probe unavailable")
         }
+    }
+    #[tokio::test]
+    async fn baseline_uses_the_requested_budget_and_remains_bounded() {
+        let request = UiVerification {
+            verify_change: true,
+            timeout_ms: Some(100),
+            ..Default::default()
+        };
+        let start = Instant::now();
+        assert!(baseline(&SlowProbe, &request).await.is_none());
+        assert!(start.elapsed() < Duration::from_millis(500));
     }
     #[tokio::test]
     async fn slow_observation_respects_deadline_and_reports_unknown() -> Result<()> {

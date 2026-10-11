@@ -131,3 +131,24 @@ Emulator evidence does not replace vendor-device, Root, Termux-permission or oth
 ABI acceptance testing.
 
 The delegated example is `.agents/skills/nl2sh-device-lab/assets/delegated-smoke.json`. It requires device model configuration; use the same `run` command with this `--case`.
+
+
+## UI and directed-log acceptance fixture
+
+`scripts/fixtures/android-ui/` contains a separate, permission-free Android application with no persistent data. Use it to exercise UI postconditions and directed logs without a model or real application data. Install only on a dedicated test target; the package is `com.nl2sh.acceptance.fixture`. Building uses the installed SDK/JDK without downloading or modifying the SDK:
+
+```sh
+python3 scripts/build-android-ui-fixture.py --output /private/lab/fixture
+adb -s SERIAL install -t /private/lab/fixture/fixture.apk
+```
+
+The initial screen shows `Ready`, `Count: 0` and a `Seed` input field. Invoke native MCP `nl2sh_invoke`, approving each mutation through the same-UID interactive terminal:
+
+- Tap `Increment`, requesting `verify_change=true` and `text_present="Count: 1"`, with a bounded timeout suitable for a slower shell UI reader.
+- Tap once more while requesting text that never appears. Expect failure with `action_sent=true`; UI change does not prove the requested outcome. A short timeout must also retain sent-action and unknown evidence. Read the counter to check that each action ran only once.
+- Focus `Seed`, append ASCII using `android.input_text`, and verify readback. With Bridge accessibility and keyboard disabled, Unicode must be refused without changing the field; this does not verify successful Unicode input.
+- Tap `Begin loading` and verify that `Done` appears and `Loading` disappears. Tap `Open child`, then verify that `android.press_back` returns to the original page.
+- Tap `Emit logs` and query `NL2SH_ACCEPTANCE:I *:S` with both package and explicit PID filters. Check `evidence-marker`, PID, time windows and synthetic-credential redaction. A short window should exclude old entries; reaching the line limit must be reported.
+- Stop the fixture: querying by package must fail without falling back to global logs. Relaunch, verify a new main-process PID, and query that process again.
+
+Stop the test process and uninstall the fixture. Do not clear system logs or change existing application settings. Retain exact ELF identity, bounded raw results, assertions and screenshots in a private report directory. Screenshots or prose never substitute for tool success fields.

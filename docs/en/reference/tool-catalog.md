@@ -326,7 +326,7 @@ Append text to the focused control. Unicode requires the enabled Android Accessi
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -423,7 +423,7 @@ Launch a validated Android package.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -509,7 +509,7 @@ Press Android Back.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -589,7 +589,7 @@ Press Android Enter.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -669,7 +669,7 @@ Press Android Home.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -838,7 +838,7 @@ Scroll by swiping between Android display coordinates.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -979,7 +979,7 @@ Force-stop a validated Android package.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -1065,7 +1065,7 @@ Swipe between Android display coordinates.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -1184,7 +1184,7 @@ Tap a coordinate on the current Android display.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -1279,7 +1279,7 @@ Tap a unique node with exact current bounds.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -1365,7 +1365,7 @@ Tap a unique visible node with exact text.
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [

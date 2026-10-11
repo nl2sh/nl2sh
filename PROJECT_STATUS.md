@@ -6,7 +6,7 @@
 - android_logcat 支持设备时区的 1–3600 秒窗口和主进程包名/PID 定向查询，失去目标不回退全局，默认尽力脱敏并明确匹配条目限额。
 - 独立 Helper 增加只读一键诊断与显式修复入口，核对 ADB、UID/API/ABI、安装版本、受管服务、运行 ELF、Web 身份、协议与 Bridge；不查询 Release、不启动或修改设置，不读取协议令牌。
 - 公共工具 Schema 和双语指南同步；Android API 26+、三 ABI 与 Security → Confirmation → Execution 保持，未改 PTY/终端恢复。
-- 验证：Rust 分权限回归 517 项通过、4 项既有忽略；格式与 all-targets 检查通过，Android API 26 ARMv7/ARM64/x86_64 编译检查通过。双语派生参考、50 对页面、严格 MkDocs 与渲染后检查通过。Helper 39 项单元测试、debug/release 构建与 lint 通过。API 34 真机服务/Web 身份匹配组件测试通过；诊断卡片视觉验收被其他应用的前台提醒遮挡，最终组件测试为 1 项通过、1 项因遮挡跳过，未计为视觉验收通过。测试使用独立应用 ID，并清理临时包，保留原 helper 与设备服务。严格 Clippy 被既有告警阻断；尚未在真机部署新的原生工具做端到端动作验证。
+- 验证：Rust 分权限回归 517 项通过、4 项既有忽略；格式与 all-targets 检查通过，Android API 26 ARMv7/ARM64/x86_64 编译检查通过。双语派生参考、50 对页面、严格 MkDocs 与渲染后检查通过。Helper 39 项单元测试、debug/release 构建与 lint 通过。前次 API 34 组件验收为 1 项通过、1 项因其他应用遮挡跳过；随后独立运行端与 API 35 模拟器端到端验收见下方记录。严格 Clippy 被既有告警阻断。
 
 Last Updated: 2026-10-11
 
@@ -596,6 +596,15 @@ Last Updated: 2026-10-11
 - `RUSTDOCFLAGS='-D missing_docs' cargo doc --no-deps`：通过。
 - `./cross-compile.sh`：通过；使用 NDK r28c 构建 Android 26 AArch64 PIE，解释器为 `/system/bin/linker64`。
 - ARMv7 真机：`--version`、Responses Agent 两轮请求、`getprop` PTY 执行/结果回传和 `adb shell -t` TUI Ctrl+Q 恢复均通过。
+
+## Android 第一阶段端到端验收（2026-10-11）
+
+- API 34 ARMv7 真机运行端与新建 API 35 x86_64 模拟器上的隔离 helper，通过宿主机回环端口转发完成实际 ADB、Web、协议与运行二进制身份核对；原有运行端配置和独立服务保持不变。
+- 真实目标诊断 instrumentation 2 项通过；完整 helper 界面完成竖屏、320dp 窄屏加 2 倍字体、横屏诊断与滚动检查，修复深色诊断卡片目标地址文字颜色。
+- 无权限测试应用验证启动、点击、加载完成、子页面返回、后置条件不成立与超时未知、动作不自动重放。修复变更验证基线读取未使用请求 timeout_ms 的问题；基线与后置观测分别受该预算约束。
+- 日志验证包名/显式 PID、时间窗口、合成敏感字段脱敏、行数截断、进程重启后 PID 更新；应用停止后拒绝包名查询且不回退全局日志。停止后的桌面 UI 树不完整，因此 UI 消失条件仍为未知。
+- 未启用 Bridge 时中文输入在动作前拒绝。目标电视输入法会转换 ASCII 标点并保留字母组合态，精确文本条件正确报告不匹配；数字输入后置条件验证通过，不据此宣称任意 ASCII 输入正常。
+- Rust 测试 518 项通过，4 项既有忽略用例；root 专属用例另在隔离容器验证，Android 三 ABI 检查通过。helper 39 项单元测试、debug/release 构建与 lint 通过；双语文档严格构建及生成引用一致性检查通过。
 
 ## Next Steps
 

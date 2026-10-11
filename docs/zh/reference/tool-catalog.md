@@ -326,7 +326,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -423,7 +423,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -509,7 +509,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -589,7 +589,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -669,7 +669,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -838,7 +838,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -979,7 +979,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -1065,7 +1065,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -1184,7 +1184,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -1279,7 +1279,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -1365,7 +1365,7 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           ]
         },
         "timeout_ms": {
-          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
           "format": "uint32",
           "minimum": 0,
           "type": [

@@ -61,7 +61,7 @@ Rust 解析最多 64 MiB、10 万 packet、50 万事件、32768 个线程，单 
 {"text":"搜索","verification":{"verify_change":true,"expected_package":"com.example.app","text_present":"结果","text_absent":"加载中","timeout_ms":2000}}
 ```
 
-字段可组合，至少指定一项检查：`verify_change` 比较审批后、动作执行前与执行后的完整 UI 树；`expected_package` 要求当前焦点窗口属于精确包名；`text_present` / `text_absent` 匹配精确文字或内容描述。超时默认 2000 ms，范围 100–10000 ms；基线读取另有最多 2 秒预算，不跨人工审批保存。验证期间轮询且不自动滚动。
+字段可组合，至少指定一项检查：`verify_change` 比较审批后、动作执行前与执行后的完整 UI 树；`expected_package` 要求当前焦点窗口属于精确包名；`text_present` / `text_absent` 匹配精确文字或内容描述。超时默认 2000 ms，范围 100–10000 ms；基线读取与动作后观察分别使用该预算；较慢的 shell UI 读取可显式提高超时，基线不跨人工审批保存。验证期间轮询且不自动滚动。
 
 结果包含 `action_sent`、原 `action_result` 和 `verification` 中的 `ui_changed`、`expectation_met`、逐项结果、`observation_complete`、`passed`。`observation_complete` 仅表示取得完整 UI 树；单独验证焦点包名时不读取树，该字段为 false。未请求或无法验证的布尔值为 null；全部请求的检查满足才报告工具成功。验证超时、条件不满足或部分/失败树会报告工具失败，但 `action_sent: true` 表示动作已发送一次，**失败不撤销动作**，重试前应重新观察。UI 变化不等于业务成功，文字缺失仅针对完整当前视口，不证明屏幕外或其他窗口不存在目标。
 

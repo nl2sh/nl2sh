@@ -1975,7 +1975,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2047,7 +2047,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2212,7 +2212,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2293,7 +2293,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2365,7 +2365,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2452,7 +2452,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2535,7 +2535,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2648,7 +2648,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2775,7 +2775,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2841,7 +2841,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -2907,7 +2907,7 @@
               ]
             },
             "timeout_ms": {
-              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "description": "Deadline for the baseline read and separately for all post-action observation, 100–10000 ms (default 2000).",
               "format": "uint32",
               "minimum": 0,
               "type": [

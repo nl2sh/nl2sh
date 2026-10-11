@@ -104,3 +104,24 @@ rollback 结果。主机崩溃期间的恢复不保证事务性；失败回滚�
 模拟器验证不代替厂商真机、Root、Termux 权限和其他 ABI 的验收。
 
 委派示例位于 `.agents/skills/nl2sh-device-lab/assets/delegated-smoke.json`，需要设备端模型配置；使用与确定性案例相同的 `run` 命令替换 `--case`。
+
+
+## UI 与定向日志验收夹具
+
+`scripts/fixtures/android-ui/` 提供无权限、无持久数据的独立 Android 应用，用于验证 UI 后置条件及定向日志，无需模型或真实用户应用数据。只在专用测试设备上安装；应用包名为 `com.nl2sh.acceptance.fixture`。构建仅使用已安装的 SDK/JDK，不下载或修改 SDK：
+
+```sh
+python3 scripts/build-android-ui-fixture.py --output /private/lab/fixture
+adb -s SERIAL install -t /private/lab/fixture/fixture.apk
+```
+
+启动后显示 `Ready`、`Count: 0` 和 `Seed` 输入框。通过原生 MCP 的 `nl2sh_invoke` 执行并在同 UID 交互终端逐项审批：
+
+- 点击 `Increment`，要求 `verify_change=true` 和 `text_present="Count: 1"`，使用较慢 shell 设备可承受的有界超时。
+- 再点击一次，故意要求不存在的文字；结果必须为失败且 `action_sent=true`，界面变化不能证明预期达成。短超时也应保留已发送动作及未知证据；读取计数确认每次只增加一次。
+- 点击 `Seed` 后以 `android.input_text` 输入 ASCII 并验证读回；Bridge 无障碍及输入法未启用时，Unicode 请求应拒绝而不修改输入框，不把该场景当成 Unicode 成功验收。
+- 点击 `Begin loading`，验证 `Done` 出现且 `Loading` 消失；点击 `Open child` 后，用 `android.press_back` 验证回到原页面。
+- 点击 `Emit logs`，以 `android_logcat` 的包名和显式 PID 分别查询 `NL2SH_ACCEPTANCE:I *:S`，检查 `evidence-marker`、PID、时间窗口和合成凭据的脱敏。短窗口排除旧条目；达到行限额应明确报告。
+- 停止夹具应用后包名查询必须失败，不回退全局日志；重新启动后复核新主进程 PID，再查询新进程日志。
+
+关闭测试进程并卸载夹具；不清除系统日志、不改变现有应用的设置。保存精确 ELF 身份、原始有界结果、逐项断言和截图到私有报告目录。截图或自然语言说明不能替代工具成功字段。
