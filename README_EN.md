@@ -14,7 +14,7 @@ Let AI complete real tasks in Android Shell. nl2sh is a multi-turn tool-calling 
 - OpenAI-compatible models, multi-turn Agent, streaming replies, recovery, and @ file references.
 - Device/UI/file/network/audio tools; optional APK/JADX, Tailcat, and ima.
 - Local TUI/Web risk classification and approvals, retained for Root and edited commands.
-- Optional host A2A/MCP and Android companion; “Hermes-like” does not promise API/plugin compatibility.
+- Built-in device HTTP/stdio MCP, A2A 1.0, and optional Android companion; “Hermes-like” does not promise API/plugin compatibility.
 
 ```text
 User → Agent → Tool Calling → Security → Confirmation → Android Shell
@@ -24,7 +24,7 @@ User → Agent → Tool Calling → Security → Confirmation → Android Shell
 
 Install host adb, enable and authorize USB debugging, then download and verify the [Release ZIP](https://github.com/nl2sh/nl2sh/releases/latest). Extract it completely and run `android-run-linux.sh` or `android-run-windows.bat`. Configure a model with `/config`, then ask “Show how much storage this device has left.”
 
-You can also install the [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) APK on an Android controller. Connect by TCP ADB or the target's Wireless debugging; the helper deploys the ARM64/ARMv7 build and opens its Web UI in a browser. Access to the helper repository and Releases is required. See the [installation guide](https://nl2sh.github.io/nl2sh/en/getting-started/installation/#nl2sh-helper).
+You can also install the [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) APK on an Android controller. Connect by TCP ADB or the target's Wireless debugging; the helper deploys the ARM64/ARMv7/x86_64 build and opens its Web UI in a browser. Access to the helper repository and Releases is required. See the [installation guide](https://nl2sh.github.io/nl2sh/en/getting-started/installation/#nl2sh-helper).
 
 In Termux:
 

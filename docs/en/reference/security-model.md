@@ -6,6 +6,8 @@ Shell assessment primarily uses `brush-parser` AST, expansion/effect analysis, a
 
 Structured tools share risk/confirmation policy and implement bounded reads, previews, target revalidation, and atomic writes. `unsafe` / `never` cannot remove mandatory production approval. `protocol_auto_approve` is an explicit default-off protocol confirmer, not a model privilege; see [approvals](../guide/security-confirmation.md).
 
+`approval_grants` match the tool, trusted package, and risk ceiling after final assessment, allowing eligible actions without manual confirmation and persistently consuming uses. The list defaults empty; Root, Critical, and strong-confirmation actions remain excluded. Non-interactive CLI can use valid grants; unmatched actions requiring approval are refused. The local Tailcat quick dialog treats selecting fixed ports as authorization for its limited check/install/stop/share tools. Model and generic protocol calls retain their original confirmer. See [approvals](../guide/security-confirmation.md) and [Tailcat](../tools/tailcat.md#tailcat-quick) for the full conditions.
+
 ## Boundaries and limitations
 
 - File tools have no workspace sandbox; process permissions define reach.
@@ -19,7 +21,7 @@ PTY groups, cancellation, timeout, wait, and terminal restoration form an execut
 
 ## Managed UI ownership and execution audits
 
-A managed task acquires the Android UI lease before its first UI preparation and keeps it until completion or cancellation, including model and confirmation waits. Other managed processes wait up to ten seconds before reporting that the device is busy. Privileged native Android shell commands share this lease; direct commands hold it during execution. Unrelated static file/APK reads remain available. External touches, ADB and the user-controlled `/shell` can still change device state, so action targets are revalidated.
+A managed task acquires the Android UI lease before its first UI preparation and normally keeps it until completion or cancellation, including model and confirmation waits. Bounded background continuation waits release it. A managed background shell that may mutate state transfers the lease to its supervisor until the child ends; read-only background collection does not retain it. Later UI/shell actions reacquire the lease and revalidate targets. Other managed processes wait up to ten seconds before reporting that the device is busy. Privileged native Android shell commands share this lease; direct commands hold it during execution. Unrelated static file/APK reads remain available. External touches, ADB and the user-controlled `/shell` can still change device state, so action targets are revalidated.
 
 Contiguous declared read-only calls can run in batches of at most four. Mutating tools, UI tools and shell commands form serial barriers. Prepared risk is checked again; batches cannot execute shell actions or elevated-risk preparations. Results retain their requested order, and budgets and approvals remain in force.
 

@@ -1,8 +1,10 @@
 # Project Status
 
-Last Updated: 2026-10-10
+Last Updated: 2026-10-11
 
 ## Recent Changes
+
+- 文档按当前源码核对：修正设备内置 MCP/A2A、原生 service 启动与签名更新、三 ABI 与当前 Slash Commands、JADX 固定摘要来源及安装/反编译审批区别；同步助手生命周期、Bridge 管理、本机安装与已验证缓存回退。安全说明补齐作用域授权凭据和后台 Shell 的 UI 租约转移；历史版本验证记录保留当时含义。
 
 - 新增托管后台 Shell：`execute_shell_command.background=true` 经原动态分类、编辑重评估、确认和命令能力绑定后立即返回随机 `child_id`；`read_output` 按独立 stdout/stderr 原始字节偏移读取状态与有界尾部，`kill` 经修改确认停止原进程组并等待回收，不接受任意 PID。独立 session、null stdin、非阻塞管道与专用监督线程，不修改 PTY/终端恢复；`waitid(WNOWAIT)` 在组清理前保留首领身份，TERM/KILL 后 wait。每进程 16 句柄、每流 1 MiB、默认一小时且最多一天，终态淘汰/偏移缺失显式报告。配置身份隔离，任务结束/取消不停止已启动命令，正常进程退出清理、重启不恢复；可能修改状态的 Android 后台命令续持 UI 租约，只读采集不续持；Agent 在成功后台启动后移交租约，同任务后续 UI/Shell 动作也需重新获取。非 root 后台 su 提权明确拒绝，已 root 执行仍沿用安全确认。双语工具说明、模型提示、派生 Schema、交互式设备回归驱动同步。
   验证：`cargo fmt --all -- --check`、`cargo check`、`cargo check --all-targets` 通过；Rust 套件按权限分组共 507 项通过、4 项显式忽略，覆盖启动/双流/分页截断、超时/忽略 TERM、父 shell 先退出、跨任务与配置隔离、拒绝/编辑确认、su 计划拒绝及 Agent 返回真实句柄而不等待前台。Android API 26 三 ABI `cargo check --release --target <target> --no-default-features`、ARMv7 release 构建通过。Android 14/API 34 ARMv7 Root 真机通过独立候选 ELF 摘要校验与 72 项断言：持续 logcat、Root tcpdump、拒绝停止保持运行、批准停止回收、双流偏移、超时强制停止、16 活动句柄上限、20 次启停/首领回收/fd 恢复与正常退出清理。既有服务未替换；OOM、异常父进程死亡、逃逸进程组及厂商回收不构成已验证或保证的能力。双语派生参考、50 对页面、严格 MkDocs 与渲染后检查通过；`cargo clippy --lib` 完成，保留既有告警，新增后台模块无告警。
@@ -393,10 +395,10 @@ Last Updated: 2026-10-10
 
 - Product positioning: 以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent；核心程序以单个可执行文件交付，提供多轮 Tool Calling 和丰富 TUI，不声称与 Hermes API 或插件兼容。
 - Build status: 当前 Cargo 版本为 1.1.0；构建与测试结果见下方 Verification Performed。
-- Test status: 全量 `cargo test --all-targets` 通过；显式凭据 ima live smoke 按设计忽略。
-- Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android` 与 `armv7-linux-androideabi` release 产物。
+- Test status: 最近按权限分组的验证结果见 Recent Changes 与 Verification Performed；显式 live 测试默认忽略，部分 Android UI/ADB 回归需要 root。
+- Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android`、`armv7-linux-androideabi` 与 `x86_64-linux-android` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
-- CI release workflow: 已添加 `.github/workflows/release.yml`，在推送 `v*` tag 时用 GitHub Actions 并行交叉编译 `aarch64-linux-android` 与 `armv7-linux-androideabi`，将两个程序放入统一包的 ABI 子目录，并与自动选择设备/ABI 的 Linux/Windows BAT 启动脚本、`config.toml.example`、双语 README 与 `docs/` 打包为单一 `.tar.gz`/`.zip`，附带 SHA256 校验和发布到 GitHub Release；`workflow_dispatch` 可手动触发草稿发布。
+- CI release workflow: 已添加 `.github/workflows/release.yml`，在推送 `v*` tag 时用 GitHub Actions 并行交叉编译 `aarch64-linux-android`、`armv7-linux-androideabi` 与 `x86_64-linux-android`，将三个程序放入统一包的 ABI 子目录，并与自动选择设备/ABI 的 Linux/Windows BAT 启动脚本、`config.toml.example`、双语 README 与 `docs/` 打包为单一 `.tar.gz`/`.zip`，附带 SHA256 校验和发布到 GitHub Release；`workflow_dispatch` 可手动触发草稿发布。
 - Known blockers: 无；标签发布产物状态由 GitHub Actions 最终结果确认。
 
 ## Completed
@@ -421,20 +423,20 @@ Last Updated: 2026-10-10
 - endpoint/model/api-type CLI 覆盖，覆盖后统一配置校验。
 - 隔离子进程 SIGINT 回归测试，验证 Agent 退出及 PTY 进程组回收。
 - 单 frame Agent TUI、内嵌确认弹窗、实时状态/输出，以及真实伪终端生命周期回归测试。
-- 缺失配置时直接进入 TUI，普通任务在 Provider 配置完成前被本地拒绝；`/config` 可完成全部设置，`/provider` 配置 API Endpoint、API Key 和协议，`/model` 单独配置模型，并在保存后热重载客户端。
+- 缺失配置时直接进入 TUI，普通任务在 Provider 配置完成前被本地拒绝；`/config` 与别名 `/setting` 可完成 Provider、模型、工具和协议等设置，保存后热重载客户端；分散的 `/provider`、`/model`、`/models`、`/proxy` 已移除。
 - TUI 底部输入框独占一行，运行状态、轮数和剩余上下文在下一行显示。
 - 对话历史按用户、Tool、Agent、命令、成功和错误等语义类型使用不同颜色。
 - 对话历史逐条持久化到默认配置目录下的 `0600` JSON Lines 日志，供异常排查。
 - 只读应用版本查询及其命令替换循环不再误判为修改操作；替换内副作用仍需确认。
 - TUI 捕获滚轮以浏览历史；按住 Shift 拖选时由宿主终端原生高亮选区并通过右键菜单复制，PageUp/PageDown 仍可浏览历史。
 - 输入框使用统一主题的青蓝色闪烁光标和聚焦边框，支持 Left/Right/Home/End/Delete 定位编辑，并可用 Up/Down 调取当前会话已提交的输入历史。
-- 输入以 `/` 开头时显示垂直命令候选菜单；Up/Down 选择，Enter 补全，列出 `/help`、`/clear`、`/config`、`/provider` 和 `/model`。
+- 输入以 `/` 开头时显示垂直命令候选菜单；Up/Down 选择，Enter 补全，列出 `/help`、`/new`、`/clear`、`/config`、`/setting`、`/permission`、`/tailcat`、`/balance`、`/sessions`、`/update`、`/shell` 和 `/exit`。
 - TUI、初始化向导与安全确认支持中文/英文，默认中文；启动历史区预置常用 Android 任务和操作说明，且不进入模型上下文。
 - 输入行和低权重状态行使用统一主题的 `background_alt`，快捷键分隔线使用 `border`/`border_focus`，其余 frame 使用非纯黑 `background`。
 - `android-build-run.sh` 会选择或连接 ADB 设备、查询 ABI 并自动选择对应 Rust target，再执行 root adbd、交叉编译、推送和启动；不支持 root adbd 时才回退 `su -c`，私有配置不可读则提前失败。
 - `android-build-run.ps1` 使用 NDK `windows-x86_64` LLVM 工具链在 Windows PowerShell 原生完成同等的设备选择、ABI 自动编译、root/su 回退和启动流程，无需 Bash 或 WSL。
-- `android-run-linux.sh` 与可双击的 `android-run-windows.bat` 会在无设备时提示连接网络 ADB、单设备自动选择、多设备按编号选择，再查询 ABI 并从 `bin/arm64-v8a` 或 `bin/armeabi-v7a` 推送对应程序；同时保留 root adbd 优先、`su` 回退和私有配置保护。
-- 部署文档说明了文件存在却由 ABI/ELF interpreter 不匹配引发 `No such file or directory` 的情况，并给出 AArch64/ARMv7 识别、重建和验证步骤。
+- `android-run-linux.sh` 与可双击的 `android-run-windows.bat` 会在无设备时提示连接网络 ADB、单设备自动选择、多设备按编号选择，再查询 ABI 并从 `bin/x86_64`、`bin/arm64-v8a` 或 `bin/armeabi-v7a` 推送对应程序，优先原生 x86_64；同时保留 root adbd 优先、`su` 回退和私有配置保护。
+- 部署文档说明了文件存在却由 ABI/ELF interpreter 不匹配引发 `No such file or directory` 的情况，并给出 AArch64/ARMv7/x86_64 识别、重建和验证步骤。
 - adb TTY 将鼠标 SGR 序列拆成按键字符时，输入边界会过滤 `[<数字;数字;数字M/m`，且空闲 Esc 不再误清已有输入；确认弹窗 Esc 行为不变。
 - `/dev/null` 重定向与 fd 复制不再把只读诊断误判为修改或连带要求 root；真实文件写入和命令副作用仍受确认保护，strict 仍按定义确认全部命令。
 - 工具执行期间保留有界实时输出，完成后结果默认折叠并可用 F2 展开/收起；模型接收带显式截断标记的有界结果，最终答复被要求使用用户语言及可读表格或文本总结。
@@ -442,16 +444,16 @@ Last Updated: 2026-10-10
 - F2 展开工具结果后按 ratatui 实际换行高度定位和滚动，不再用逻辑历史条目数限制大结果，长命令与输出可完整浏览。
 - 交互命令退出后恢复备用屏幕与鼠标捕获，并使 ratatui 强制完整重绘，避免第二轮对话只显示结果而框架消失。
 - 配置、安全、root、HTTP mock 和 Agent loop 测试源码。
-- GitHub Actions release workflow：tag 推送自动构建 AArch64/ARMv7 Android release、打包快速启动脚本并发布 Release。
-- `pack-release.sh` 与 `pack-release.ps1` 可在 Linux/Windows 本地构建双 ABI，并输出与 GitHub Release ZIP 相同的 `nl2sh-android/` 目录结构和 SHA256 校验文件。
-- 面向普通用户的中文使用说明，覆盖 ADB 连接、Linux/Windows 启动、自动设备/32/64 位选择和常见故障，并纳入统一 release 压缩包。
-- `screenshots/nl2sh.gif` 动态操作演示嵌入中文使用说明与 README，release 压缩包同步包含 `screenshots/`，保证打包后的说明动图完整。
+- GitHub Actions release workflow：tag 推送自动构建 AArch64/ARMv7/x86_64 Android release、打包快速启动脚本并发布 Release。
+- `pack-release.sh` 与 `pack-release.ps1` 可在 Linux/Windows 本地构建三 ABI，并输出与 GitHub Release ZIP 相同的 `nl2sh-android/` 目录结构和 SHA256 校验文件。
+- 正式双语用户文档位于 `docs/zh/` 与 `docs/en/`，覆盖 ADB 连接、Linux/Windows 启动、自动设备/ABI 选择和常见故障，并纳入统一 release 压缩包；根目录教程仅保留入口。
+- `docs/assets/nl2sh.gif` 动态操作演示嵌入 README，release 压缩包同步包含双语 `docs/` 与共享素材；旧的 `screenshots/` 和完整根目录使用说明已移除。
 - 已建立 `UI_DESIGN.md`，统一定义深色 TUI palette、语义颜色、各界面区域样式、ANSI 256 fallback、实现边界和验收标准；规范明确颜色不得改变或替代安全分类与确认流程。
 - 已在 `src/tui/theme.rs` 实现集中式 Theme/Palette 与 TrueColor/ANSI 256 能力选择，并迁移标题栏、对话、Markdown、工具结果、表格、快捷键、输入区、状态栏、命令菜单和确认弹窗；长正文与 stdout 不再继承成功绿色。
-- 命令审批改为固定 `1-6` 列表，支持方向键/Enter 与 `y/n/a/e/i/t` 别名；可在当前 Agent 任务内记住完全相同的普通命令，但 Root、Dangerous、Critical 和强确认命令始终禁用该选项，且许可不持久化、不做前缀匹配。
+- 命令审批使用固定 `1-7` 列表，支持方向键/Enter 与 `y/a/r/n/e/i/t` 别名；可在当前 Agent 任务内记住完全相同的普通命令，但 Root、Dangerous、Critical 和强确认命令始终禁用该选项，且许可不持久化、不做前缀匹配。
 - 审批区域使用完整风险色边框和统一 `background_alt` 面板背景；阶段切换保持稳定最小高度并清空整个面板，避免列表字符残留到强确认或编辑画面。
 - 审批面板锚定在输入区正上方的左下角；初始审批忽略孤立 Esc 和大写 CSI 尾字符，避免 adb 将方向键拆分后误触拒绝或 always 导致弹窗消失。
-- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.0.6。
+- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.1.0。
 - 实时 TUI、捕获式工具结果、发给模型的 Tool Result、JSONL 单事件和单文件均有可配置上限；截断会插入明确标记。
 - TUI 输出与历史生命周期已从 session 控制器拆为独立模块，同时保留新的审批菜单和任务级精确命令许可。
 - 真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵已完成，覆盖提权与确认链、超时回收，以及全屏程序退出后的终端恢复和 TUI 重绘。
@@ -466,19 +468,21 @@ Last Updated: 2026-10-10
 
 - 根包若通过 crates.io `cargo package` 发布，需先发布版本匹配的 `nl2sh-tool-macros` 编译期依赖；GitHub/TUR 的完整源码归档构建及单 ELF 运行交付不受影响。
 - 真机矩阵已覆盖 root/非 root、超时和全屏交互程序；未覆盖的设备、su 或终端实现仍可能存在兼容差异。
-- 源码编译启动脚本仅自动映射 `arm64-v8a` 与 `armeabi-v7a`；其他设备 ABI 会明确拒绝，显式 `RUST_TARGET` 与设备不匹配时也会停止。
+- 源码编译启动脚本自动映射 `x86_64`、`arm64-v8a` 与 `armeabi-v7a`，优先原生 x86_64；其他设备 ABI 会明确拒绝，显式 `RUST_TARGET` 与设备不匹配时也会停止。
 - Agent TUI 在 LLM 和捕获式命令执行期间保持同一 ratatui frame；全屏交互命令会临时挂起 TUI，退出后恢复并完整重绘。
 - 新主题已完成渲染与样式测试，仍需在不同 adb shell 宿主的 TrueColor/ANSI 256、窄屏和实际电视显示效果下做真机可读性验证。
 
 ## Technical Decisions
 
-- reqwest 关闭默认 feature，只使用 rustls、JSON 和 stream feature。
+- reqwest 关闭默认 feature，启用 rustls、JSON、stream 与 SOCKS 代理 feature。
 - Provider JSON 与 Agent 通过统一类型隔离。
 - su 命令作为独立 argv 传递，避免 nl2sh 自己做不安全 shell quoting。
 - 安全规则只允许自定义规则提高风险，内置规则不可被清空。
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- 文档源码对齐：代码派生 CLI/配置/工具参考 `--check`、50 对双语页面检查、`mkdocs build --strict`、构建后路由/编辑链接/语言切换检查、31 项 Python 脚本测试、`cargo fmt --all -- --check`、`cargo check` 与 `git diff --check` 通过；配套仓库 31 份 Markdown 的本地链接、锚点与双语页面对齐检查通过。Linux 普通 UID 下 `cargo test` 的库套件为 393 项通过、2 项显式忽略、5 项 Android UI/ADB 回归失败；这五项使用受 shell/root 能力过滤的工具，与既有按权限分组验证的限制一致。 随后独立执行的 103 项集成测试（含 PTY/TUI）、6 项 CLI 测试和 1 项宏测试通过，另有 2 项集成 live 测试按设计忽略。
 
 - MCP/A2A 连接展示：完整 `cargo test --workspace --all-targets` 通过（440 项通过、4 项显式 live 测试忽略），39 项 Web 测试与生产构建通过；格式及全目标编译检查、CLI service/stdio 回归、Android API 26 AArch64/ARMv7/x86_64 编译检查通过。新增回归覆盖实际 HTTP 公告 origin、stdio 无 HTTP、私有权限、PID 启动身份、同状态目录不同配置、遗留记录不误报、CLI/Web 连接一致与令牌不泄露。真实浏览器验证自定义端口、复制地址/客户端配置、Esc 与焦点恢复、390px 窗口、停止/stdio 切换刷新和查询失败清除旧地址；实际 TUI 伪终端验证运行状态、公告地址、鉴权/stdio 说明及安全退出。49 对双语文档、派生参考、严格 MkDocs 构建与站点检查通过。严格 Clippy 仍被既有 17 项告警阻断，本次连接模块无新增告警。
 

@@ -21,7 +21,7 @@ flowchart LR
 | `/mcp` | Bearer 鉴权，Streamable HTTP；不是旧 SSE `/sse` |
 | `nl2sh protocol stdio` | 设备本地 stdin/stdout MCP，使用启动用户权限 |
 
-HTTP 服务与 Web 独立。默认监听 `0.0.0.0:8765`，`--allow-insecure-http=true`。公告 IP 从 IPv4 路由/活动网卡自动获取，找不到时回退本机；`--advertised-url` 可覆盖给 Agent Card 与 Host/Origin 校验使用的 origin。未设 `NL2SH_PROTOCOL_TOKEN` 或配置 `protocol_token` 时生成 64 字符、256 bit 系统随机令牌并打印启动连接信息；设置时要求 32–256 个可打印 ASCII 字符且不打印值。自动令牌重启即换，在运行期间以 0600 权限保存到协议公告以供 TUI/Web 显示，并加入任务快照脱敏。所有持有同一令牌的调用者共享同一个可信所有者，不提供多租户任务隔离；task/context ID 不是访问凭据。Host 必须匹配公告 authority 或本地监听地址；有 Origin 时必须匹配公告 origin。缺少/错误令牌返回 401，错误 Host/Origin 返回 403。只需本机可用时设置 `--host 127.0.0.1`；`--allow-insecure-http=false` 拒绝非本机 HTTP 监听。
+HTTP 服务与 Web 独立。默认监听 `0.0.0.0:8765`，`--allow-insecure-http=true`。公告 IP 从 IPv4 路由/活动网卡自动获取，找不到时回退本机；`--advertised-url` 可覆盖给 Agent Card 与 Host/Origin 校验使用的 origin。未设 `NL2SH_PROTOCOL_TOKEN` 或配置 `protocol_token` 时生成 64 字符、256 bit 系统随机令牌并打印启动连接信息；设置时要求 32–256 个无空格可打印 ASCII 字符且不打印值。自动令牌重启即换，在运行期间以 0600 权限保存到协议公告以供 TUI/Web 显示，并加入任务快照脱敏。所有持有同一令牌的调用者共享同一个可信所有者，不提供多租户任务隔离；task/context ID 不是访问凭据。Host 必须匹配公告 authority 或本地监听地址；有 Origin 时必须匹配公告 origin。缺少/错误令牌返回 401，错误 Host/Origin 返回 403。只需本机可用时设置 `--host 127.0.0.1`；`--allow-insecure-http=false` 拒绝非本机 HTTP 监听。
 
 MCP 使用官方 Rust SDK；支持 `2025-11-25`、`2025-06-18`、`2024-11-05` 协议版本。HTTP 使用无服务器会话模式，客户端仍按协议执行 initialize/initialized 生命周期；无须保存 `Mcp-Session-Id`。服务不提供 MCP resources/prompts、远程审批、采样或 MCP Tasks 扩展。
 
@@ -65,6 +65,8 @@ Task 使用 `id/contextId/status/history/artifacts`。状态为 `TASK_STATE_SUBM
 ## 执行、审批与取消
 
 直接调用与 Agent 调用都复用工具注册、参数校验、准备、风险评估、资源锁、确认、权限绑定和审计。远程宽松配置提升至至少 balanced/risk_only；执行使用捕获式管道。默认修改等待设备本地交互终端审批，最多八个请求、120 秒；危险类需要精确短语。协议不提供批准工具。显式 `protocol_auto_approve` 可自动批准所有风险等级，仅影响协议确认器。
+
+本地配置的作用域授权凭据也在最终评估后求值：匹配的合格操作可不产生终端审批请求，Root、Critical 和强确认仍排除。`protocol_auto_approve` 是另一个显式确认器，范围不同。完整规则见[安全确认](../guide/security-confirmation.md)。
 
 同一 context 的 Agent 任务在服务内串行处理，并使用独立的 `protocol-` 会话名；Web/TUI 会话不复用该命名空间。Android UI 互斥仍使用现有跨进程锁。HTTP 请求断连不自动重放或回滚 A2A 任务；查询已知 task 后再决定是否重新提交。message ID 不提供 exactly-once 保证。
 

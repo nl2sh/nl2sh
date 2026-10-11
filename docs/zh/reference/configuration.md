@@ -12,7 +12,7 @@
 
 ## 常用设置
 
-`api_type` 可选 `auto/responses/chat_completions`；auto 省略序列化但仍为默认。`security_level` 可选 `strict/balanced/unsafe`，`execute_confirm_policy` 可选 `always/risk_only/never`；宽松设置也不能解除强制修改或危险确认。桥接自动批准是单独、默认关闭的显式设置，见 [安全确认](../guide/security-confirmation.md)。
+`api_type` 可选 `auto/responses/chat_completions`；auto 省略序列化但仍为默认。`security_level` 可选 `strict/balanced/unsafe`，`execute_confirm_policy` 可选 `always/risk_only/never`；宽松设置也不能解除强制修改或危险确认。`protocol_auto_approve` 是单独、默认关闭的显式协议设置，见 [安全确认](../guide/security-confirmation.md)。
 
 `execute_user_mode` 是 `auto/normal/root`；`ui_language` 是 `zh_cn/en`，终端默认中文，网站语言选择独立于此配置。预算 `fast/normal/deep` 与显式覆盖见 [Agent](../advanced/agent-mode.md)。
 

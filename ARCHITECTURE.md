@@ -79,7 +79,7 @@ Provider 通过 SSE 将模型文本增量送入 Agent 的显示 sink；TUI 在�
 
 TUI 的视觉语义统一由 `UI_DESIGN.md` 约束。实现应以集中式 `Theme`/`Palette` 向 Widget、Markdown、工具结果、确认界面和状态栏提供语义样式，禁止各渲染模块自行硬编码业务颜色。主题只影响显示，不得改变安全评估、确认策略、root 行为、日志内容或 Tool Result；颜色也不得作为风险信息的唯一载体。
 
-内置 Web 页面复用 `UI_DESIGN.md` 的 TrueColor 语义色板，通过 `web/src/style.css` 的 CSS 变量集中供页面及 Markdown 使用；浏览器不需要终端的 ANSI fallback。Web Markdown 围栏代码仅对已注册语言语法高亮，未知语言转义后按纯文本显示。Web/TUI 的视觉调整均不进入安全或执行边界。`--web-only` 在 HTTP 服务启动后直接等待服务或进程信号，不初始化 TUI、raw mode、alternate screen 或 PTY，适合由 Android shell 后台守护；构建、预编译和安装启动器的显式 Web-only 选项通过设备端 `nohup` 启动该模式且不请求 ADB PTY。Web 内的工具执行仍使用原有捕获式执行、安全分类和浏览器确认流程。
+内置 Web 页面复用 `UI_DESIGN.md` 的 TrueColor 语义色板，通过 `web/src/style.css` 的 CSS 变量集中供页面及 Markdown 使用；浏览器不需要终端的 ANSI fallback。Web Markdown 围栏代码仅对已注册语言语法高亮，未知语言转义后按纯文本显示。Web/TUI 的视觉调整均不进入安全或执行边界。`--web-only` 在 HTTP 服务启动后直接等待服务或进程信号，不初始化 TUI、raw mode、alternate screen 或 PTY，适合由 Android shell 后台守护；构建、预编译和安装启动器的显式 Web-only 选项调用带配置路径的原生 `service start --json`，不请求 ADB PTY；复用健康服务，日志位于配置旁的私有 `config.service/service.log`，更新二进制后需显式 `service restart`。Web 内的工具执行仍使用原有捕获式执行、安全分类和浏览器确认流程。
 
 Web 更新检查与安装分离：自动查询只返回正式版号与安装归属，用户在独立 Android 安装的版本弹窗选择后才通过 POST 启动更新。服务端复核所选版本、归属和签名发布清单，复用同一有界 HTTPS 下载及 GPG/摘要/ELF 校验、原子替换链，后台状态保存在 Web Shared 并供刷新后的页面读取；下载进度使用实际字节数。签名验证与文件写入在阻塞工作线程执行，进程内安装串行化；完成后保留当前服务并提示用户通过原管理入口重启，不自动中断会话。Helper/APT 和归属无法验证的安装拒绝网页替换。跳过版本只影响浏览器提示，不改模型上下文、审批或 PTY。
 
@@ -243,7 +243,7 @@ AST 以重定向节点判断真实写入，文字参数中的 `>` 不作为重�
 
 ## 更新与设置
 
-启动更新检查是只读后台任务，失败不阻塞 TUI；仅在发现更高版本且匹配本机 ABI 时提示。立即更新会先恢复终端，再下载裸二进制及 SHA-256，校验通过后在当前目录原子替换。跳过版本写入配置，普通暂不更新不持久化。
+启动更新检查是只读后台任务，失败不阻塞 TUI；仅在发现更高版本且匹配本机 ABI 时提示。立即更新会先恢复终端，再验证签名运行时 Manifest、裸二进制的精确大小、SHA-256、独立 GPG 签名与 ELF ABI，复核安装归属后在可执行文件所在目录原子替换。跳过版本写入配置，普通暂不更新不持久化。
 
 Termux TUR/APT 构建不启用 `self-update` Cargo feature：不执行启动更新检查，也不替换包管理器拥有的 `$PREFIX/bin/nl2sh`，手工更新入口只提示 `pkg upgrade nl2sh`。TUR 配方从固定 tag 和 SHA-256 源码归档通过 `termux_setup_rust` 构建。直接 Android 发布仍默认启用校验后自更新。Termux 默认配置遵循 XDG config 目录，日志与会话遵循 XDG state 目录；非 Termux直接部署和显式配置路径继续保持配置相邻状态。
 
@@ -291,7 +291,7 @@ The pinned public key authenticates binary SHA-256 OpenPGP signatures before JSO
 
 ### Tool descriptors
 
-Every explicitly registered adapter exposes one ToolDescriptor with typed schema generation, group/default switch, capability and platform requirements, risk floor, scheduling policy and process lifetime. ToolMetadata is an alias for source compatibility. Configuration validation, Web/TUI settings, runtime availability and code-exported references derive from this inventory. Existing #[tool] generates descriptors and accepts explicit policy attributes; registration remains explicit. AndroidUi operations acquire a stable process-shared flock before preparation and retain its descriptor through the task, including subsequent model/confirmation waits. Privileged Android Shell calls use the same lease; direct command entries acquire it for execution. A task-local ownership scope prevents nested broker reacquisition. No lock inode is unlinked; cancellation/exit releases the descriptor. Parallel ReadOnly calls execute in contiguous batches of at most four with isolated call contexts, ordered results, mutation/UI/Shell barriers, prepared-risk validation and the same assessment boundary. Structured audits carry task/session/request correlation, interface, risk, preview SHA256, approval, process UID, root request, result and duration; arguments/output/error strings are excluded. Private bounded JSONL appends are flock-serialized between processes. External input and user-controlled /shell remain outside managed UI coordination, so existing state revalidation remains required.
+Every explicitly registered adapter exposes one ToolDescriptor with typed schema generation, group/default switch, capability and platform requirements, risk floor, scheduling policy and process lifetime. ToolMetadata is an alias for source compatibility. Configuration validation, Web/TUI settings, runtime availability and code-exported references derive from this inventory. Existing #[tool] generates descriptors and accepts explicit policy attributes; registration remains explicit. AndroidUi operations acquire a stable process-shared flock before preparation and normally retain its descriptor through the task, including subsequent model/confirmation waits. Bounded continuation waits release it; mutating background shell commands transfer ownership to the child supervisor, and later UI/Shell actions reacquire it. Privileged Android Shell calls use the same lease; direct command entries acquire it for execution. A task-local ownership scope prevents nested broker reacquisition. No lock inode is unlinked; cancellation/exit releases the descriptor. Parallel ReadOnly calls execute in contiguous batches of at most four with isolated call contexts, ordered results, mutation/UI/Shell barriers, prepared-risk validation and the same assessment boundary. Structured audits carry task/session/request correlation, interface, risk, preview SHA256, approval, process UID, root request, result and duration; arguments/output/error strings are excluded. Private bounded JSONL appends are flock-serialized between processes. External input and user-controlled /shell remain outside managed UI coordination, so existing state revalidation remains required.
 
 ## Web 后端职责
 

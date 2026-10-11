@@ -138,7 +138,7 @@ nl2sh --config /data/local/tmp/config.toml protocol approve REQUEST_ID
 
 ## 更新与验证
 
-升级设备 nl2sh 后重新启动协议服务。原 `a2a_gateway/`、`nl2sh-a2a`、`nl2sh-a2a-mcp`、`bridge` 命令及 `bridge_auto_approve` 已移除，不提供兼容入口或自动迁移；旧配置需要删除旧字段并按上文重新设置。
+升级设备 nl2sh 后重新启动协议服务。原 `a2a_gateway/`、`nl2sh-a2a`、`nl2sh-a2a-mcp`、`bridge` 命令及 `bridge_auto_approve` 已移除，不提供兼容入口或自动迁移；旧字段在读取时自动丢弃，正常保存时清理；它不会迁移旧批准权限。按上文显式配置新协议服务。
 
 内置协议回归：
 

@@ -3,7 +3,7 @@
 | 使用环境 | 安装方式 | 所需条件 |
 | --- | --- | --- |
 | 电脑连接 Android | Release ZIP + ADB 启动器 | 主机 adb，Android API 26+，ARM64/ARMv7/x86_64 |
-| Android 控制端连接目标设备 | nl2sh-helper APK | 控制端 Android API 26+；目标设备 ARM64/ARMv7、可用的 TCP ADB 或 Android 11+ 无线调试 |
+| Android 控制端连接目标设备 | nl2sh-helper APK | 控制端 Android API 26+；目标设备 ARM64/ARMv7/x86_64、可用的 TCP ADB 或 Android 11+ 无线调试 |
 | 电脑一键安装 | Bash / PowerShell / CMD 安装脚本 | 主机联网及 adb |
 | Android Termux | TUR 或签名 APT / 本地 deb | Termux 包管理器 |
 | 开发者 | 源码交叉编译 | stable Rust、Node.js 22+、Android NDK |
@@ -25,6 +25,8 @@ Windows 可用 `Get-FileHash ./nl2sh-android.zip -Algorithm SHA256` 比较摘要
 如果用另一台 Android 设备作控制端，可从需仓库访问权限的 [nl2sh-helper Releases](https://github.com/nl2sh/nl2sh-helper/releases/latest) 下载已签名 APK，并安装在控制端。打开助手后，选择 TCP ADB（目标设备已开启 TCP ADB），或选择配对码/二维码连接目标 Android 11+ 的无线调试。首次 TCP 连接需在目标设备批准 ADB 授权；配对码方式按目标设备显示的临时地址、端口和配对码填写。
 
 连接会复用健康的已安装运行时，不检查发布或重启。首次安装及显式更新从认证的发布 Manifest 选择 ARM64、ARMv7 或 x86_64，验证原生资产大小、摘要与签名，部署到 `/data/local/tmp/nl2sh`。原生 service 返回实际 Web 端口；更新、重启、停止是独立动作，更新失败恢复先前已验证程序与归属。打开返回的浏览器地址，在 Web“快速开始”配置模型凭据。控制端须能访问实际端口；Web 无登录且监听所有 IPv4 接口，仅在可信网络使用。详见[助手指南](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/zh/guide.md)。
+
+Android 11+ 也可在助手选择“本机”，通过本机无线调试配对并以 shell 身份安装、启动 nl2sh，浏览器使用 `127.0.0.1` 的实际 Web 端口。首次安装或更新联网失败时，只能回退到已完整缓存并重新验证签名、大小、摘要与 ABI 的版本；缓存不会覆盖相同或更高的已安装版本，界面会明确提示尚未确认最新版本。Bridge 安装仍需联网。
 
 ## 一键安装
 

@@ -10,9 +10,9 @@
 | [jadx-helper](https://github.com/nl2sh/jadx-helper) | APK 单类反编译 | API 26+ DEX JAR，通过 app_process 运行，不作为 APK 安装 | [APK/JADX](../tools/apk-jadx.md) |
 | [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) | Android ADB 安装与浏览器启动助手 | API 26+ 控制端，TCP 或目标 Android 11+ 无线配对，部署 ARM64/ARMv7/x86_64 Release | [安装](../getting-started/installation.md#nl2sh-helper)（需仓库权限） |
 
-ADB 安装助手与无障碍伴侣用途不同。助手验证签名发布，管理原生 service 并使用实际 Web 端口，不配置模型凭据，也不提供 A2A/MCP。使用方式见[安装](../getting-started/installation.md#nl2sh-helper)。
+ADB 安装助手与无障碍伴侣用途不同。助手验证签名发布，部署 `/data/local/tmp/nl2sh`，管理原生 service 并使用实际 Web 端口；另提供显式的 Bridge 检查、安装和系统设置入口，由用户手工启用服务。助手不配置模型凭据，也不提供 A2A/MCP。使用方式见[安装](../getting-started/installation.md#nl2sh-helper)。
 
-伴侣/helper 独立发布，原生发布把所选资产收录到认证的兼容性 Manifest。Bridge 标签发布必须使用 APK 签名，本地可生成未签名开发产物。JADX 默认资产来自内嵌签名策略，未签名源码构建需显式配置离线或自定义来源。协调接口时保持包名、provider authority 与 DEX 入口兼容。
+伴侣/helper 独立发布，原生发布把所选资产收录到认证的兼容性 Manifest。Bridge 标签发布必须使用 APK 签名，本地可生成未签名开发产物。JADX 优先使用显式来源，其次内嵌签名策略；无内嵌策略的源码构建回退到编译期固定发布 URL 与 SHA-256，内嵌策略验签失败不降级。协调接口时保持包名、provider authority 与 DEX 入口兼容。
 
 协议工具与 Agent 写入默认等待设备交互终端审批；显式 `protocol_auto_approve` 可自动批准所有风险等级，风险与能力检查仍运行。完整 UI 自动化要求 shell/root。Web 与协议服务使用独立端口及访问策略。
 

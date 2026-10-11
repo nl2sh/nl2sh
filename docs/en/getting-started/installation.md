@@ -3,7 +3,7 @@
 | Environment | Installation | Requirements |
 | --- | --- | --- |
 | Computer connected to Android | Release ZIP and ADB launcher | Host adb, Android API 26+, ARM64/ARMv7/x86_64 |
-| Android controller connected to a target device | nl2sh-helper APK | Controller Android API 26+; target ARM64/ARMv7 with TCP ADB or Android 11+ Wireless debugging |
+| Android controller connected to a target device | nl2sh-helper APK | Controller Android API 26+; target ARM64/ARMv7/x86_64 with TCP ADB or Android 11+ Wireless debugging |
 | Computer bootstrap | Bash / PowerShell / CMD installer | Host network access and adb |
 | Android Termux | TUR, signed APT, or local deb | Termux package manager |
 | Developer | Cross-compile source | Stable Rust, Node.js 22+, Android NDK |
@@ -25,6 +25,8 @@ On Windows compare `Get-FileHash ./nl2sh-android.zip -Algorithm SHA256`, extract
 If another Android device is your controller, download a signed APK from [nl2sh-helper Releases](https://github.com/nl2sh/nl2sh-helper/releases/latest), which requires repository access, and install it on the controller. In the helper, choose TCP ADB if it is already enabled on the target, or use a pairing code or QR code for a target running Android 11+ Wireless debugging. Accept the ADB authorization prompt on the target for a first TCP connection. For pairing codes, enter the temporary address, port, and code shown on the target.
 
 Connecting reuses a healthy installed runtime without checking releases or restarting it. First installation and explicit updates select ARM64, ARMv7 or x86_64 from an authenticated release manifest, verify the binary size/digest/signature, and deploy to `/data/local/tmp/nl2sh`. The native service reports its actual Web port. Explicit update, restart and stop actions are separate. Failed updates restore the previous verified binary and ownership. Open the returned browser address and configure model credentials in Web Quick Start. The controller must reach the actual port; Web has no login and listens on all IPv4 interfaces, so use a trusted network. See the [helper guide](https://github.com/nl2sh/nl2sh-helper/blob/main/docs/en/guide.md).
+
+On Android 11+, the helper also offers Local mode: pair through this device’s Wireless debugging, install/run nl2sh as shell, and open `127.0.0.1` at the actual Web port. If online installation or update fails, it can use a complete cached release only after revalidating signatures, size, digest, and ABI. A cache does not replace an equal or newer installed version, and the UI reports that the latest version is unconfirmed. Bridge installation still requires network access.
 
 ## Bootstrap installation
 

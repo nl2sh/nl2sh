@@ -12,7 +12,7 @@ Models can also inspect, change, or reset the active configuration using [nl2sh_
 
 ## Common settings
 
-`api_type` accepts `auto/responses/chat_completions`; auto is omitted on serialization but remains the default. `security_level` accepts `strict/balanced/unsafe`; `execute_confirm_policy` accepts `always/risk_only/never`. Permissive preferences still retain mandatory mutation and dangerous-action approval. Protocol auto-approval is a separate explicit default-off setting; see [safety approvals](../guide/security-confirmation.md).
+`api_type` accepts `auto/responses/chat_completions`; auto is omitted on serialization but remains the default. `security_level` accepts `strict/balanced/unsafe`; `execute_confirm_policy` accepts `always/risk_only/never`. Permissive preferences still retain mandatory mutation and dangerous-action approval. `protocol_auto_approve` is a separate explicit default-off protocol setting; see [safety approvals](../guide/security-confirmation.md).
 
 `execute_user_mode` is `auto/normal/root`; `ui_language` is `zh_cn/en`, with Chinese terminal default. Website language selection is independent. Budget presets and explicit overrides are documented under [Agent](../advanced/agent-mode.md).
 

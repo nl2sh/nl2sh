@@ -9,7 +9,7 @@
 
 Wrapper 验证 Gradle 发行包摘要；重封装条目顺序、时间戳与压缩方式固定。两个入口输出 dist/jadx-helper.jar、摘要和 metadata.json，dist 不提交。分发时附适用 JADX 和依赖许可证。
 
-已验证 API35 x86_64、API28 ARMv7 和 API26 x86_64 ART 的单类反编译；大型 multidex、内存峰值与超时清理需扩展覆盖。原生发布通过认证的兼容性 Manifest 选择 helper，不再默认使用历史 v1.0.4 资产。未签名的本地源码构建可显式指定离线 DEX helper，或提供自定义 HTTPS 地址与用户指定的 SHA-256。获取与反编译仍须强确认。手工 app_process 必须提供私有可写临时目录：
+已验证 API35 x86_64、API28 ARMv7 和 API26 x86_64 ART 的单类反编译；大型 multidex、内存峰值与超时清理需扩展覆盖。原生发布通过认证的兼容性 Manifest 选择 helper，不再默认使用历史 v1.0.4 资产。无内嵌签名策略的源码构建回退到编译期固定的 v0.2.0 helper URL 与 SHA-256，也可显式指定离线 DEX helper 或自定义 HTTPS 地址与独立摘要。内嵌策略验签失败不降级。`jadx_check` 只读检查来源与缓存；`jadx_install` 在修改确认后获取并校验 helper，是唯一联网入口；`decompile_apk_class` 只用已安装 helper，并要求强确认。手工 app_process 必须提供私有可写临时目录：
 
 ```bash
 CLASSPATH=/data/local/tmp/jadx-helper.jar /system/bin/app_process   -Djava.io.tmpdir=/data/local/tmp/jadx-work / com.nl2sh.jadx.Main APK CLASS OUTPUT

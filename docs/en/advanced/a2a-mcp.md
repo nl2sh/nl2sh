@@ -138,7 +138,7 @@ Explicit `protocol_auto_approve = true` approves every risk level, including Dan
 
 ## Update and verify
 
-Restart the protocol service after upgrading device nl2sh. The old `a2a_gateway/`, `nl2sh-a2a`, `nl2sh-a2a-mcp`, `bridge` command, and `bridge_auto_approve` are removed without compatibility entry points or automatic migration. Remove the old configuration field and configure the service as described above.
+Restart the protocol service after upgrading device nl2sh. The old `a2a_gateway/`, `nl2sh-a2a`, `nl2sh-a2a-mcp`, `bridge` command, and `bridge_auto_approve` are removed without compatibility entry points or automatic migration. The retired field is discarded on load and removed on normal save, without migrating approval privileges. Configure the new protocol service explicitly as described above.
 
 Run built-in protocol regressions:
 

@@ -14,7 +14,7 @@
 - OpenAI 兼容模型、多轮 Agent、流式回答、会话恢复与 @ 文件引用。
 - 设备、UI、文件、网络、音频工具，可选 APK/JADX、Tailcat、ima。
 - TUI/Web 本地安全分类与确认，Root、用户编辑和模型都不能跳过检查。
-- 可选主机侧 A2A/MCP 与 Android companion；“类 Hermes”不承诺 API/插件兼容。
+- 设备内置 HTTP/stdio MCP、A2A 1.0 与可选 Android companion；“类 Hermes”不承诺 API/插件兼容。
 
 ```text
 User → Agent → Tool Calling → Security → Confirmation → Android Shell
@@ -24,7 +24,7 @@ User → Agent → Tool Calling → Security → Confirmation → Android Shell
 
 电脑先安装 adb、开启设备 USB 调试并授权，再下载并校验 [Release ZIP](https://github.com/nl2sh/nl2sh/releases/latest)，完整解压后运行 `android-run-linux.sh` 或 `android-run-windows.bat`。使用 `/config` 配置模型，输入“查看这台设备还剩多少存储空间”。
 
-也可以在 Android 控制端安装 [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) APK，通过 TCP ADB 或目标设备的无线调试连接，自动部署 ARM64/ARMv7 版 nl2sh 并在浏览器打开 Web 界面。助手仓库和 Release 需要访问权限；详见[安装指引](https://nl2sh.github.io/nl2sh/getting-started/installation/#nl2sh-helper)。
+也可以在 Android 控制端安装 [nl2sh-helper](https://github.com/nl2sh/nl2sh-helper) APK，通过 TCP ADB 或目标设备的无线调试连接，自动部署 ARM64/ARMv7/x86_64 版 nl2sh 并在浏览器打开 Web 界面。助手仓库和 Release 需要访问权限；详见[安装指引](https://nl2sh.github.io/nl2sh/getting-started/installation/#nl2sh-helper)。
 
 Termux 用户可使用：
 
