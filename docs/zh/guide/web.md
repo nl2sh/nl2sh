@@ -4,6 +4,11 @@
 
 交互启动默认同时监听 `0.0.0.0:9999`；端口占用时选择其他可用端口，以启动日志中的实际地址为准。**页面无需登录，能访问页面的人可查看数据、编辑配置并提交任务。只在受信任网络使用。** `adb forward` 不会关闭局域网监听。
 
+## 系统 Prompt
+
+在“配置 → 模型与智能体 → 系统 Prompt 补充”中输入多行指令并保存，例如回答语言、风格或长期约定。对应 TOML 字段为 `system_prompt`，留空恢复默认行为。指令追加到内置 Agent 提示词，保留工具规则与运行环境信息，不能绕过安全分类、执行审批或 Root 检查。配置作用于共享 Agent；下一次 Web 任务读取新值，运行中任务保留原值，TUI 重启后生效。
+
+
 ## MCP / A2A 配置
 
 在设置的“MCP / A2A”分类集中编辑 `protocol_start_with_service`（随 Web/TUI 启动）、`protocol_service_port`（0–65535，0 自动分配）、`protocol_token` 和 `protocol_auto_approve`。Token 输入掩码显示；留空启动时自动生成，固定值必须为 32–256 个无空格可打印 ASCII 字符，`NL2SH_PROTOCOL_TOKEN` 环境变量优先。

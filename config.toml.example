@@ -1,3 +1,7 @@
+# Additional system instructions; empty keeps the built-in Agent defaults.
+# Appended to the built-in prompt; execution safety and approval still apply.
+system_prompt = ""
+
 api_key = "sk-xxx"
 # Optional read-only Tencent ima knowledge-base connector. This client always
 # connects directly and never uses the proxy settings below.

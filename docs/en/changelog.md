@@ -2,6 +2,8 @@
 
 ## 2026-10-11
 
+- Add multiline additional system instructions to Web configuration; new tasks use saved changes while retaining built-in tool guidance, security classification, and execution approval.
+
 - Fix Android configuration-write locking; clarify channel approval commands, acknowledge saved grants, and let owners revoke individual permanent grants safely.
 
 - Optimize permanent channel media approval by requester/conversation, destination and media kind; changed file fingerprints do not prompt again. Immutable snapshots and legacy grant scopes are preserved; session grants cover all ordinary operations.

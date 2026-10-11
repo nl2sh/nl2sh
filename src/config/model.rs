@@ -148,6 +148,8 @@ pub struct Config {
     pub skipped_update_version: Option<String>,
     /// Maximum complete text interaction units retained.
     pub max_context_turns: usize,
+    /// Additional system instructions appended to the built-in Agent prompt; empty uses defaults.
+    pub system_prompt: String,
     /// Maximum model/tool iterations per request.
     pub max_agent_steps: usize,
     /// Named budget profile used as a user-facing hint.
@@ -287,6 +289,7 @@ impl Default for Config {
             proxy_bypass: "localhost,127.0.0.1,::1".into(),
             skipped_update_version: None,
             max_context_turns: 16,
+            system_prompt: String::new(),
             max_agent_steps: 50,
             agent_mode: AgentMode::Normal,
             max_tool_calls: 100,

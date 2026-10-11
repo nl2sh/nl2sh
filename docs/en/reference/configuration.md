@@ -52,6 +52,7 @@ See [approval grants](../guide/security-confirmation.md#approval-grants) for sco
 | `proxy_bypass` | `"localhost,127.0.0.1,::1"` | Comma-separated hosts which bypass the proxy. |
 | `skipped_update_version` | `null` | Release version suppressed by the user in the update prompt. |
 | `max_context_turns` | `16` | Maximum complete text interaction units retained. |
+| `system_prompt` | `""` | Additional system instructions appended to the built-in Agent prompt; empty uses defaults. |
 | `max_agent_steps` | `50` | Maximum model/tool iterations per request. |
 | `agent_mode` | `"normal"` | Named budget profile used as a user-facing hint. |
 | `max_tool_calls` | `100` | Maximum tool calls attempted during one task. |

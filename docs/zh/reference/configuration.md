@@ -52,6 +52,7 @@
 | `proxy_bypass` | `"localhost,127.0.0.1,::1"` | 逗号分隔的绕过主机 |
 | `skipped_update_version` | `null` | 忽略的更新版本 |
 | `max_context_turns` | `16` | 保留完整对话轮次上限 |
+| `system_prompt` | `""` | 追加到内置 Agent 提示词的系统指令；空值使用默认行为，执行安全与审批仍生效 |
 | `max_agent_steps` | `50` | 单任务模型步骤上限 |
 | `agent_mode` | `"normal"` | fast/normal/deep 预算预设 |
 | `max_tool_calls` | `100` | 单任务工具尝试上限 |

@@ -296,7 +296,7 @@ button:disabled { opacity: .45; }
 .config-row strong, .config-row small { display: block; }
 .config-row strong { font-weight: 500; }
 .config-row small { margin-top: .12rem; color: var(--text-secondary); font: 12px/1.4 ui-monospace, monospace; overflow-wrap: anywhere; }
-.config-row input:not([type=checkbox]), .config-row select { width: 100%; min-width: 0; padding: .5rem .6rem; background: var(--background-alt); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; }
+.config-row input:not([type=checkbox]), .config-row select, .config-row textarea { width: 100%; min-width: 0; padding: .5rem .6rem; background: var(--background-alt); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; }
 .config-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
 .config-source { min-height: 0; resize: none; }
 .config-footer { min-height: 2.5rem; font-size: .85rem; }
@@ -466,3 +466,5 @@ button:disabled { opacity: .45; }
 .channel-qr a {overflow-wrap:anywhere;color:var(--accent)}
 
 .channel-invite-qr { display:block; width:min(100%,240px); height:auto; margin:12px auto; background:#fff; }
+
+.config-row textarea { resize: vertical; min-height: 10rem; font: inherit; line-height: 1.5; }

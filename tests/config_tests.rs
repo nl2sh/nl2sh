@@ -256,3 +256,19 @@ fn fixed_protocol_token_round_trips_and_rejects_invalid_values() -> anyhow::Resu
     assert!(Config::default().protocol_token.is_empty());
     Ok(())
 }
+
+#[test]
+fn system_prompt_multiline_survives_web_json_and_saved_config() -> anyhow::Result<()> {
+    let dir = tempdir()?;
+    let path = dir.path().join("config.toml");
+    assert!(Config::default().system_prompt.is_empty());
+    let mut cfg = Config::default();
+    cfg.system_prompt = "请用中文回答。\nPreserve \"quotes\" and \\ paths.".into();
+    let rendered: Config = serde_json::from_value(serde_json::to_value(&cfg)?)?;
+    nl2sh::config::save_config(&path, &rendered)?;
+    assert_eq!(
+        load_or_default_unvalidated(&path)?.system_prompt,
+        cfg.system_prompt
+    );
+    Ok(())
+}

@@ -1,5 +1,8 @@
 # Project Status
 
+- Web 配置新增多行 `system_prompt` 补充指令，默认空值；共享 Agent 追加到内置提示词，下一次 Web 任务生效，TUI 重启读取。不改变 Android、执行安全、Root 或 PTY 路径。
+
+
 ## 渠道审批语义与 Android 配置写入修复
 
 - 渠道 Agent 上下文明确微信/QQ 审批命令与全局审批策略的区别：讨论或测试 /approve always 不代表授权或修改 execute_confirm_policy；无待处理请求时解释正确流程。session/always 建立后发送单语言 Markdown 回执，持久化失败不声称保存成功。
@@ -550,6 +553,8 @@ Last Updated: 2026-10-11
 - 直接 Android shell 使用 `/system/bin/sh`，Termux 使用 `$PREFIX/bin/sh`，非 Android 开发主机条件使用 `/bin/sh`。
 
 ## Verification Performed
+
+- Web 系统 Prompt：Rust 格式与编译检查、16 项配置测试、提示词保留内置/运行时指令回归、40 项 Web 测试与生产构建通过；代码派生参考一致、51 对双语页面检查、严格 MkDocs 构建与生成站点检查通过。
 
 - 文档源码对齐：代码派生 CLI/配置/工具参考 `--check`、50 对双语页面检查、`mkdocs build --strict`、构建后路由/编辑链接/语言切换检查、31 项 Python 脚本测试、`cargo fmt --all -- --check`、`cargo check` 与 `git diff --check` 通过；配套仓库 31 份 Markdown 的本地链接、锚点与双语页面对齐检查通过。Linux 普通 UID 下 `cargo test` 的库套件为 393 项通过、2 项显式忽略、5 项 Android UI/ADB 回归失败；这五项使用受 shell/root 能力过滤的工具，与既有按权限分组验证的限制一致。 随后独立执行的 103 项集成测试（含 PTY/TUI）、6 项 CLI 测试和 1 项宏测试通过，另有 2 项集成 live 测试按设计忽略。
 

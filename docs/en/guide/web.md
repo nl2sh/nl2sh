@@ -4,6 +4,11 @@
 
 Interactive startup also listens on `0.0.0.0:9999`, choosing another available port if occupied. Use the actual URL in startup output. **There is no login: anyone reaching the page can view data, edit configuration, and submit tasks. Use a trusted network.** ADB forwarding does not disable LAN listening.
 
+## System prompt
+
+Enter multiline instructions in “Configuration → Model and Agent → Additional system prompt” and save, for example response language, style, or standing preferences. The TOML field is `system_prompt`; leave it empty to restore defaults. Instructions are appended to the built-in Agent prompt, preserving tool rules and runtime information. They cannot bypass security classification, execution approval, or Root checks. The setting applies to the shared Agent: the next Web task loads the new value, running tasks retain their snapshot, and TUI sessions need a restart.
+
+
 ## MCP / A2A settings
 
 The “MCP / A2A” settings category brings together `protocol_start_with_service` (start with Web/TUI), `protocol_service_port` (0–65535; zero selects an available port), `protocol_token`, and `protocol_auto_approve`. Token input is masked. Leave it empty to generate a token at startup, or enter 32–256 printable ASCII characters without spaces. The `NL2SH_PROTOCOL_TOKEN` environment variable takes priority.
