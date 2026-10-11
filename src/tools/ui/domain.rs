@@ -103,6 +103,8 @@ pub struct InspectAndroidUiArgs {
 
 #[derive(Debug, Clone, Serialize)]
 struct UiNode {
+    #[serde(skip)]
+    parent_index: Option<usize>,
     package: Option<String>,
     class: Option<String>,
     resource_id: Option<String>,
@@ -111,6 +113,10 @@ struct UiNode {
     bounds: Option<String>,
     clickable: bool,
     focused: bool,
+    focusable: Option<bool>,
+    selected: Option<bool>,
+    enabled: Option<bool>,
+    scrollable: Option<bool>,
 }
 
 pub async fn inspect_android_ui(
@@ -127,8 +133,13 @@ pub async fn inspect_android_ui(
         .split_once("---NL2SH_DISPLAY---")
         .unwrap_or((remainder, ""));
     let (all_nodes, truncated) = parse_nodes(xml)?;
-    let hierarchy_valid = xml.contains("<hierarchy") && xml.contains("</hierarchy>");
+    let hierarchy_valid =
+        xml.contains("<hierarchy") && xml.contains("</hierarchy>") && !all_nodes.is_empty();
     let total_node_count = all_nodes.len();
+    let navigation = navigation_summary(
+        &all_nodes,
+        result.exit_code == Some(0) && hierarchy_valid && !truncated,
+    );
     let nodes = if args.full {
         all_nodes
     } else {
@@ -143,6 +154,7 @@ pub async fn inspect_android_ui(
         "total_node_count": total_node_count,
         "truncated": truncated,
         "mode": if truncated { "partial" } else if args.full { "full" } else { "compact" },
+        "navigation": navigation,
         "nodes": nodes,
         "window": window.trim(),
         "display": display.trim(),
@@ -153,8 +165,54 @@ pub async fn inspect_android_ui(
 
 impl UiNode {
     fn is_meaningful(&self) -> bool {
-        self.clickable || self.focused || self.text.is_some() || self.content_description.is_some()
+        self.clickable
+            || self.focused
+            || self.focusable == Some(true)
+            || self.selected == Some(true)
+            || self.text.is_some()
+            || self.content_description.is_some()
     }
+}
+
+// A TV often focuses an unlabeled container while its child carries the menu label.
+// Preserve XML ancestry rather than guessing the label from neighboring text or bounds.
+fn navigation_summary(nodes: &[UiNode], complete: bool) -> serde_json::Value {
+    let mut focused = Vec::new();
+    for (index, node) in nodes.iter().enumerate().filter(|(_, node)| node.focused) {
+        let mut labels = Vec::new();
+        for (child_index, child) in nodes.iter().enumerate() {
+            if child.text.is_none() && child.content_description.is_none() {
+                continue;
+            }
+            let mut parent = Some(child_index);
+            while let Some(current) = parent {
+                if current == index {
+                    labels.push(serde_json::json!({
+                        "text": child.text, "content_description": child.content_description,
+                        "resource_id": child.resource_id, "bounds": child.bounds,
+                    }));
+                    break;
+                }
+                parent = nodes[current].parent_index;
+            }
+        }
+        focused.push(serde_json::json!({
+            "node": node,
+            "labels": labels.iter().take(16).collect::<Vec<_>>(),
+            "labels_truncated": labels.len() > 16,
+        }));
+    }
+    let visible_labels: Vec<_> = nodes
+        .iter()
+        .filter_map(|node| node.text.as_deref().or(node.content_description.as_deref()))
+        .collect();
+    serde_json::json!({
+        "complete": complete,
+        "focused": focused,
+        "visible_labels": visible_labels.iter().take(40).collect::<Vec<_>>(),
+        "visible_labels_truncated": visible_labels.len() > 40,
+        "notice": "Current viewport only. Focus labels come from the focused node and its XML descendants; multiple labels do not identify a unique action. Observe after each navigation step and verify the focused target before Enter/OK."
+    })
 }
 
 pub fn capture_command(path: &str) -> Result<String> {
@@ -170,20 +228,28 @@ pub fn capture_command(path: &str) -> Result<String> {
 }
 
 fn parse_nodes(xml: &str) -> Result<(Vec<UiNode>, bool)> {
-    let node = Regex::new(r"<node\s+([^>]+)/?>").context("invalid UI node parser")?;
+    let node = Regex::new(r"<(/?)node\b([^>]*)>").context("invalid UI node parser")?;
     let attribute =
         Regex::new(r#"([a-zA-Z0-9_-]+)="([^"]*)""#).context("invalid UI attribute parser")?;
     let mut nodes = Vec::new();
     let mut truncated = false;
-    for (index, capture) in node.captures_iter(xml).take(MAX_UI_NODES + 1).enumerate() {
-        if index == MAX_UI_NODES {
+    let mut parents = Vec::new();
+    for capture in node.captures_iter(xml) {
+        if capture.get(1).is_some_and(|value| value.as_str() == "/") {
+            if parents.pop().is_none() {
+                anyhow::bail!("malformed Android UI node hierarchy")
+            }
+            continue;
+        }
+        if nodes.len() == MAX_UI_NODES {
             truncated = true;
             break;
         }
-        let Some(attributes) = capture.get(1) else {
+        let Some(attributes) = capture.get(2) else {
             continue;
         };
         let mut value = UiNode {
+            parent_index: parents.last().copied(),
             package: None,
             class: None,
             resource_id: None,
@@ -192,6 +258,10 @@ fn parse_nodes(xml: &str) -> Result<(Vec<UiNode>, bool)> {
             bounds: None,
             clickable: false,
             focused: false,
+            focusable: None,
+            selected: None,
+            enabled: None,
+            scrollable: None,
         };
         for pair in attribute.captures_iter(attributes.as_str()) {
             let Some(name) = pair.get(1).map(|item| item.as_str()) else {
@@ -209,12 +279,30 @@ fn parse_nodes(xml: &str) -> Result<(Vec<UiNode>, bool)> {
                 "bounds" => value.bounds = non_empty(content),
                 "clickable" => value.clickable = content == "true",
                 "focused" => value.focused = content == "true",
+                "focusable" => value.focusable = parse_boolean(content),
+                "selected" => value.selected = parse_boolean(content),
+                "enabled" => value.enabled = parse_boolean(content),
+                "scrollable" => value.scrollable = parse_boolean(content),
                 _ => {}
             }
         }
+        if !attributes.as_str().trim_end().ends_with('/') {
+            parents.push(nodes.len());
+        }
         nodes.push(value);
     }
+    if !truncated && !parents.is_empty() {
+        anyhow::bail!("incomplete Android UI node hierarchy")
+    }
     Ok((nodes, truncated))
+}
+
+fn parse_boolean(value: &str) -> Option<bool> {
+    match value {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
 }
 
 fn non_empty(value: &str) -> Option<String> {
@@ -279,6 +367,106 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{capture_command, parse_nodes, view_screenshot, ViewScreenshotArgs};
+
+    struct UiProbe(&'static str);
+
+    #[async_trait::async_trait]
+    impl crate::shell::CommandExecutor for UiProbe {
+        async fn execute(
+            &self,
+            _: &str,
+            _: bool,
+            _: bool,
+        ) -> anyhow::Result<crate::shell::ExecutionResult> {
+            Ok(crate::shell::ExecutionResult {
+                stdout: self.0.into(),
+                stderr: String::new(),
+                exit_code: Some(0),
+                timed_out: false,
+                interrupted: false,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn empty_hierarchy_with_zero_exit_is_not_complete() -> anyhow::Result<()> {
+        for raw in [
+            "<hierarchy></hierarchy>",
+            "ERROR: could not get idle state.",
+        ] {
+            let output =
+                super::inspect_android_ui(&UiProbe(raw), &super::InspectAndroidUiArgs::default())
+                    .await?;
+            let value: serde_json::Value = serde_json::from_str(&output)?;
+            assert_eq!(value["status"], "failed");
+            assert_eq!(value["navigation"]["complete"], false);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn compact_snapshot_keeps_tv_focus_and_navigation_before_full_tree() -> anyhow::Result<()>
+    {
+        let output = super::inspect_android_ui(&UiProbe(r#"<hierarchy><node focused="true" focusable="true" bounds="[0,0][100,100]"><node text="关于" /></node><node /></hierarchy>"#), &super::InspectAndroidUiArgs::default()).await?;
+        let value: serde_json::Value = serde_json::from_str(&output)?;
+        assert_eq!(value["status"], "complete");
+        assert_eq!(value["node_count"], 2);
+        assert_eq!(value["total_node_count"], 3);
+        assert_eq!(
+            value["navigation"]["focused"][0]["labels"][0]["text"],
+            "关于"
+        );
+        assert!(output.find("\"navigation\"") < output.find("\"nodes\""));
+        Ok(())
+    }
+
+    #[test]
+    fn malformed_ancestry_cannot_label_a_focus_target() {
+        assert!(parse_nodes("<hierarchy><node focused=\"true\"></hierarchy>").is_err());
+        assert!(parse_nodes("<hierarchy></node></hierarchy>").is_err());
+    }
+
+    #[test]
+    fn tv_focus_summary_uses_descendants_and_excludes_neighboring_actions() -> anyhow::Result<()> {
+        let (nodes, truncated) = parse_nodes(
+            r#"<hierarchy>
+            <node text="" focused="true" focusable="true" enabled="true" selected="false" bounds="[0,0][50,50]">
+              <node text="关于" focused="false" bounds="[1,1][40,40]" />
+            </node>
+            <node text="恢复默认设置" focused="false" bounds="[50,0][100,50]" />
+            <node text="" focused="false" scrollable="true" />
+        </hierarchy>"#,
+        )?;
+        let summary = super::navigation_summary(&nodes, !truncated);
+        assert_eq!(summary["focused"][0]["labels"][0]["text"], "关于");
+        assert_eq!(
+            summary["focused"][0]["labels"].as_array().map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(summary["focused"][0]["node"]["focusable"], true);
+        assert_eq!(nodes[0].selected, Some(false));
+        assert_eq!(nodes[1].enabled, None);
+        assert_eq!(nodes[3].scrollable, Some(true));
+        assert!(nodes[0].is_meaningful());
+        Ok(())
+    }
+
+    #[test]
+    fn summary_retains_unknown_focus_and_marks_label_limits() -> anyhow::Result<()> {
+        let (nodes, _) = parse_nodes(&format!(
+            "<hierarchy><node focused=\"true\">{}</node></hierarchy>",
+            "<node text=\"item\" />".repeat(41)
+        ))?;
+        let summary = super::navigation_summary(&nodes, false);
+        assert_eq!(summary["complete"], false);
+        assert_eq!(summary["focused"][0]["labels_truncated"], true);
+        assert_eq!(summary["visible_labels_truncated"], true);
+        let (empty, _) = parse_nodes("<hierarchy></hierarchy>")?;
+        assert!(super::navigation_summary(&empty, false)["focused"]
+            .as_array()
+            .is_some_and(Vec::is_empty));
+        Ok(())
+    }
 
     #[test]
     fn parses_bounded_accessibility_nodes() -> anyhow::Result<()> {

@@ -18,6 +18,14 @@
 
 `inspect_android_ui` / `inject_android_input` 提供原有 bounds 校验入口；输入准备前和执行前重新读取树，坐标必须仍在匹配且可用节点内。
 
+### 电视焦点导航
+
+优先使用 `inspect_android_ui` 的默认紧凑模式（`full: false`）。结果在节点列表前提供 `navigation`：当前焦点节点、该节点及其 XML 子孙的文字/描述（每个焦点最多 16 条）、可见标签（最多 40 条）和各自截断标记。节点增加 `focusable`、`selected`、`enabled`、`scrollable`；未上报的属性为 `null`。焦点容器可能没有自身文字；多条子孙标签不代表唯一可点击目标，不能从相邻节点或屏幕坐标猜标签。空树即使命令退出码为零也报告失败；摘要 `complete` 只表示当前树读完整，不证明页面目标不存在或业务完成。
+
+按实际可见标签优先选择 `android.tap_text` / `android.tap_node`；必须遥控导航时，每次方向键后重新观察焦点，再决定下一步。不要把猜测的多次方向键和确认键合并执行，进入、确认前先核对包名和焦点文字。仅查找信息时不要激活恢复默认、清除、出厂重置或升级。原始 Shell 的 `input` 与 `cmd input` 都按 Dangerous 强确认，包括方向键、Enter/OK、点击和文本注入；只读包查询不受此规则影响。
+
+用户指定信息来源或操作路径时，按该要求查证并注明实际来源；没有证据时，不把不同来源的同名字段视为等价。回答保持在用户请求的范围内。
+
 ## 截图与视觉
 
 `android.screenshot` / `android.read_screen` 无路径时用私有临时目录返回图片附件；指定持久路径需确认。`capture_android_screen` 确认后写指定 PNG。`view_screenshot` 支持 PNG/JPEG/WebP，必要时缩放并转 JPEG，附件不保存进会话。需要支持视觉的模型；MediaStore 的时间/尺寸不是画面证据。

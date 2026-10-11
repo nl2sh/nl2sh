@@ -9,6 +9,8 @@ The execution boundary remains `LLM → Security → Confirmation → Execution`
 | Dangerous / Critical | Strong confirmation |
 | Unreliable parsing or dynamic execution | Conservative assessment and strong confirmation |
 
+Android input injection through `input` or `cmd input` (including direction/activation keys, taps, and text) is Dangerous and requires strong confirmation. These commands can activate destructive controls and are never treated as read-only queries.
+
 ## TUI / CLI
 
 Read the complete command or diff, local risk, and rule reasons. TUI offers one-time approval, identical ordinary-command approval within a task, process-lifetime ordinary-mutation approval, rejection, editing, and interactive/captured execution. Task grants do not match prefixes; process grants are memory-only. `/permission allow` enables process ordinary-mutation grants; `/permission ask` disables them. Root, high risk, and strong-confirmation actions are excluded. Non-interactive CLI can approve eligible actions with matching valid grants; unmatched actions are refused when required approval is unavailable. See Approval grants below.

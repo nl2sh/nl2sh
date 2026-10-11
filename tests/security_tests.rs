@@ -4,6 +4,46 @@ use nl2sh::{
 };
 
 #[test]
+fn android_input_aliases_require_strong_confirmation() {
+    let cfg = Config::default();
+    for command in [
+        "input keyevent 23",
+        "/system/bin/input tap 10 20",
+        "input touchscreen swipe 1 2 3 4",
+        "input text hello",
+        "cmd input keyevent 20",
+        "cmd -w input keyevent 23",
+        "cmd \"$SERVICE\" keyevent 23",
+        "cmd -w \"$SERVICE\" keyevent 23",
+        "/system/bin/cmd input keyevent KEYCODE_DPAD_CENTER",
+        "dumpsys activity top | grep mResumed; cmd input keyevent 20 2>/dev/null",
+        "cmd input keyevent 20; sleep 1; cmd input keyevent 23",
+        "sh -c 'cmd input keyevent 4'",
+        "env /system/bin/cmd input keyevent 23",
+        "cmd input keyevent \"$KEY\"",
+    ] {
+        let assessment = assess(command, &cfg);
+        assert_eq!(assessment.risk_level, RiskLevel::Dangerous, "{command}");
+        assert!(assessment.requires_confirmation, "{command}");
+        assert!(assessment.requires_double_confirmation, "{command}");
+        assert!(PrivilegeBroker::authorize(command, &assessment, &cfg, None).is_err());
+    }
+    for command in [
+        "cmd package resolve-activity --brief com.example.settings",
+        "cmd package list packages",
+        "cmd -w package list packages",
+        "dumpsys input",
+        "echo 'cmd input keyevent 23'",
+    ] {
+        assert_eq!(
+            assess(command, &cfg).risk_level,
+            RiskLevel::ReadOnly,
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn ast_effects_cover_nested_commands_and_uncertain_execution() {
     let cfg = Config::default();
     for command in [

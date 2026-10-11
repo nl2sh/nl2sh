@@ -18,6 +18,14 @@ Without a companion, `android.input_text` accepts printable ASCII only. See [And
 
 `inspect_android_ui` / `inject_android_input` provide the earlier bounds-validated path. Preparation and execution reread the tree; coordinates must remain inside the same available node.
 
+### TV focus navigation
+
+Prefer the default compact `inspect_android_ui` mode (`full: false`). Before the node list, `navigation` provides focused nodes, text/descriptions from each node and its XML descendants (up to 16 labels per focus), visible labels (up to 40), and separate truncation flags. Nodes also expose `focusable`, `selected`, `enabled`, and `scrollable`; missing attributes remain `null`. An unlabeled focus container may have several descendant labels, which do not identify one unique action. Do not infer its label from neighboring nodes or coordinates. Empty trees report failure even with exit code zero. Summary `complete` means only a complete current tree, not target absence or business success.
+
+Prefer `android.tap_text` / `android.tap_node` using observed labels. When remote-control navigation is necessary, observe focus after each direction key before deciding the next step. Never batch guessed directions with activation; check the focused label and package before Enter/OK. Do not activate restore-defaults, erase, factory-reset, or upgrade controls while searching for information. Raw Shell `input` and `cmd input` require Dangerous strong confirmation, including direction keys, Enter/OK, taps, and text injection. Read-only package queries are unaffected.
+
+When the user specifies an information source or workflow, follow it and report the observed source. Do not assume similarly named fields from different sources are equivalent without evidence. Keep answers scoped to the requested information.
+
 ## Screenshots and vision
 
 Pathless `android.screenshot` / `android.read_screen` returns an attachment from a private temporary directory; persistent paths need confirmation. `capture_android_screen` confirms before writing PNG. `view_screenshot` accepts PNG/JPEG/WebP, downscaling to JPEG when needed. Attachments are not stored in sessions. A vision-capable model is needed; MediaStore timestamps/dimensions do not prove image content.

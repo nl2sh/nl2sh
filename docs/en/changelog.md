@@ -2,6 +2,8 @@
 
 ## 2026-10-11
 
+Fix read-only classification of `input` / `cmd input`. Add compact UI navigation summaries with actual XML focus-descendant labels; empty trees no longer report completeness. Agent guidance requires observation between navigation steps, focus checks before activation, and adherence to requested information sources without assuming field equivalence.
+
 Device acceptance fixed the two-second UI baseline limit: baseline reads and post-action observation each use the caller’s bounded timeout. Added a permission-free UI/log fixture and reproducible acceptance instructions.
 
 Added optional UI action postconditions and directed device-clock log windows, preserving approval and identity checks; failed verification never replays actions, and partial trees cannot prove absence.

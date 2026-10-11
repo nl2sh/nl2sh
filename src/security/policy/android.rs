@@ -2,6 +2,23 @@ use crate::security::{shell::effects::Effects, RiskLevel};
 
 pub(super) fn classify_command(name: &str, args: &[String], effects: &mut Effects) {
     match name {
+        "input" => effects.raise(
+            RiskLevel::Dangerous,
+            "android-input-injection",
+            "Android input injection can activate destructive controls or enter text",
+        ),
+        "cmd"
+            if args
+                .iter()
+                .find(|arg| arg.as_str() != "-w")
+                .is_some_and(|service| service == "input" || service.is_empty()) =>
+        {
+            effects.raise(
+                RiskLevel::Dangerous,
+                "android-input-injection",
+                "Android input injection or a dynamic service can change the device",
+            )
+        }
         "dumpsys"
             if args.first().is_some_and(|service| {
                 !crate::security::readonly_dumpsys(
