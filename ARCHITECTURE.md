@@ -323,3 +323,7 @@ Web `/api/tailcat` 与 TUI `/tailcat` 共用 `tools::tailcat::quick` 的进程�
 Android 可能修改状态的后台命令共享 Arc UI Lease 至监督结束，只读采集不续持租约；
 Agent 将租约移交子进程，后续 UI/Shell 动作重新获取；读取/停止不需 UI 租约。非 root 通过 su 的后台计划明确拒绝，已 root 仍经过完整审批。
 不变更 PTY、终端恢复或前台执行；不保证 OOM/异常死亡、逃逸进程组或 daemonize 的存活/清理。
+
+## UI 后置条件与定向日志
+
+可选 UI verification 在既有 AndroidUi Lease 内审批后取得基线，仅在批准动作发送一次后进行有界只读观测。焦点窗口包使用固定 dumpsys 查询；文字存在/缺失与变化要求完整树，缺失证据为 unknown。超时或条件失败保留 action_sent 并返回失败，不补偿或重放；省略验证保持旧结果。定向日志在当前 UID 下解析精确包名主进程或显式 PID，使用设备时区计算起点并限制匹配条目；找不到目标不读全局，输出尽力脱敏。两者继续由统一 Descriptor 派生 Schema，不改变权限、审批或 PTY。

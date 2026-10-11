@@ -53,3 +53,25 @@ Reports include coverage counts, target PID, thresholds, anomaly counts with at 
 - CPU: long runnable waits and at least 100 observed wakeups/second are heuristics, not energy measurements or proven root causes.
 
 Rust parsing is limited to 64 MiB, 100,000 packets, 500,000 events and 32,768 threads, with a 4 MiB packet limit. Malformed or oversized inputs fail. Events are sorted across CPUs. Loss markers reset pairing; non-boot clocks, compression, compact_sched and newer TrackEvent FrameTimeline yield unsupported/partial coverage. Unmatched and unfinished boundary intervals are excluded. Missing data or empty findings do not prove the device is healthy. See the [tool catalog](../reference/tool-catalog.md) for all parameters.
+
+## UI action postconditions
+
+`android.launch_app`, `android.stop_app`, taps, input, swipes, scrolling and Back/Home/Enter accept optional `verification`. Omitting it preserves the existing result format and behavior. Approval and target revalidation still apply; verification is read-only and never replays an action.
+
+```json
+{"text":"Search","verification":{"verify_change":true,"expected_package":"com.example.app","text_present":"Results","text_absent":"Loading","timeout_ms":2000}}
+```
+
+Combine checks as needed, with at least one requested: `verify_change` compares complete UI trees immediately before dispatch, after approval, and after the action; `expected_package` checks the exact focused-window owner; `text_present` / `text_absent` match exact text or content descriptions. Timeout defaults to 2000 ms, bounded to 100–10000 ms; baseline collection has a separate two-second budget and is not retained across approval waits. Polling never scrolls automatically.
+
+Results include `action_sent`, the original `action_result`, and `verification` with `ui_changed`, `expectation_met`, individual checks, `observation_complete` and `passed`. `observation_complete` refers only to a complete UI tree; a focused-package-only check does not read a tree and leaves it false. Unrequested or unverifiable booleans are null. All requested checks must pass for tool success. Timeout, unmet conditions or partial/failed observations return tool failure, but `action_sent: true` means the action was sent once. **Failure does not undo it**: observe before retrying. UI change alone is not business success. Absence checks cover only a complete current viewport, not off-screen content or other windows.
+
+## Directed log time windows
+
+`android_logcat` adds `since_secs` (1–3600 seconds) and either `package` or `pid`, retaining `lines` (maximum 500) and tag/priority `filter`. Lookback uses the device clock and timezone, without clearing buffers or modifying the device.
+
+```json
+{"package":"com.example.app","since_secs":120,"lines":200,"filter":"MyTag:D *:S"}
+```
+
+Package selection resolves the unique current main-process PID. Missing or ambiguous processes fail rather than falling back to global logs. Child and restarted processes may be omitted; use an explicit PID or separate capture. A time window returns at most the requested matching entries after its start, marking `limit_reached`; it does not guarantee coverage of the whole window. Results include the device cutoff, resolved PID, scope and limits. Common credential assignments and Authorization headers receive best-effort redaction by default. No matching logs does not prove absence of an error, and redaction cannot detect every sensitive value.

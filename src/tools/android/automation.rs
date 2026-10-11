@@ -79,6 +79,9 @@ pub struct UiArgs {
     /// Append to the focused control, or clear it first through the nl2sh keyboard.
     #[serde(default)]
     pub mode: Option<TextWriteMode>,
+    /// Optional read-only verification after an approved UI mutation.
+    #[serde(default)]
+    pub verification: Option<super::verification::UiVerification>,
     /// Maximum wait time in milliseconds.
     #[serde(default)]
     pub timeout_ms: Option<u32>,
@@ -286,7 +289,7 @@ fn select_unique_node(value: &Value, text: Option<&str>, bounds: Option<&str>) -
     Ok(first.clone())
 }
 
-fn node_matches_text(node: &Value, needle: &str, digest: &str) -> bool {
+pub(crate) fn node_matches_text(node: &Value, needle: &str, digest: &str) -> bool {
     [
         ("text", "text_hash"),
         ("content_description", "description_hash"),
@@ -303,7 +306,7 @@ fn node_matches_text(node: &Value, needle: &str, digest: &str) -> bool {
     })
 }
 
-fn full_text_hash(value: &str) -> String {
+pub(crate) fn full_text_hash(value: &str) -> String {
     let mut digest = Sha256::new();
     for unit in value.encode_utf16() {
         digest.update(unit.to_be_bytes());
@@ -368,7 +371,7 @@ fn shell_input_text_command(value: &str) -> Result<String> {
         .join(" && "))
 }
 
-fn validate_package(value: &str) -> Result<()> {
+pub(crate) fn validate_package(value: &str) -> Result<()> {
     if value.len() > 255
         || value.split('.').count() < 2
         || value.split('.').any(|part| {

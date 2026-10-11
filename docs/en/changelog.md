@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-11
+
+Added optional UI action postconditions and directed device-clock log windows, preserving approval and identity checks; failed verification never replays actions, and partial trees cannot prove absence.
+
 ## [Unreleased]
 
 - Add managed background shell capture: `background=true` immediately returns `child_id`, `read_output` pages independent stream byte offsets, and `kill` stops through confirmation. Output/runtime bounds, process-group cleanup and normal-exit draining apply; task completion does not stop children, restart does not restore them, and non-root background `su` elevation is rejected.

@@ -72,7 +72,7 @@ static METADATA: &[ToolMetadata] = &[
     meta!("list_android_apps", "List bounded installed Android applications with package, APK path, and UID.", Android, ReadOnly),
     meta!("top_android_apps", "Return a bounded Android process snapshot sorted by resident memory.", Android, ReadOnly),
     meta!("android_dumpsys", "Run one bounded, validated read-only Android dumpsys service query.", Android, ReadOnly, platform = Android, concurrency = Parallel),
-    meta!("android_logcat", "Read a bounded Android logcat snapshot with an optional validated filter.", Android, ReadOnly, platform = Android, concurrency = Parallel),
+    meta!("android_logcat", "Read bounded, credential-redacted Android logs with optional device-clock lookback, tag filters and exact main-process package or PID.", Android, ReadOnly, platform = Android, concurrency = Parallel),
     meta!("android_settings", "Read or list Android system, secure, or global settings; writes are unavailable.", Android, ReadOnly),
     meta!("android_content_query", "Run a bounded read-only query against a content URI; writes are unavailable.", Android, ReadOnly),
     meta!("http_request", "Perform a bounded GET or HEAD request to a public HTTP(S) URL without redirects or private targets.", Network, ReadOnly),
@@ -133,9 +133,7 @@ impl Tool for ExtendedTool {
             }
             "android_logcat" => {
                 let args: AndroidLogcatArgs = parse_args(name, arguments)?;
-                if let Some(filter) = args.filter.as_deref().filter(|value| !value.is_empty()) {
-                    android_diagnostics::validate_logcat_filter(filter)?;
-                }
+                android_diagnostics::validate_logcat_args(&args)?;
                 ExtendedAction::Logcat(args)
             }
             "android_settings" => ExtendedAction::Settings(parse_args(name, arguments)?),

@@ -299,6 +299,48 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
           "type": "string"
         }
       ]
+    },
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -317,6 +359,17 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
     "text": {
       "description": "Visible text or content description to match.",
       "type": "string"
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
     }
   },
   "required": [
@@ -343,11 +396,66 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "package": {
       "description": "Package name for launch or stop.",
       "type": "string"
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
     }
   },
   "required": [
@@ -374,8 +482,64 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
-  "properties": {},
+  "properties": {
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
+    }
+  },
   "required": [],
   "type": "object"
 }
@@ -398,8 +562,64 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
-  "properties": {},
+  "properties": {
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
+    }
+  },
   "required": [],
   "type": "object"
 }
@@ -422,8 +642,64 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
-  "properties": {},
+  "properties": {
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
+    }
+  },
   "required": [],
   "type": "object"
 }
@@ -535,6 +811,48 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
         "up"
       ],
       "type": "string"
+    },
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -580,6 +898,17 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
         "null"
       ]
     },
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
+    },
     "x": {
       "default": null,
       "description": "Start or tap horizontal coordinate.",
@@ -623,11 +952,66 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "package": {
       "description": "Package name for launch or stop.",
       "type": "string"
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
     }
   },
   "required": [
@@ -654,6 +1038,50 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "duration_ms": {
@@ -677,6 +1105,17 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
     },
     "x": {
       "description": "Start or tap horizontal coordinate.",
@@ -718,8 +1157,63 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
+    },
     "x": {
       "description": "Start or tap horizontal coordinate.",
       "format": "uint32",
@@ -758,11 +1252,66 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "bounds": {
       "description": "Exact current node bounds for a node tap.",
       "type": "string"
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
     }
   },
   "required": [
@@ -789,11 +1338,66 @@ Rust 有界只读解析原始 Perfetto protobuf，报告主线程/RenderThread �
 
 ```json
 {
+  "$defs": {
+    "UiVerification": {
+      "additionalProperties": false,
+      "description": "Read-only checks to perform after a normally approved Android action.",
+      "properties": {
+        "expected_package": {
+          "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_absent": {
+          "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_present": {
+          "description": "Exact visible text or content description that must appear.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "verify_change": {
+          "default": false,
+          "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "text": {
       "description": "Visible text or content description to match.",
       "type": "string"
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UiVerification"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Optional read-only verification after an approved UI mutation."
     }
   },
   "required": [
@@ -1113,7 +1717,7 @@ DeviceIdle 与白名单证据。
 
 ## `android_logcat`
 
-有界 logcat 快照与受限过滤。
+有界定向 logcat 快照、设备时间窗口和包名/PID 过滤，默认尽力脱敏；缺少目标不回退全局。
 
 | 描述项 | 值 |
 | --- | --- |
@@ -1140,6 +1744,34 @@ DeviceIdle 与白名单证据。
     "lines": {
       "default": null,
       "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "package": {
+      "default": null,
+      "description": "Exact main-process package; fails if no unique running PID can be resolved.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pid": {
+      "default": null,
+      "description": "Explicit process ID; mutually exclusive with package.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "since_secs": {
+      "default": null,
+      "description": "Look back on the device clock, 1–3600 seconds; cap the returned matching lines.",
+      "format": "uint32",
       "minimum": 0,
       "type": [
         "integer",

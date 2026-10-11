@@ -52,3 +52,25 @@ Agent 内调用 `start_system_trace` 成功后，运行时会登记绑定当前�
 - CPU：长可运行等待与观测窗口内至少 100 次/秒的唤醒启发式，不等同功耗测量或已证明根因。
 
 Rust 解析最多 64 MiB、10 万 packet、50 万事件、32768 个线程，单 packet 4 MiB；超限和损坏数据拒绝分析。跨 CPU 按时间排序；丢失标志清空配对状态，非 boot 时钟、压缩、compact_sched 和新版 TrackEvent FrameTimeline 标记为未支持/部分证据。未配对、边界未完成区间被排除；空结果或缺失数据源不能证明设备健康。完整参数见[工具目录](../reference/tool-catalog.md)。
+
+## UI 操作后置条件
+
+`android.launch_app`、`android.stop_app`、点击、输入、滑动、滚动及返回/Home/Enter 支持可选 `verification`。省略时保持原结果格式和调用行为；所有动作继续经过原审批与目标复核，验证只读且不重放动作。
+
+```json
+{"text":"搜索","verification":{"verify_change":true,"expected_package":"com.example.app","text_present":"结果","text_absent":"加载中","timeout_ms":2000}}
+```
+
+字段可组合，至少指定一项检查：`verify_change` 比较审批后、动作执行前与执行后的完整 UI 树；`expected_package` 要求当前焦点窗口属于精确包名；`text_present` / `text_absent` 匹配精确文字或内容描述。超时默认 2000 ms，范围 100–10000 ms；基线读取另有最多 2 秒预算，不跨人工审批保存。验证期间轮询且不自动滚动。
+
+结果包含 `action_sent`、原 `action_result` 和 `verification` 中的 `ui_changed`、`expectation_met`、逐项结果、`observation_complete`、`passed`。`observation_complete` 仅表示取得完整 UI 树；单独验证焦点包名时不读取树，该字段为 false。未请求或无法验证的布尔值为 null；全部请求的检查满足才报告工具成功。验证超时、条件不满足或部分/失败树会报告工具失败，但 `action_sent: true` 表示动作已发送一次，**失败不撤销动作**，重试前应重新观察。UI 变化不等于业务成功，文字缺失仅针对完整当前视口，不证明屏幕外或其他窗口不存在目标。
+
+## 定向日志时间窗口
+
+`android_logcat` 增加 `since_secs`（1–3600 秒）、`package` 或 `pid`（二选一），保留 `lines`（最多 500）和标签/优先级 `filter`。时间窗口使用设备时间与时区，不依赖控制端时钟，不清除缓冲区或修改设备。
+
+```json
+{"package":"com.example.app","since_secs":120,"lines":200,"filter":"MyTag:D *:S"}
+```
+
+包名解析到当前唯一主进程 PID；不存在或不唯一时失败，不回退读取全局日志。子进程和已重启进程可能遗漏，需要明确 PID 或另行采集。时间窗口返回起点之后最多指定数量的匹配条目，达到限额会标记 `limit_reached`，不保证覆盖整个窗口。返回设备截断时间、实际 PID、范围及限额；默认对常见凭据赋值和 Authorization 等头部做尽力脱敏。没有匹配日志不能证明没有故障，脱敏也不保证识别所有敏感信息。

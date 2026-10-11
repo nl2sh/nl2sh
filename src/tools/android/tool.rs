@@ -3,6 +3,7 @@
 use super::{
     automation::{self, GestureSpec, UiArgs},
     companion::{self, TextWriteMode},
+    verification,
 };
 use crate::tools::ui::domain::{self as ui, InspectAndroidUiArgs};
 use crate::tools::{
@@ -143,6 +144,14 @@ fn argument_fields(name: &str) -> (&'static [&'static str], &'static [&'static s
     }
 }
 
+fn allowed_fields(name: &str) -> Vec<&'static str> {
+    let mut fields = argument_fields(name).0.to_vec();
+    if verification::supports(name) {
+        fields.push("verification");
+    }
+    fields
+}
+
 /// Record every `#/$defs/<name>` reference inside one JSON schema fragment.
 fn collect_definition_refs(value: &Value, referenced: &mut Vec<String>) {
     match value {
@@ -162,7 +171,8 @@ fn collect_definition_refs(value: &Value, referenced: &mut Vec<String>) {
 }
 
 fn validate_argument_fields(name: &str, arguments: &Value) -> Result<()> {
-    let (allowed, required) = argument_fields(name);
+    let (_, required) = argument_fields(name);
+    let allowed = allowed_fields(name);
     let fields = arguments
         .as_object()
         .with_context(|| format!("{name} arguments must be an object"))?;
@@ -189,6 +199,9 @@ impl Tool for AndroidUiTool {
         validate_argument_fields(self.0.name, &arguments)?;
         let args: UiArgs = parse_args(self.0.name, arguments)?;
         let name = self.0.name;
+        if let Some(verification) = &args.verification {
+            verification.validate()?;
+        }
         let executor = ctx.executor.context("Android executor unavailable")?;
         let mut accessibility = false;
         let mut target = None;
@@ -452,6 +465,17 @@ impl PreparedExecution for AndroidUiAction {
 
     async fn execute(self: Box<Self>, ctx: &mut ToolContext<'_>) -> Result<ToolOutput> {
         let executor = ctx.executor.context("Android executor unavailable")?;
+        // Read the baseline after approval, immediately before dispatch; never across user waits.
+        let baseline = if self
+            .args
+            .verification
+            .as_ref()
+            .is_some_and(|v| v.verify_change)
+        {
+            verification::baseline(executor).await
+        } else {
+            None
+        };
         let content = match self.name {
             "android.screen_dump" => {
                 let snapshot = match companion::screen_dump(executor).await {
@@ -572,6 +596,19 @@ impl PreparedExecution for AndroidUiAction {
                 )?
             }
         };
+        if let Some(request) = &self.args.verification {
+            let (evidence, passed) =
+                verification::observe(executor, request, baseline.as_ref()).await?;
+            let content = serde_json::to_string(&json!({
+                "action_sent": true, "action_result": content, "verification": evidence,
+                "notice": "Action was sent once. Verification failure does not undo it; observe before retrying."
+            }))?;
+            return Ok(if passed {
+                ToolOutput::success(content)
+            } else {
+                ToolOutput::refused(&content)
+            });
+        }
         Ok(ToolOutput::success(content))
     }
 }
@@ -708,7 +745,7 @@ mod tests {
     use super::{
         builtin_tools, check_result, checked_screen_dump, plan_unicode_input,
         validate_argument_fields, verify_ime_target, verify_same_target, AndroidUiAction,
-        TextBackend,
+        AndroidUiTool, TextBackend, METADATA,
     };
     use crate::tools::android::automation::UiArgs;
     use crate::tools::android::companion::TextWriteMode;
@@ -717,7 +754,7 @@ mod tests {
         config::Config,
         security::SecurityAssessment,
         shell::{CommandExecutor, ExecutionResult},
-        tools::{runtime::invoke, PreparedExecution},
+        tools::{runtime::invoke, PreparedExecution, Tool, ToolContext},
     };
     use anyhow::{Context, Result};
     use async_trait::async_trait;
@@ -755,7 +792,9 @@ mod tests {
                 .map(|tool| &tool.parameters)
                 .with_context(|| format!("missing {name} schema"))
         };
-        assert_eq!(find("android.press_home")?["properties"], json!({}));
+        assert!(find("android.press_home")?["properties"]
+            .get("verification")
+            .is_some());
         assert_eq!(find("android.tap_text")?["required"], json!(["text"]));
         assert_eq!(
             find("android.tap_text")?["properties"]["text"]["type"],
@@ -765,7 +804,7 @@ mod tests {
             find("android.tap_text")?["properties"]
                 .as_object()
                 .map(|value| value.len()),
-            Some(1)
+            Some(2)
         );
         assert_eq!(
             find("android.swipe")?["required"],
@@ -914,6 +953,65 @@ mod tests {
             action.name = name;
             assert_eq!(action.approval_package(), None);
         }
+    }
+
+    struct UnchangedUi(std::sync::atomic::AtomicUsize);
+    #[async_trait]
+    impl CommandExecutor for UnchangedUi {
+        async fn execute(&self, command: &str, _: bool, _: bool) -> Result<ExecutionResult> {
+            if command == "input keyevent 4" {
+                self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            } else if command.starts_with("content call") {
+                anyhow::bail!("companion unavailable")
+            } else if !command.starts_with("p=/data/local/tmp/.nl2sh-ui-") {
+                anyhow::bail!("unexpected probe")
+            }
+            Ok(ExecutionResult { stdout: "<hierarchy><node package=\"com.example\" text=\"Still here\" bounds=\"[0,0][1,1]\" /></hierarchy>".into(),
+                stderr: String::new(), exit_code: Some(0), timed_out: false, interrupted: false })
+        }
+    }
+    #[tokio::test]
+    async fn postcondition_failure_retains_sent_action_and_never_replays() -> Result<()> {
+        let executor = UnchangedUi(std::sync::atomic::AtomicUsize::new(0));
+        let config = Config::default();
+        let files = crate::tools::file::domain::FileToolExecutor::new(std::path::Path::new("."))?;
+        let mut runtime = crate::agent::TaskRuntime::new();
+        let mut ctx = ToolContext {
+            file_tools: &files,
+            ima: None,
+            config: Some(&config),
+            executor: Some(&executor),
+            llm: None,
+            confirmer: Some(&Approve),
+            audio_tools: None,
+            runtime: Some(&mut runtime),
+            audio_cache: None,
+        };
+        let metadata = METADATA
+            .iter()
+            .find(|meta| meta.name == "android.press_back")
+            .context("missing back tool")?;
+        let tool = AndroidUiTool(metadata);
+        let prepared = tool.prepare(&ctx, json!({"verification":{"verify_change":true,"text_present":"Done","timeout_ms":100}})).await?;
+        let crate::tools::PreparedAction::Operation(operation) = prepared.action else {
+            anyhow::bail!("expected operation")
+        };
+        let output = crate::tools::runtime::execute_prepared_operation(
+            metadata,
+            prepared.risk,
+            &prepared.preview,
+            operation,
+            &mut ctx,
+            &Approve,
+        )
+        .await?;
+        assert!(!output.success);
+        let report: Value = serde_json::from_str(&output.content)?;
+        assert_eq!(report["action_sent"], true);
+        assert_eq!(report["verification"]["ui_changed"], false);
+        assert_eq!(report["verification"]["expectation_met"], false);
+        assert_eq!(executor.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+        Ok(())
     }
 
     struct Reject;
@@ -1311,7 +1409,8 @@ mod tests {
             .find(|tool| tool.name == "android.tap_text")
             .map(|tool| tool.parameters.clone())
             .context("missing android.tap_text schema")?;
-        assert!(tap_text.get("$defs").is_none());
+        assert!(tap_text["$defs"].get("TextWriteMode").is_none());
+        assert!(tap_text["$defs"].get("UiVerification").is_some());
         assert!(validate_argument_fields(
             "android.input_text",
             &json!({"text": "中文", "mode": "replace"})
@@ -1350,7 +1449,8 @@ mod tests {
 
 fn android_schema(metadata: &ToolMetadata) -> serde_json::Value {
     let mut tool = definition::<UiArgs>(metadata.name, metadata.description);
-    let (allowed, required) = argument_fields(metadata.name);
+    let (_, required) = argument_fields(metadata.name);
+    let allowed = allowed_fields(metadata.name);
     if let Some(properties) = tool.parameters["properties"].as_object_mut() {
         properties.retain(|field, _| allowed.contains(&field.as_str()));
         for field in required {

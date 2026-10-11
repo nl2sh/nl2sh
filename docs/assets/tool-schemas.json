@@ -1251,7 +1251,7 @@
     }
   },
   {
-    "description": "Read a bounded Android logcat snapshot with an optional validated filter.",
+    "description": "Read bounded, credential-redacted Android logs with optional device-clock lookback, tag filters and exact main-process package or PID.",
     "name": "android_logcat",
     "parameters": {
       "additionalProperties": false,
@@ -1266,6 +1266,34 @@
         "lines": {
           "default": null,
           "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "package": {
+          "default": null,
+          "description": "Exact main-process package; fails if no unique running PID can be resolved.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pid": {
+          "default": null,
+          "description": "Explicit process ID; mutually exclusive with package.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "since_secs": {
+          "default": null,
+          "description": "Look back on the device clock, 1–3600 seconds; cap the returned matching lines.",
+          "format": "uint32",
           "minimum": 0,
           "type": [
             "integer",
@@ -1920,11 +1948,66 @@
     "description": "Launch a validated Android package.",
     "name": "android.launch_app",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
       "properties": {
         "package": {
           "description": "Package name for launch or stop.",
           "type": "string"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
         }
       },
       "required": [
@@ -1937,11 +2020,66 @@
     "description": "Force-stop a validated Android package.",
     "name": "android.stop_app",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
       "properties": {
         "package": {
           "description": "Package name for launch or stop.",
           "type": "string"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
         }
       },
       "required": [
@@ -2047,8 +2185,63 @@
     "description": "Tap a coordinate on the current Android display.",
     "name": "android.tap",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
       "properties": {
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
+        },
         "x": {
           "description": "Start or tap horizontal coordinate.",
           "format": "uint32",
@@ -2073,11 +2266,66 @@
     "description": "Tap a unique visible node with exact text.",
     "name": "android.tap_text",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
       "properties": {
         "text": {
           "description": "Visible text or content description to match.",
           "type": "string"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
         }
       },
       "required": [
@@ -2090,11 +2338,66 @@
     "description": "Tap a unique node with exact current bounds.",
     "name": "android.tap_node",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
       "properties": {
         "bounds": {
           "description": "Exact current node bounds for a node tap.",
           "type": "string"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
         }
       },
       "required": [
@@ -2122,6 +2425,48 @@
               "type": "string"
             }
           ]
+        },
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
         }
       },
       "additionalProperties": false,
@@ -2140,6 +2485,17 @@
         "text": {
           "description": "Visible text or content description to match.",
           "type": "string"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
         }
       },
       "required": [
@@ -2152,6 +2508,50 @@
     "description": "Swipe between Android display coordinates.",
     "name": "android.swipe",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
       "properties": {
         "duration_ms": {
@@ -2175,6 +2575,17 @@
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
         },
         "x": {
           "description": "Start or tap horizontal coordinate.",
@@ -2210,6 +2621,48 @@
             "up"
           ],
           "type": "string"
+        },
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
         }
       },
       "additionalProperties": false,
@@ -2255,6 +2708,17 @@
             "null"
           ]
         },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
+        },
         "x": {
           "default": null,
           "description": "Start or tap horizontal coordinate.",
@@ -2284,8 +2748,64 @@
     "description": "Press Android Back.",
     "name": "android.press_back",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
-      "properties": {},
+      "properties": {
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
+        }
+      },
       "required": [],
       "type": "object"
     }
@@ -2294,8 +2814,64 @@
     "description": "Press Android Home.",
     "name": "android.press_home",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
-      "properties": {},
+      "properties": {
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
+        }
+      },
       "required": [],
       "type": "object"
     }
@@ -2304,8 +2880,64 @@
     "description": "Press Android Enter.",
     "name": "android.press_enter",
     "parameters": {
+      "$defs": {
+        "UiVerification": {
+          "additionalProperties": false,
+          "description": "Read-only checks to perform after a normally approved Android action.",
+          "properties": {
+            "expected_package": {
+              "description": "Exact package owning the current focused window, not merely a package present in the tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_absent": {
+              "description": "Exact visible text or content description that must be absent from a complete current viewport tree.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text_present": {
+              "description": "Exact visible text or content description that must appear.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "timeout_ms": {
+              "description": "Overall post-action observation deadline, 100–10000 milliseconds (default 2000).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "verify_change": {
+              "default": false,
+              "description": "Compare complete UI trees immediately before and after dispatch; not proof of business success.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
       "additionalProperties": false,
-      "properties": {},
+      "properties": {
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UiVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional read-only verification after an approved UI mutation."
+        }
+      },
       "required": [],
       "type": "object"
     }

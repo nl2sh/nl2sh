@@ -127,6 +127,7 @@ pub async fn inspect_android_ui(
         .split_once("---NL2SH_DISPLAY---")
         .unwrap_or((remainder, ""));
     let (all_nodes, truncated) = parse_nodes(xml)?;
+    let hierarchy_valid = xml.contains("<hierarchy") && xml.contains("</hierarchy>");
     let total_node_count = all_nodes.len();
     let nodes = if args.full {
         all_nodes
@@ -137,7 +138,7 @@ pub async fn inspect_android_ui(
             .collect()
     };
     serde_json::to_string_pretty(&serde_json::json!({
-        "status": if result.exit_code == Some(0) && !truncated { "complete" } else if nodes.is_empty() { "failed" } else { "partial" },
+        "status": if result.exit_code == Some(0) && hierarchy_valid && !truncated { "complete" } else if nodes.is_empty() { "failed" } else { "partial" },
         "node_count": nodes.len(),
         "total_node_count": total_node_count,
         "truncated": truncated,

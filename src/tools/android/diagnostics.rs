@@ -46,6 +46,15 @@ pub struct AndroidLogcatArgs {
     pub lines: Option<usize>,
     #[serde(default)]
     pub filter: Option<String>,
+    /// Look back on the device clock, 1–3600 seconds; cap the returned matching lines.
+    #[serde(default)]
+    pub since_secs: Option<u32>,
+    /// Exact main-process package; fails if no unique running PID can be resolved.
+    #[serde(default)]
+    pub package: Option<String>,
+    /// Explicit process ID; mutually exclusive with package.
+    #[serde(default)]
+    pub pid: Option<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -211,17 +220,148 @@ pub async fn android_logcat(
     executor: &dyn CommandExecutor,
     args: &AndroidLogcatArgs,
 ) -> Result<String> {
+    validate_logcat_args(args)?;
     let lines = args
         .lines
         .unwrap_or(DEFAULT_LOGCAT_LINES)
         .clamp(1, MAX_LOGCAT_LINES);
-    let mut command = format!("logcat -d -t {lines}");
+    let pid = if let Some(package) = &args.package {
+        let result = execute_readonly(executor, &format!("pidof {}", shell_quote(package))).await?;
+        if result.exit_code != Some(0) || result.timed_out || result.interrupted {
+            bail!("target package has no verified running main process; no broad log query was issued")
+        }
+        let pids = result
+            .stdout
+            .split_whitespace()
+            .map(str::parse::<u32>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        if pids.len() != 1 || pids[0] <= 1 {
+            bail!("target package has no unique running main process; specify pid")
+        }
+        Some(pids[0])
+    } else {
+        args.pid
+    };
+    let cutoff = if let Some(seconds) = args.since_secs {
+        let clock = execute_readonly(executor, "date '+%s %z'").await?;
+        if clock.exit_code != Some(0) || clock.timed_out || clock.interrupted {
+            bail!("cannot read device clock")
+        }
+        Some(logcat_cutoff(&clock.stdout, seconds)?)
+    } else {
+        None
+    };
+    let command = logcat_command(args, lines, pid, cutoff.as_deref())?;
+    let mut result = execute_readonly(executor, &command).await?;
+    result.stdout = redact_logcat(&result.stdout)?;
+    result.stderr = redact_logcat(&result.stderr)?;
+    let capped = result.stdout.lines().count() >= lines;
+    serde_json::to_string_pretty(&json!({
+        "kind": "logcat", "result": result_value(result), "package": args.package, "pid": pid,
+        "since_secs": args.since_secs, "device_cutoff": cutoff, "line_limit": lines, "limit_reached": capped,
+        "scope": if args.package.is_some() { "current main process only; restarted and child processes may be omitted" } else { "requested PID or accessible buffers" },
+        "redacted": true,
+        "limitations": "Bounded snapshot; no matching logs does not prove no error. Credential patterns are best effort."
+    })).context("cannot encode Android logcat snapshot")
+}
+
+/// Validate structured log filters before any device command is prepared or issued.
+pub(crate) fn validate_logcat_args(args: &AndroidLogcatArgs) -> Result<()> {
     if let Some(filter) = args.filter.as_deref().filter(|value| !value.is_empty()) {
         validate_logcat_filter(filter)?;
-        command.push(' ');
-        command.push_str(&shell_quote(filter));
     }
-    encode_single("logcat", execute_readonly(executor, &command).await?)
+    if let Some(package) = &args.package {
+        super::automation::validate_package(package)?;
+    }
+    if args.package.is_some() && args.pid.is_some() {
+        bail!("logcat package and pid are mutually exclusive")
+    }
+    if args
+        .pid
+        .is_some_and(|pid| pid <= 1 || pid > i32::MAX as u32)
+    {
+        bail!("invalid logcat PID")
+    }
+    if args
+        .since_secs
+        .is_some_and(|seconds| !(1..=3600).contains(&seconds))
+    {
+        bail!("logcat since_secs must be 1–3600")
+    }
+    Ok(())
+}
+fn logcat_command(
+    args: &AndroidLogcatArgs,
+    lines: usize,
+    pid: Option<u32>,
+    cutoff: Option<&str>,
+) -> Result<String> {
+    let mut command = if let Some(cutoff) = cutoff {
+        // -T starts at device-local time; -m caps matching entries without clearing buffers.
+        format!(
+            "logcat -d -v threadtime -T {} -m {lines}",
+            shell_quote(cutoff)
+        )
+    } else {
+        format!("logcat -d -v threadtime -t {lines}")
+    };
+    if let Some(pid) = pid {
+        command.push_str(&format!(" --pid {pid}"));
+    }
+    if let Some(filter) = args.filter.as_deref().filter(|value| !value.is_empty()) {
+        // Each filter spec is an argument. Quoting the whole list breaks Android parsing.
+        for rule in filter.split_whitespace() {
+            command.push(' ');
+            command.push_str(&shell_quote(rule));
+        }
+    }
+    Ok(command)
+}
+fn logcat_cutoff(clock: &str, seconds: u32) -> Result<String> {
+    let fields: Vec<_> = clock.split_whitespace().collect();
+    if fields.len() != 2 {
+        bail!("invalid device clock reply")
+    }
+    let epoch: i64 = fields[0].parse().context("invalid device epoch")?;
+    let zone = fields[1];
+    if zone.len() != 5
+        || !zone.is_ascii()
+        || !matches!(zone.as_bytes()[0], b'+' | b'-')
+        || !zone[1..].bytes().all(|b| b.is_ascii_digit())
+    {
+        bail!("invalid device timezone")
+    }
+    let hours: i32 = zone[1..3].parse()?;
+    let minutes: i32 = zone[3..5].parse()?;
+    if hours > 23 || minutes > 59 {
+        bail!("invalid device timezone offset")
+    }
+    let offset = (hours * 3600 + minutes * 60) * if zone.starts_with('-') { -1 } else { 1 };
+    let epoch = epoch
+        .checked_sub(i64::from(seconds))
+        .context("invalid device time range")?;
+    let t = time::OffsetDateTime::from_unix_timestamp(epoch)?
+        .to_offset(time::UtcOffset::from_whole_seconds(offset)?);
+    Ok(format!(
+        "{:02}-{:02} {:02}:{:02}:{:02}.000",
+        u8::from(t.month()),
+        t.day(),
+        t.hour(),
+        t.minute(),
+        t.second()
+    ))
+}
+fn redact_logcat(text: &str) -> Result<String> {
+    let header = Regex::new(
+        r"(?im)((?:authorization|(?:x-)?(?:api|secret|access)[-_ ]?key)\s*:\s*)[^\r\n]+",
+    )?;
+    let assignment = Regex::new(
+        r#"(?i)(["']?(?:secret|token|password|authorization|api[-_]?key|private[-_]?key|encryption[-_]?key)["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;}]+)"#,
+    )?;
+    let headers = header.replace_all(text, "${1}[REDACTED]");
+    Ok(assignment
+        .replace_all(&headers, "${1}\"[REDACTED]\"")
+        .into_owned())
 }
 
 pub async fn android_settings(
@@ -441,6 +581,86 @@ mod tests {
         foreground_component, normalize_projection, parse_package_line, validate_content_uri,
         validate_identifier, ProjectionArg,
     };
+
+    #[test]
+    fn logcat_cutoff_uses_device_timezone_and_handles_day_boundary(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            super::logcat_cutoff("1704067200 +0800", 60)?,
+            "01-01 07:59:00.000"
+        );
+        assert_eq!(
+            super::logcat_cutoff("1704067200 -0530", 60)?,
+            "12-31 18:29:00.000"
+        );
+        assert!(super::logcat_cutoff("0 +2460", 1).is_err());
+        assert!(super::logcat_cutoff("oops +0000", 1).is_err());
+        Ok(())
+    }
+    #[test]
+    fn logcat_directed_queries_reject_options_and_broad_fallback(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut args: super::AndroidLogcatArgs = serde_json::from_value(
+            serde_json::json!({"package":"com.example", "since_secs":120, "filter":"MyTag:D *:S"}),
+        )?;
+        super::validate_logcat_args(&args)?;
+        let command = super::logcat_command(&args, 200, Some(42), Some("01-01 07:59:00.000"))?;
+        let words = shell_words::split(&command)?;
+        assert!(words.windows(2).any(|w| w == ["--pid", "42"]));
+        assert!(words.contains(&"MyTag:D".to_owned()));
+        assert!(words.contains(&"*:S".to_owned()));
+        assert!(!words.iter().any(|w| w == "-c" || w == "-G"));
+        args.pid = Some(42);
+        assert!(super::validate_logcat_args(&args).is_err());
+        args.pid = None;
+        args.package = Some("com.example;id".into());
+        assert!(super::validate_logcat_args(&args).is_err());
+        args.package = None;
+        args.since_secs = Some(3601);
+        assert!(super::validate_logcat_args(&args).is_err());
+        Ok(())
+    }
+    #[test]
+    fn logcat_redacts_headers_and_quoted_secret_values() -> Result<(), Box<dyn std::error::Error>> {
+        let text = "Tag: api_key=abcdef password=\"with spaces\"\nTag: Authorization: Bearer private-token\nTag: normal evidence";
+        let masked = super::redact_logcat(text)?;
+        for secret in ["abcdef", "with spaces", "private-token"] {
+            assert!(!masked.contains(secret));
+        }
+        assert!(masked.contains("normal evidence"));
+        Ok(())
+    }
+    struct MissingPackage(std::sync::Mutex<Vec<String>>);
+    #[async_trait::async_trait]
+    impl crate::shell::CommandExecutor for MissingPackage {
+        async fn execute(
+            &self,
+            command: &str,
+            _: bool,
+            _: bool,
+        ) -> anyhow::Result<crate::shell::ExecutionResult> {
+            self.0
+                .lock()
+                .map_err(|_| anyhow::anyhow!("poisoned"))?
+                .push(command.into());
+            Ok(crate::shell::ExecutionResult {
+                stdout: String::new(),
+                stderr: String::new(),
+                exit_code: Some(1),
+                timed_out: false,
+                interrupted: false,
+            })
+        }
+    }
+    #[tokio::test]
+    async fn missing_package_never_reads_unrelated_logs() -> anyhow::Result<()> {
+        let executor = MissingPackage(std::sync::Mutex::new(Vec::new()));
+        let args = serde_json::from_value(serde_json::json!({"package":"com.example"}))?;
+        assert!(super::android_logcat(&executor, &args).await.is_err());
+        let commands = executor.0.lock().map_err(|_| anyhow::anyhow!("poisoned"))?;
+        assert_eq!(commands.as_slice(), ["pidof 'com.example'"]);
+        Ok(())
+    }
 
     #[test]
     fn readonly_diagnostic_arguments_reject_actions_and_logcat_options() {

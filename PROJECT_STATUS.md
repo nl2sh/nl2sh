@@ -1,5 +1,13 @@
 # Project Status
 
+## ADB-MCP 参考能力第一阶段
+
+- Android UI 修改工具增加可选 verification：审批后基线、设备焦点包与精确文字后置条件、有界轮询、逐项未知/失败证据及不重放。部分树不能证明缺失；没有有效 hierarchy 的 shell 探测不报告完整树。
+- android_logcat 支持设备时区的 1–3600 秒窗口和主进程包名/PID 定向查询，失去目标不回退全局，默认尽力脱敏并明确匹配条目限额。
+- 独立 Helper 增加只读一键诊断与显式修复入口，核对 ADB、UID/API/ABI、安装版本、受管服务、运行 ELF、Web 身份、协议与 Bridge；不查询 Release、不启动或修改设置，不读取协议令牌。
+- 公共工具 Schema 和双语指南同步；Android API 26+、三 ABI 与 Security → Confirmation → Execution 保持，未改 PTY/终端恢复。
+- 验证：Rust 分权限回归 517 项通过、4 项既有忽略；格式与 all-targets 检查通过，Android API 26 ARMv7/ARM64/x86_64 编译检查通过。双语派生参考、50 对页面、严格 MkDocs 与渲染后检查通过。Helper 39 项单元测试、debug/release 构建与 lint 通过。API 34 真机服务/Web 身份匹配组件测试通过；诊断卡片视觉验收被其他应用的前台提醒遮挡，最终组件测试为 1 项通过、1 项因遮挡跳过，未计为视觉验收通过。测试使用独立应用 ID，并清理临时包，保留原 helper 与设备服务。严格 Clippy 被既有告警阻断；尚未在真机部署新的原生工具做端到端动作验证。
+
 Last Updated: 2026-10-11
 
 ## Recent Changes
