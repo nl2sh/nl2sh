@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fixed duplicate native asset matches during release uploads; each asset is uploaded once from the final signed directory to avoid concurrent overwrite conflicts.
+
 ## [1.2.0] - 2026-10-28
 
 - Added four-policy quick settings to Web/TUI approval dialogs, saving and immediately applying to the current session and pending operation, with session isolation, stale/cancelled-request rejection, failure preservation and ordinary-mode strong review.

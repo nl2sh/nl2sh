@@ -2,9 +2,9 @@ TERMUX_PKG_HOMEPAGE=https://github.com/nl2sh/nl2sh
 TERMUX_PKG_DESCRIPTION="Android-first natural-language shell agent with a local safety boundary"
 TERMUX_PKG_LICENSE="MIT"
 TERMUX_PKG_MAINTAINER="Ernest Su <307141632@qq.com>"
-TERMUX_PKG_VERSION="1.1.0"
+TERMUX_PKG_VERSION="1.2.0"
 TERMUX_PKG_SRCURL="https://github.com/nl2sh/nl2sh/archive/refs/tags/v${TERMUX_PKG_VERSION}.tar.gz"
-TERMUX_PKG_SHA256=8ce8fb9aff71987aa85dc96047adf83da84ff0ad1b932853c533f4c402da8974
+TERMUX_PKG_SHA256=61405e39150b0cf8716ceb78ff54346ab13401ec6bb4abc35b0b1f3037207c35
 TERMUX_PKG_BUILD_IN_SRC=true
 TERMUX_PKG_AUTO_UPDATE=true
 
