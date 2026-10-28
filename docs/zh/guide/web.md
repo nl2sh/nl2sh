@@ -9,6 +9,22 @@
 在“配置 → 模型与智能体 → 系统 Prompt 补充”中输入多行指令并保存，例如回答语言、风格或长期约定。对应 TOML 字段为 `system_prompt`，留空恢复默认行为。指令追加到内置 Agent 提示词，保留工具规则与运行环境信息，不能绕过安全分类、执行审批或 Root 检查。配置作用于共享 Agent；下一次 Web 任务读取新值，运行中任务保留原值，TUI 重启后生效。
 
 
+## 执行与安全配置
+
+“配置 → 执行与安全”的下拉选项附有简短含义，各字段显示常驻说明：
+
+| 字段 | 选项与含义 |
+| --- | --- |
+| `execute_confirm_policy` | `always`：每条 Shell 都确认，包含只读；`risk_only`：按风险确认，只读通常直接执行；`never`：最少确认，仍保留强制审批；`full_access`：Full access（危险，含 Root），所有入口自动批准全部风险，持久保存。 |
+| `security_level` | `strict`：包含只读的全部 Shell 确认；`balanced`：只读通常直接执行，修改审批；`unsafe`：兼容宽松偏好，不取消强制审批。 |
+| `execute_user_mode` | `auto`：按本地评估决定提权；`normal`：不请求 su，也不降低已有 Root 身份；`root`：请求 Root 执行，需要已有 Root 或可用 su，审批由确认策略决定。 |
+| `execute_timeout_secs` | 普通前台 Shell 的执行时限，单位秒，须大于 0；不含审批等待，超时终止并回收进程。后台任务另有时限。 |
+| `interactive_execute_timeout_secs` | 交互式 Shell 的执行时限，单位秒；0 关闭交互超时。 |
+| `enable_pty` | 普通终端执行使用伪终端，关闭使用管道；Web Agent 使用管道，交互终端使用专用 PTY。 |
+| `allow_dangerous_grants` | 危险授权模板还需 `--allow-dangerous-grants` 启动开关；不会自动创建授权，Root、Critical 和强确认操作不能由模板放行。 |
+
+除显式 `full_access` 外，`strict` 或 `always` 任一启用，只读 Shell 也会进入审批。希望只读自动执行时选择 `balanced` + `risk_only`；结构化工具按自身风险审批。普通档位下修改与提权仍需审批，高危需二次确认；匹配的已有授权仅放行其允许的范围。一个任务包含多条工具调用时，各操作分别评估。保存后新 Web 任务读取设置，当前任务保留原值。详见[安全确认](security-confirmation.md)。
+
 ## MCP / A2A 配置
 
 在设置的“MCP / A2A”分类集中编辑 `protocol_start_with_service`（随 Web/TUI 启动）、`protocol_service_port`（0–65535，0 自动分配）、`protocol_token` 和 `protocol_auto_approve`。Token 输入掩码显示；留空启动时自动生成，固定值必须为 32–256 个无空格可打印 ASCII 字符，`NL2SH_PROTOCOL_TOKEN` 环境变量优先。
@@ -94,3 +110,7 @@ adb shell '/data/local/tmp/nl2sh --config /data/local/tmp/config.toml service st
 确定或重试会自动停止旧的托管 Tailcat 监听器并重新共享；完成或失败后窗口都保留，仅手动关闭。
 
 消息渠道管理见[微信与 QQ 消息渠道](channels.md)。渠道任务可以在原会话完成一次性审批，独立于 MCP/A2A 本地审批与协议自动审批开关。
+
+确认策略在配置页与高级快捷审批菜单均提供 `full_access`（Full access，危险，含 Root）；选择并保存后持久生效，新任务对所有入口自动批准全部风险。Web 顶部显示危险提示；改选普通档并保存即可对新任务关闭。若由 `--full-access` 启动参数强制开启，提示会说明仍需不带该参数重启。详见[开发 Full access](security-confirmation.md#full-access)。
+
+执行审批弹框的“确认策略快捷设置”可保存四档策略，并立即作用于当前会话及正在等待的操作。Full access 会自动批准当前及后续危险/Root 操作；普通档仍保留必要审批，保存失败不改变权限。运行中的其他会话保持原策略。详见[弹框切换](security-confirmation.md)。

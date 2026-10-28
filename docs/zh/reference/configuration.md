@@ -66,7 +66,7 @@
 | `llm_request_timeout_secs` | `60` | 模型 HTTP 请求超时秒数 |
 | `execute_timeout_secs` | `30` | 普通命令超时秒数 |
 | `interactive_execute_timeout_secs` | `0` | 交互命令超时，0 不限制 |
-| `execute_confirm_policy` | `"risk_only"` | 一般确认偏好，服从强制策略 |
+| `execute_confirm_policy` | `"risk_only"` | 确认策略 always/risk_only/never/full_access；full_access 危险地自动批准全部风险及 Root |
 | `security_level` | `"balanced"` | strict/balanced/unsafe 安全偏好 |
 | `protocol_start_with_service` | `false` | 默认关闭；Web/TUI 与后台 service 启停时管理 MCP/A2A，重启生效 |
 | `protocol_service_port` | `8765` | Web/TUI 随服务启动 MCP/A2A 的首选端口，默认 8765；占用时选择空闲端口，0 直接自动分配 |

@@ -34,7 +34,7 @@ fn definitions() -> Vec<Tool> {
     vec![
         Tool::new("nl2sh_inspect", "Read fixed device environment facts; no model required.", empty.as_object().cloned().unwrap_or_default()),
         Tool::new("nl2sh_tools", "List currently available device tools and their parameter schemas.", empty.as_object().cloned().unwrap_or_default()),
-        Tool::new("nl2sh_invoke", "Invoke a registered device tool directly. Mutations require local approval unless protocol_auto_approve is explicitly enabled.", schemars::schema_for!(InvokeArgs).as_object().cloned().unwrap_or_default()),
+        Tool::new("nl2sh_invoke", "Invoke a registered device tool directly. Mutations require local approval unless protocol_auto_approve or the owner CLI --full-access policy is explicitly enabled.", schemars::schema_for!(InvokeArgs).as_object().cloned().unwrap_or_default()),
         Tool::new("nl2sh_read_screen", "Read the Android screen as text and an MCP image; no model required.", empty.as_object().cloned().unwrap_or_default()),
         Tool::new("nl2sh_ask", "Delegate a task to the built-in Agent; requires a configured model. Reuse context_id to continue the conversation.", schemars::schema_for!(AskArgs).as_object().cloned().unwrap_or_default()),
         Tool::new("nl2sh_get_task", "Read a persisted device task, including its status and result.", schemars::schema_for!(TaskArgs).as_object().cloned().unwrap_or_default()),

@@ -11,11 +11,47 @@ The execution boundary remains `LLM → Security → Confirmation → Execution`
 
 Android input injection through `input` or `cmd input` (including direction/activation keys, taps, and text) is Dangerous and requires strong confirmation. These commands can activate destructive controls and are never treated as read-only queries.
 
+## Development Full access
+
+!!! danger "Every interface auto-approves, including destructive Root commands"
+
+    Select `full_access` in Web settings under Execution and security → Confirmation policy, in the Web advanced quick approval menu, or in TUI `/config` under Execution and security → Confirmation. The option is labeled “Full access (DANGER, includes Root)”. Saving automatically approves every risk level, Root request and strong-confirmation operation across CLI, TUI, Web, the safe terminal, MCP/A2A and WeChat/QQ channels. Web has no login: clients can act with the process permissions. Use only on fully trusted development devices and networks.
+
+The choice persists as:
+
+```toml
+execute_confirm_policy = "full_access"
+```
+
+Click Save configuration in the full Web editor; selecting a quick-menu option saves immediately. New Web, protocol and channel tasks load the saved policy; running tasks retain their snapshots. Saving in TUI reloads its configuration; restart TUI after external edits. Select and save an ordinary policy such as `risk_only` to disable configuration-based Full access. The saved choice survives restart. Models may read this option but cannot enable it through `nl2sh_config`.
+
+Alternatively, force it temporarily with global `--full-access` (alias `--dangerously-full-access`):
+
+```sh
+nl2sh --full-access --config /data/local/tmp/config.toml service restart --json
+```
+
+The flag also works with TUI, `--web-only`, `protocol serve` and `protocol stdio`, without changing TOML. It overrides the saved preference. If the startup flag forces Full access, selecting an ordinary policy cannot disable it: restart without the flag and ensure the saved preference is no longer `full_access`. `--full-access service start` requires restart when the existing service has Full access disabled. Ordinary `service start` reuses the service without changing its startup flags.
+
+Risk classification, argument validation, exact command/root-plan binding, target revalidation, cancellation, resource limits and audits remain active. Audits record `approval="approved_by_full_access"`. The `full_access` field in `service status --json`, `/api/info`, `/api/quick-settings` and `nl2sh_inspect` reports the effective policy; `full_access_cli` identifies a forced startup override. Web displays a persistent danger notice; TUI startup, `/status` and `/permission` report it. `/permission ask` does not change the saved preference.
+
+Full access does not obtain root, change SELinux/Android permissions or enable disabled optional tools. Elevation still requires `execute_user_mode="auto"` or `"root"` and working root/su; `normal` continues to reject explicit su. It takes precedence over strict and protocol/channel confirmers. Per-operation rules below describe ordinary operation without Full access.
+
 ## TUI / CLI
 
 Read the complete command or diff, local risk, and rule reasons. TUI offers one-time approval, identical ordinary-command approval within a task, process-lifetime ordinary-mutation approval, rejection, editing, and interactive/captured execution. Task grants do not match prefixes; process grants are memory-only. `/permission allow` enables process ordinary-mutation grants; `/permission ask` disables them. Root, high risk, and strong-confirmation actions are excluded. Non-interactive CLI can approve eligible actions with matching valid grants; unmatched actions are refused when required approval is unavailable. See Approval grants below.
 
 Enter strong-confirmation text exactly as displayed. A natural-language “yes” does not authorize subsequent actions. Editing restarts the full classification and confirmation chain.
+
+## Change policy from an approval dialog
+
+The Web execution approval dialog includes a quick confirmation-policy selector for `always`, `risk_only`, `never` and `full_access`. Click Save and apply to this session now. In a TUI approval dialog, press **P** for the same four choices, use the arrow keys, and press Enter to save and apply immediately; Esc returns to approval. While editing a command, P remains ordinary input.
+
+This saves `execute_confirm_policy` in the original configuration and updates the current session's live approval layer. **The operation already waiting for approval is reconsidered immediately**, without stopping the task or resubmitting it. Full access automatically approves the pending operation and subsequent Dangerous/Critical/Root actions in this session. Ordinary choices only release eligible read-only approvals: mutations, Root, strict and strong-confirmation requirements retain their original rules. Operations still requiring approval are shown again in full.
+
+Other already-running sessions do not inherit this live override; their current tasks retain their policies. New tasks load the saved preference, while the current Web session also applies its choice to later calls and its safe terminal. The temporary override is never restored from history or checkpoints, and old approvals are never replayed; the saved configuration preference persists normally. Existing exact grants and ordinary run-wide permissions retain their original scope. CLI `--full-access` still takes precedence.
+
+The server checks the session, current request ID and cancellation state. Stale dialogs, factual-question windows and completed requests cannot change the policy. A still-required approval gets a new ID and starts strong review again. Saving failure leaves the original policy and pending request intact. Classification, argument/target validation, exact command/Root binding, cancellation and execution limits remain active. Changes emit `confirmation_policy_changed`; eligible reads released by the live ordinary preference audit as `approved_by_session_policy`.
 
 ## Web
 

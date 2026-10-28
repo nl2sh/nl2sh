@@ -11,11 +11,49 @@
 
 Android 输入注入命令 `input` 和 `cmd input`（包括方向键、确认键、点击和文字）属于 Dangerous，必须强确认；它们可能激活破坏性控件，不能视为只读查询。
 
+<a id="full-access"></a>
+
+## 开发设备 Full access
+
+!!! danger "所有入口自动批准，包括危险 Root 指令"
+
+    在 Web 配置页“执行与安全 → 确认策略”、Web 高级快捷栏的审批菜单，或 TUI `/config` 的“执行与安全 → 确认策略”选择 `full_access`。界面显示“Full access（危险，含 Root）”。保存后所有风险、Root 和强确认操作都自动批准，覆盖 CLI、TUI、Web、安全终端、MCP/A2A 及微信/QQ 渠道。Web 无登录，接入者能借用进程权限执行操作，仅用于完全信任的开发设备和网络。
+
+选择会持久保存为：
+
+```toml
+execute_confirm_policy = "full_access"
+```
+
+Web 完整配置页需要点击“保存配置”；快捷审批菜单选定即保存。保存后新 Web、协议和渠道任务使用新策略，进行中任务保留自己的快照；TUI 内保存设置会重载配置，外部修改后需重启 TUI。改选 `risk_only` 等普通档并保存，可关闭配置授予的 Full access；重启继续保留已保存的选择。模型可以读取该档位，但不能通过 `nl2sh_config` 自行开启。
+
+也可用全局 `--full-access`（别名 `--dangerously-full-access`）临时强制开启：
+
+```sh
+nl2sh --full-access --config /data/local/tmp/config.toml service restart --json
+```
+
+该参数同样适用于直接 TUI、`--web-only`、`protocol serve` 和 `protocol stdio`，不写入 TOML。它优先于已保存的确认策略；启动参数强制开启时，仅改选普通档不能关闭，需不带参数重启，并确保配置不再是 `full_access`。对已运行且未开启的服务使用 `--full-access service start` 会要求 restart；普通 `service start` 只复用服务，不改变其启动参数。
+
+风险分类、参数校验、命令/root 计划绑定、目标复核、取消、资源限制和审计继续运行。审计记录 `approval="approved_by_full_access"`；`service status --json`、`/api/info`、`/api/quick-settings` 与 `nl2sh_inspect` 的 `full_access` 报告有效策略，`full_access_cli` 区分启动参数是否强制开启。Web 常驻危险提示，TUI 启动、`/status` 和 `/permission` 可查看。`/permission ask` 不改写已保存的策略。
+
+Full access 不凭空取得 root、不更改 SELinux/Android 系统权限，也不启用关闭的可选工具。提权仍需 `execute_user_mode="auto"` 或 `"root"` 和可用的 root/su；`normal` 继续拒绝显式 su。它优先于 strict 和协议/渠道确认器。下方逐次确认规则描述未开启 Full access 的通常模式。
+
 ## TUI / CLI
 
 先看完整命令或 diff、本地风险和规则依据。TUI 支持允许一次、任务内允许完全相同普通命令、运行期允许普通修改、拒绝、编辑、交互/捕获执行。任务许可不匹配前缀；运行期许可只保存在内存。`/permission allow` 开启运行期普通修改许可，`/permission ask` 关闭。Root、高风险和强确认不获得这些许可。非交互 CLI 可由匹配的有效授权凭据批准合格操作；未命中且无法取得必要批准时拒绝，见下方“授权凭据”。
 
 强确认的文字按当前提示输入；不要把自然语言“可以”当作所有后续动作的授权。编辑后整个分类/确认链重新运行。
+
+## 审批弹框快捷切换
+
+Web 的执行审批弹框提供“确认策略快捷设置”，可选择 `always`、`risk_only`、`never`、`full_access`，点击“保存并立即应用于本会话”。TUI 审批弹框按 **P** 打开同样的四档选择，用方向键选择，Enter 保存并立即应用，Esc 返回审批；编辑命令时 P 仍作为普通文字输入。
+
+快捷选择保存到原配置的 `execute_confirm_policy`，同时更新当前会话的实时审批层，**正在等待的这条操作也会立即重新决定是否需要人工确认**，无需停止任务或重新提问。Full access 会自动批准当前操作及本会话后续危险/Critical/Root 操作；普通档位只免去符合条件的只读确认，修改、Root、strict 或强确认要求仍按原规则执行，仍需审批时重新显示完整操作。
+
+已经运行的其他会话不继承此实时覆盖；它们保留当前任务的审批策略。新任务加载保存的配置，当前 Web 会话的快捷选择也作用于后续调用及安全终端。临时会话覆盖不写入历史或检查点，重启/恢复不重放旧批准；保存的配置档位正常保留。既有精确授权和普通运行期许可仍按原范围匹配，CLI `--full-access` 继续优先。
+
+服务器核对会话、当前请求编号和取消状态；旧弹框、补充信息窗口和已结束请求不能修改档位。普通档切换后仍需审批时生成新编号，危险强确认重新开始；保存失败时保留原策略与待决请求。风险分类、参数/目标复核、精确命令与 Root 绑定、取消和执行限额不改变。策略变更记入 `confirmation_policy_changed`；实时普通档释放只读操作使用 `approved_by_session_policy` 审计。
 
 ## Web
 

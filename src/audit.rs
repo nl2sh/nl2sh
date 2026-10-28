@@ -224,6 +224,9 @@ pub(crate) fn decision(decision: &crate::agent::ConfirmationDecision) {
             None
         };
         event.approval = match decision {
+            ApproveByFullAccess => "approved_by_full_access",
+            ApproveBySessionPolicy => "approved_by_session_policy",
+            SetPolicy(_) => "policy_changed",
             ApproveByGrant(_) => "approved_by_grant",
             Reject => "rejected",
             Edit(_) => "edited",

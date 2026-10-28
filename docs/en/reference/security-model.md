@@ -1,5 +1,7 @@
 # Security model
 
+Explicit development exception: the owner can select `execute_confirm_policy="full_access"` or pass `--full-access` to automatically approve every risk and Root at the confirmation layer, retaining classification and execution capability binding. Off by default; the configuration choice persists. See [Full access](../guide/security-confirmation.md#development-full-access).
+
 Models and external data are untrusted. Models propose tool calls; local Tool Runtime validates arguments, prepares actions, assesses risk, selects confirmation, and executes. Model risk claims are not authoritative. Results come from actual execution; failed or truncated output is not complete evidence.
 
 Shell assessment primarily uses `brush-parser` AST, expansion/effect analysis, and filesystem/Android/privilege/network policies. Parsing failures, dynamic execution, nested shells, and unknown wrappers receive conservative treatment. Custom regex can only raise risk. Exact approved commands and Root plans bind to in-process capabilities; the execution broker reassesses and refuses mismatches.

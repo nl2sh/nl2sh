@@ -31,6 +31,7 @@ pub(in crate::web) struct Message {
 
 #[derive(Deserialize)]
 pub(in crate::web) struct Decision {
+    pub(in crate::web) policy: Option<ConfirmPolicy>,
     pub(in crate::web) session_id: String,
     pub(in crate::web) request_id: u64,
     pub(in crate::web) action: String,
@@ -58,6 +59,7 @@ pub(in crate::web) async fn get_state(
         .lock()
         .map_err(|_| anyhow!("web session lock poisoned"))?;
     Ok(Json(Snapshot {
+        confirmation_policy: current.approval_policy.get(),
         id: inner.id.clone(),
         title: inner.title.clone(),
         history: inner.history.clone(),
@@ -588,6 +590,35 @@ pub(in crate::web) async fn post_decision(
     Json(decision): Json<Decision>,
 ) -> ApiResult<String> {
     let current = session(&state, &decision.session_id)?;
+    if decision.action == "set_policy" {
+        let policy = decision.policy.context("confirmation policy missing")?;
+        let path = state.path.clone();
+        let current = current.clone();
+        let request_id = decision.request_id;
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("web session lock poisoned"))?;
+            if !matches!(inner.pending, Some(Pending::Approval { request_id: id, .. }) if id == request_id)
+                || inner.reply.as_ref().is_none_or(|reply| reply.is_closed())
+                || *current.cancel.borrow()
+            {
+                bail!("approval request changed or was cancelled")
+            }
+            let mut cfg = config::load_or_default_unvalidated(&path)?;
+            cfg.execute_confirm_policy = policy;
+            config::save_config(&path, &cfg)?;
+            current.approval_policy.set(policy);
+            inner.pending = None;
+            set_activity(&mut inner, "tool", None);
+            inner.reply.take().context("approval receiver missing")?
+                .send(Reply::Approval(ConfirmationDecision::SetPolicy(policy)))
+                .map_err(|_| anyhow!("approval request no longer active"))?;
+            drop(inner);
+            audit(&current, "confirmation_policy_changed", &format!("{policy:?}"));
+            notify(&current, "state");
+            Ok(())
+        }).await??;
+        return Ok("确认策略已保存，并已应用于当前会话和等待中的审批".into());
+    }
     let mut inner = current
         .inner
         .lock()

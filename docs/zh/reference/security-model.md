@@ -1,5 +1,7 @@
 # 安全模型
 
+显式开发例外：所有者选择 `execute_confirm_policy="full_access"` 或使用 `--full-access`，确认层自动批准全部风险及 Root，分类与执行能力绑定保持。默认关闭，配置选择可持久保存；详见[Full access](../guide/security-confirmation.md#full-access)。
+
 模型和外部数据均不可信。模型负责提出工具调用，本地 Tool Runtime 验证参数、准备动作、安全评估、选择确认方式后执行；风险不由模型自报。结果来自真实执行，禁止把失败或截断作为完整证据。
 
 Shell 主要通过 `brush-parser` AST、展开/副作用分析与文件系统/Android/提权/网络领域策略判定。解析失败、动态执行、嵌套 shell 和未知包装采用保守等级；自定义 regex 只提高风险。已批准的精确命令与 root 计划绑定到进程内能力，执行 broker 再评估，错误绑定拒绝。

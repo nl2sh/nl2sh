@@ -20,7 +20,7 @@ use toml_edit::{DocumentMut, Item};
 const MAX_CONFIG_BYTES: usize = 256 * 1024;
 const META: ToolMetadata = ToolMetadata {
     name: "nl2sh_config",
-    description: "Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Writes preserve other fields and comments and do not hot-reload the current task. New Web/protocol tasks reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.",
+    description: "Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Full access may only be enabled by the owner in TUI/Web settings or the CLI, never by this tool. Writes preserve other fields and comments and do not hot-reload the current task. New Web/protocol tasks reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.",
     category: ToolCategory::Configuration,
     risk: ToolRisk::ReadOnly,
     requires: &[],
@@ -240,7 +240,7 @@ fn describe(
         "api_type" => &["auto", "responses", "chat_completions"],
         "agent_mode" => &["fast", "normal", "deep"],
         "security_level" => &["strict", "balanced", "unsafe"],
-        "execute_confirm_policy" => &["always", "risk_only", "never"],
+        "execute_confirm_policy" => &["always", "risk_only", "never", "full_access"],
         "execute_user_mode" => &["auto", "normal", "root"],
         "ui_language" => &["zh_cn", "en"],
         "proxy_type" => &["http", "socks5", "socks5h"],
@@ -248,6 +248,9 @@ fn describe(
     };
     if !choices.is_empty() {
         result["allowed_values"] = json!(choices);
+    }
+    if key == "execute_confirm_policy" {
+        result["owner_only_values"] = json!(["full_access"]);
     }
     if let Some((group, leaf)) = key.split_once('.') {
         if group == "tool_groups" {
@@ -484,6 +487,11 @@ fn prepare_sync(active: Config, path: PathBuf, args: ConfigArgs) -> Result<Prepa
     if credentials().contains(&key.as_str()) {
         bail!("credential fields cannot be set/reset by the model; use /config or Web settings")
     }
+    if key == "execute_confirm_policy"
+        && args.value.as_ref().and_then(Value::as_str) == Some("full_access")
+    {
+        bail!("Full access can only be enabled by the owner in /config, Web settings or --full-access; the model configuration tool cannot enable it")
+    }
     if let Some(value) = &args.value {
         if serde_json::to_vec(value)?.len() > 16 * 1024 {
             bail!("configuration value exceeds 16 KiB")
@@ -682,6 +690,7 @@ mod tests {
             json!({"action":"set","key":"model","value":null}),
             json!({"action":"set","key":"execute_timeout_secs","value":0}),
             json!({"action":"set","key":"api_type","value":"invalid"}),
+            json!({"action":"set","key":"execute_confirm_policy","value":"full_access"}),
             json!({"action":"set","key":"api_key","value":"never-secret"}),
             json!({"action":"reset","key":"proxy_password"}),
             json!({"action":"set","key":"protocol_token","value":"never-secret"}),

@@ -21,6 +21,8 @@ nl2sh protocol approvals
 `nl2sh protocol serve` starts with the default configuration: `0.0.0.0:8765`, HTTP allowed, automatically detected advertised IPv4, and a generated token/connection output when the environment token is absent. Use `--host 127.0.0.1` for local only, `--allow-insecure-http=false` to refuse network HTTP, or `--advertised-url` for a proxy/VPN override.
 
 
+`--full-access` temporarily forces automatic approval of every risk and Root across all interfaces. You can also persist `execute_confirm_policy="full_access"` in settings. The CLI flag takes precedence: disable it by restarting without the flag and selecting an ordinary saved preference. Status reports the effective policy and CLI override separately. See [Full access](../guide/security-confirmation.md#development-full-access).
+
 ## Help exported from clap
 
 This includes the root command and every protocol subcommand; argument lists are not maintained manually.
@@ -45,6 +47,9 @@ Arguments:
 Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
       --config <CONFIG>
 
@@ -90,6 +95,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -109,6 +117,9 @@ Commands:
 Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help
@@ -132,6 +143,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -147,6 +161,9 @@ Options:
 
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help
@@ -170,6 +187,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -185,6 +205,9 @@ Options:
 
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help
@@ -216,6 +239,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -244,6 +270,9 @@ Options:
           [default: true]
           [possible values: true, false]
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -257,6 +286,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -269,6 +301,9 @@ Usage: approvals [OPTIONS]
 Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help
@@ -286,6 +321,9 @@ Arguments:
 Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help

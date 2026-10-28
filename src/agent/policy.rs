@@ -71,27 +71,83 @@ pub async fn confirm_assessed(
     request: &ConfirmationRequest<'_>,
     assessment: &SecurityAssessment,
 ) -> Result<ConfirmationDecision> {
-    if confirmer.approval_cancelled() {
-        return Ok(ConfirmationDecision::Reject);
-    }
-    let grant_request = crate::security::grants::GrantRequest {
-        tool: request.tool,
-        package: request.package,
-        risk: assessment.risk_level,
-        blocked: assessment.requires_root || assessment.requires_double_confirmation,
-    };
-    if let Some(id) = crate::security::grants::try_release(config, &grant_request).await? {
+    loop {
         if confirmer.approval_cancelled() {
             return Ok(ConfirmationDecision::Reject);
         }
-        return Ok(ConfirmationDecision::ApproveByGrant(id));
+        let policy = confirmer
+            .confirmation_policy_override()
+            .unwrap_or(config.execute_confirm_policy);
+        if crate::security::access::full_access_enabled()
+            || policy == crate::config::ConfirmPolicy::FullAccess
+        {
+            return Ok(ConfirmationDecision::ApproveByFullAccess);
+        }
+        if confirmer.confirmation_policy_override().is_some()
+            && policy != crate::config::ConfirmPolicy::Always
+            && config.security_level != crate::config::SecurityLevel::Strict
+            && assessment.risk_level == RiskLevel::ReadOnly
+            && !assessment.requires_root
+            && !assessment.requires_double_confirmation
+        {
+            return Ok(ConfirmationDecision::ApproveBySessionPolicy);
+        }
+        let grant_request = crate::security::grants::GrantRequest {
+            tool: request.tool,
+            package: request.package,
+            risk: assessment.risk_level,
+            blocked: assessment.requires_root || assessment.requires_double_confirmation,
+        };
+        if let Some(id) = crate::security::grants::try_release(config, &grant_request).await? {
+            if confirmer.approval_cancelled() {
+                return Ok(ConfirmationDecision::Reject);
+            }
+            return Ok(ConfirmationDecision::ApproveByGrant(id));
+        }
+        match confirmer
+            .confirm_with_policy(request, assessment, policy)
+            .await?
+        {
+            ConfirmationDecision::SetPolicy(selected) => {
+                if confirmer.confirmation_policy_override() != Some(selected) {
+                    anyhow::bail!("confirmation policy change was not applied to the session")
+                }
+            }
+            decision => return Ok(decision),
+        }
     }
-    confirmer.confirm(request, assessment).await
+}
+
+/// Includes a live session's `always` selection without altering the bound risk assessment.
+pub fn confirmation_required(
+    config: &crate::config::Config,
+    confirmer: &dyn Confirmer,
+    assessment: &SecurityAssessment,
+) -> bool {
+    assessment.requires_confirmation
+        || confirmer
+            .confirmation_policy_override()
+            .unwrap_or(config.execute_confirm_policy)
+            == crate::config::ConfirmPolicy::Always
 }
 
 #[async_trait]
 /// UI-independent approval interface invoked after every assessment.
 pub trait Confirmer: Send + Sync {
+    /// A live owner choice for this session, independent of the task's configuration snapshot.
+    fn confirmation_policy_override(&self) -> Option<crate::config::ConfirmPolicy> {
+        None
+    }
+
+    /// Presents the effective preference alongside the assessed operation.
+    async fn confirm_with_policy(
+        &self,
+        request: &ConfirmationRequest<'_>,
+        assessment: &SecurityAssessment,
+        _policy: crate::config::ConfirmPolicy,
+    ) -> Result<ConfirmationDecision> {
+        self.confirm(request, assessment).await
+    }
     /// Input images for this task, never supplied by local text interfaces.
     fn input_images(&self) -> Vec<crate::llm::ToolAttachment> {
         Vec::new()
@@ -134,6 +190,12 @@ pub trait Confirmer: Send + Sync {
 pub enum ConfirmationDecision {
     /// Execute the currently assessed command.
     Approve,
+    /// Execute under the owner's explicit Full access configuration or CLI policy.
+    ApproveByFullAccess,
+    /// A live ordinary session preference released an eligible read-only operation.
+    ApproveBySessionPolicy,
+    /// Owner UI saved and installed a policy; the shared boundary must reassess approval.
+    SetPolicy(crate::config::ConfirmPolicy),
     /// Execute using a consumed, scoped approval grant; never remember this decision.
     ApproveByGrant(String),
     /// Execute using the bidirectional interactive terminal bridge.

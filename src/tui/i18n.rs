@@ -75,6 +75,12 @@ pub(crate) fn startup_history(
             format!("{hint} Controls: Ctrl+C cancels or clears input; Ctrl+Q quits safely"),
         ],
     };
+    if crate::security::access::full_access_enabled() {
+        history.push(match language {
+            UiLanguage::ZhCn => "危险：Full access 已开启，所有操作自动批准（含危险 Root 指令）；关闭需不带 --full-access 重启。".into(),
+            UiLanguage::En => "DANGER: Full access auto-approves all operations, including destructive Root commands; restart without --full-access to disable.".into(),
+        });
+    }
     history.extend(support_history(show_buddha_ascii_art));
     if show_train_ascii_art {
         history.push(WELCOME_TRAIN_ANCHOR.into());
@@ -140,6 +146,12 @@ pub(crate) fn help_history(
             format!("{hint} Ctrl+C cancels or clears input; Ctrl+Q quits safely"),
         ],
     };
+    if crate::security::access::full_access_enabled() {
+        history.push(match language {
+            UiLanguage::ZhCn => "危险：Full access 已开启，所有操作自动批准（含危险 Root 指令）；关闭需不带 --full-access 重启。".into(),
+            UiLanguage::En => "DANGER: Full access auto-approves all operations, including destructive Root commands; restart without --full-access to disable.".into(),
+        });
+    }
     history.extend(support_history(show_buddha_ascii_art));
     history
 }

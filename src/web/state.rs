@@ -9,6 +9,7 @@ pub(in crate::web) struct Shared {
 }
 
 pub(in crate::web) struct WebSession {
+    pub(in crate::web) approval_policy: crate::agent::SessionConfirmationPolicy,
     pub(in crate::web) inner: Mutex<SessionState>,
     pub(in crate::web) persist: AsyncMutex<()>,
     pub(in crate::web) events: broadcast::Sender<String>,
@@ -89,6 +90,7 @@ pub(in crate::web) fn web_session(inner: SessionState) -> Arc<WebSession> {
     let (events, _) = broadcast::channel(128);
     let (cancel, _) = watch::channel(false);
     Arc::new(WebSession {
+        approval_policy: crate::agent::SessionConfirmationPolicy::default(),
         inner: Mutex::new(inner),
         persist: AsyncMutex::new(()),
         events,
@@ -327,6 +329,7 @@ pub(in crate::web) async fn persist_web_session(
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(in crate::web) enum Pending {
     Approval {
+        policy: ConfirmPolicy,
         request_id: u64,
         command: String,
         risk: String,
@@ -363,6 +366,7 @@ pub(in crate::web) enum Reply {
 
 #[derive(Serialize)]
 pub(in crate::web) struct Snapshot {
+    pub(in crate::web) confirmation_policy: Option<ConfirmPolicy>,
     pub(in crate::web) id: String,
     pub(in crate::web) title: String,
     pub(in crate::web) history: Vec<String>,

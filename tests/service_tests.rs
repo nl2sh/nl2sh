@@ -49,6 +49,200 @@ impl Drop for Fixture {
 }
 
 #[tokio::test]
+async fn full_access_service_forwards_policy_reports_it_and_resets_on_restart() {
+    let fixture = Fixture::new();
+    std::fs::write(
+        &fixture.config,
+        r#"
+protocol_start_with_service = true
+protocol_service_port = 0
+protocol_token = "full-access-service-test-token-0123456789"
+execute_confirm_policy = "always"
+[[security_rules]]
+id = "critical-probe"
+pattern = "full-access-probe"
+risk = "critical"
+message = "Harmless output used to test Critical approval"
+"#,
+    )
+    .unwrap();
+    let normal = fixture.status(&["start", "--port", "0", "--json"]).await;
+    assert_eq!(normal["full_access"], false);
+    let mismatch = fixture.call(&["start", "--full-access", "--json"]).await;
+    assert!(!mismatch.status.success());
+    assert!(String::from_utf8_lossy(&mismatch.stderr).contains("service restart"));
+    let enabled = fixture
+        .status(&["restart", "--full-access", "--port", "0", "--json"])
+        .await;
+    assert_eq!(enabled["full_access"], true);
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .unwrap();
+    let info: Value = client
+        .get(format!("http://127.0.0.1:{}/api/info", enabled["port"]))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(info["full_access"], true);
+    let port = reqwest::Url::parse(enabled["connections"]["mcp_url"].as_str().unwrap())
+        .unwrap()
+        .port()
+        .unwrap();
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let request = |body: Value| {
+        client
+            .post(&url)
+            .bearer_auth("full-access-service-test-token-0123456789")
+            .header("accept", "application/json, text/event-stream")
+            .json(&body)
+    };
+    request(serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"full-access-test","version":"1"}}}))
+        .send().await.unwrap().error_for_status().unwrap();
+    let result: Value = request(serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"nl2sh_invoke","arguments":{"tool":"execute_shell_command","arguments":{"command":"printf full-access-probe","reason":"verify Critical auto approval without executing destructive commands"}}}}))
+        .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    assert_eq!(
+        result["result"]["structuredContent"]["success"], true,
+        "{result}"
+    );
+    assert!(result["result"]["structuredContent"]["output"]
+        .as_str()
+        .unwrap()
+        .contains("risk=Critical"));
+    let status = fixture.status(&["status", "--json"]).await;
+    assert_eq!(
+        status["full_access"], true,
+        "status describes the child, not the controller"
+    );
+    let reset = fixture.status(&["restart", "--port", "0", "--json"]).await;
+    assert_eq!(reset["full_access"], false);
+    assert_ne!(enabled["pid"], reset["pid"]);
+}
+
+#[tokio::test]
+async fn web_selected_full_access_applies_to_new_tasks_persists_and_can_be_disabled() {
+    use nl2sh::config::{Config, ConfirmPolicy};
+    let fixture = Fixture::new();
+    std::fs::write(
+        &fixture.config,
+        r#"
+protocol_start_with_service = true
+protocol_service_port = 0
+protocol_token = "saved-full-access-test-token-0123456789"
+[[security_rules]]
+id = "critical-probe"
+pattern = "configured-full-access-probe"
+risk = "critical"
+message = "Harmless Critical approval probe"
+"#,
+    )
+    .unwrap();
+    let started = fixture.status(&["start", "--port", "0", "--json"]).await;
+    assert_eq!(started["full_access"], false);
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(15))
+        .build()
+        .unwrap();
+    let base = format!("http://127.0.0.1:{}", started["port"]);
+    let mut quick: Value = client
+        .get(format!("{base}/api/quick-settings"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    quick["confirm_policy"] = serde_json::json!("full_access");
+    client
+        .post(format!("{base}/api/quick-settings"))
+        .json(&quick)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let stored: Config =
+        toml::from_str(&std::fs::read_to_string(&fixture.config).unwrap()).unwrap();
+    assert_eq!(stored.execute_confirm_policy, ConfirmPolicy::FullAccess);
+    let status = fixture.status(&["status", "--json"]).await;
+    assert_eq!(status["pid"], started["pid"]);
+    assert_eq!(status["full_access"], true);
+    assert_eq!(status["full_access_cli"], false);
+    let info: Value = client
+        .get(format!("{base}/api/info"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(info["full_access"], true);
+    assert_eq!(info["full_access_cli"], false);
+    let port = reqwest::Url::parse(started["connections"]["mcp_url"].as_str().unwrap())
+        .unwrap()
+        .port()
+        .unwrap();
+    let rpc = |body: Value| {
+        client
+            .post(format!("http://127.0.0.1:{port}/mcp"))
+            .bearer_auth("saved-full-access-test-token-0123456789")
+            .header("accept", "application/json, text/event-stream")
+            .json(&body)
+    };
+    rpc(serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"saved-policy-test","version":"1"}}})).send().await.unwrap().error_for_status().unwrap();
+    let result: Value = rpc(serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"nl2sh_invoke","arguments":{"tool":"execute_shell_command","arguments":{"command":"printf configured-full-access-probe"}}}})).send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    assert_eq!(
+        result["result"]["structuredContent"]["success"], true,
+        "{result}"
+    );
+    assert!(result["result"]["structuredContent"]["output"]
+        .as_str()
+        .unwrap()
+        .contains("risk=Critical"));
+    let mut updated = stored;
+    updated.execute_confirm_policy = ConfirmPolicy::RiskOnly;
+    client
+        .post(format!("{base}/api/config"))
+        .body(toml::to_string(&updated).unwrap())
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let quick: Value = client
+        .get(format!("{base}/api/quick-settings"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(quick["full_access"], false);
+    assert_eq!(quick["confirm_policy"], "risk_only");
+    let disabled = fixture.status(&["status", "--json"]).await;
+    assert_eq!(disabled["pid"], started["pid"]);
+    assert_eq!(disabled["full_access"], false);
+    updated.execute_confirm_policy = ConfirmPolicy::FullAccess;
+    client
+        .post(format!("{base}/api/config"))
+        .body(toml::to_string(&updated).unwrap())
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let restarted = fixture.status(&["restart", "--port", "0", "--json"]).await;
+    assert_eq!(restarted["full_access"], true);
+    assert_eq!(restarted["full_access_cli"], false);
+    assert_ne!(restarted["pid"], started["pid"]);
+}
+
+#[tokio::test]
 async fn status_omits_token_and_web_displays_verified_connection_credentials() {
     let fixture = Fixture::new();
     let token = "connection-discovery-secret-token-0123456789";

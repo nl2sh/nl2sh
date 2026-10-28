@@ -13,6 +13,8 @@ pub(in crate::web) async fn get_info(
     };
     Ok(Json(serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"), "protocol": 1,
+        "full_access": crate::security::access::full_access_for(&cfg),
+        "full_access_cli": crate::security::access::full_access_enabled(),
         "runtime_policy": runtime_policy,
         "update_ownership": crate::update::ownership().await,
         "pid": std::process::id(), "uptime": state.started.elapsed().as_secs(),

@@ -27,7 +27,7 @@ impl ApiType {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-/// General user confirmation preference, subordinate to tool policy.
+/// Confirmation preference, including explicit unrestricted development approval.
 pub enum ConfirmPolicy {
     /// Confirm every command.
     Always,
@@ -36,6 +36,8 @@ pub enum ConfirmPolicy {
     RiskOnly,
     /// Skip general confirmation where mandatory safety policy permits.
     Never,
+    /// DANGER: automatically approve all risks, including destructive Root operations.
+    FullAccess,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -176,7 +178,7 @@ pub struct Config {
     pub execute_timeout_secs: u64,
     /// Interactive timeout; zero disables it.
     pub interactive_execute_timeout_secs: u64,
-    /// General confirmation preference.
+    /// Confirmation policy: always, risk_only, never, or dangerous full_access for all risks and Root.
     pub execute_confirm_policy: ConfirmPolicy,
     /// Safety posture.
     pub security_level: SecurityLevel,

@@ -75,9 +75,13 @@ impl TextDeltaSink for Silent {
 }
 
 pub(super) async fn inspect(path: &Path) -> Result<Value> {
-    let executor = ShellExecutor::new(load(path)?);
+    let cfg = load(path)?;
+    let full_access = crate::security::access::full_access_for(&cfg);
+    let executor = ShellExecutor::new(cfg);
     let mut environment: Value = serde_json::from_str(&inspect_environment(&executor).await?)?;
     environment["build_identity"] = crate::build_identity::running_identity().await?;
+    environment["full_access"] = full_access.into();
+    environment["full_access_cli"] = crate::security::access::full_access_enabled().into();
     Ok(environment)
 }
 pub(super) async fn tools(path: &Path) -> Result<Value> {

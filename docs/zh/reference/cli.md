@@ -21,6 +21,8 @@ nl2sh protocol approvals
 `nl2sh protocol serve` 使用默认配置，一条命令启动：默认 `0.0.0.0:8765`、允许 HTTP、自动获取公告 IPv4，缺少环境令牌时自动生成并打印连接信息。可用 `--host 127.0.0.1` 限制本机、`--allow-insecure-http=false` 禁止网络 HTTP、`--advertised-url` 覆盖代理/VPN 地址。
 
 
+`--full-access` 临时强制所有入口自动批准全部风险与 Root；配置也可持久保存 `execute_confirm_policy="full_access"`。启动参数优先，关闭时需不带参数重启且配置改为普通档；状态分别报告有效策略与 CLI 强制开关。详见[Full access](../guide/security-confirmation.md#full-access)。
+
 ## 从 clap 导出的帮助
 
 以下含根命令与全部 protocol 子命令，不手工维护参数列表。
@@ -45,6 +47,9 @@ Arguments:
 Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
       --config <CONFIG>
 
@@ -90,6 +95,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -109,6 +117,9 @@ Commands:
 Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help
@@ -132,6 +143,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -147,6 +161,9 @@ Options:
 
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help
@@ -170,6 +187,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -185,6 +205,9 @@ Options:
 
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help
@@ -216,6 +239,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -244,6 +270,9 @@ Options:
           [default: true]
           [possible values: true, false]
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -257,6 +286,9 @@ Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
 
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
+
   -h, --help
           Print help
 ```
@@ -269,6 +301,9 @@ Usage: approvals [OPTIONS]
 Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help
@@ -286,6 +321,9 @@ Arguments:
 Options:
       --allow-dangerous-grants
           DANGER: enable configured dangerous grants (root/strong/Critical still excluded)
+
+      --full-access
+          DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart
 
   -h, --help
           Print help

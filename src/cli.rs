@@ -105,6 +105,9 @@ pub struct Cli {
     /// DANGER: enable configured dangerous grants (root/strong/Critical still excluded).
     #[arg(long, global = true)]
     pub allow_dangerous_grants: bool,
+    /// DANGER: automatically approve ALL operations, including destructive Root commands, in every interface. For trusted development devices only; does not grant OS privileges. Pass again on each service start/restart.
+    #[arg(long, alias = "dangerously-full-access", global = true)]
+    pub full_access: bool,
     #[arg(long)]
     pub config: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "agent")]

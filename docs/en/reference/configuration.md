@@ -66,7 +66,7 @@ See [approval grants](../guide/security-confirmation.md#approval-grants) for sco
 | `llm_request_timeout_secs` | `60` | HTTP request timeout. |
 | `execute_timeout_secs` | `30` | Ordinary command timeout. |
 | `interactive_execute_timeout_secs` | `0` | Interactive timeout; zero disables it. |
-| `execute_confirm_policy` | `"risk_only"` | General confirmation preference. |
+| `execute_confirm_policy` | `"risk_only"` | Confirmation policy: always, risk_only, never, or dangerous full_access for all risks and Root. |
 | `security_level` | `"balanced"` | Safety posture. |
 | `protocol_start_with_service` | `false` | Start device HTTP MCP/A2A with Web/TUI services, including the managed background service. |
 | `protocol_service_port` | `8765` | Preferred MCP/A2A port with Web/TUI; occupied ports fall back to an available port, zero assigns one directly. |

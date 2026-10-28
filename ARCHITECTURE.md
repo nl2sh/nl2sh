@@ -228,6 +228,10 @@ ima 是这一通用 Provider 代理策略的显式例外：按产品边界使用
 
 ## 安全架构
 
+审批弹框通过 `SessionConfirmationPolicy` 保存原配置后的会话实时覆盖，`Confirmer` 只读暴露当前覆盖并接受带有效策略的展示请求。Web 用当前待决 ID、会话和取消状态绑定 `set_policy`，blocking worker 持会话状态锁保存并交回 `SetPolicy`；TUI P/方向键/Enter 在 worker 保存后才更新会话原子值及回复。共享 `confirm_assessed` 消费该内部决定并重新判断当前操作，普通只读可释放为 `ApproveBySessionPolicy`，修改/Root/strict/强确认保持，Full access 仍显式全风险自动批准。原风险评估与 Broker 命令能力不改写；Shell 的实时 always 要求在共享边界前补充确认，既有精确/运行许可保持原范围。普通档重开审批生成新编号并重置强确认。覆盖按 Web 会话/TUI 运行隔离，不从历史/检查点恢复，保存配置供新任务使用；状态/审计展示当前会话选择。未改 PTY、进程组、信号与终端恢复。
+
+确认策略 `execute_confirm_policy="full_access"` 为所有者显式选择的开发例外，与临时 `--full-access`（别名 `--dangerously-full-access`）共用 `full_access_for`。Web 完整设置/快捷菜单及 TUI 原确认策略选择均可保存该枚举；新 Web/协议/渠道任务加载，运行中快照不变，TUI 内保存重载。模型配置工具只读发现此档位，不能自行写入开启。CLI 强制开关优先，关闭需移除参数及普通配置。`confirm_assessed` 在取消检查后、凭据匹配前返回独立 `ApproveByFullAccess`，保留风险分类、参数/目标校验、精确命令与 Root 绑定、取消及限额；审计 `approved_by_full_access`。服务转发 CLI 参数，状态从运行进程启动记录与当前配置分别展示有效 `full_access`、强制 `full_access_cli`；配置切换无需重启后台服务，CLI 改变需 restart。Web 常驻危险提示，TUI 启动/状态与协议 inspect 可观察。不改变执行 UID 或工具开关。下文人工审批规则描述未开启 Full access 的默认模式。
+
 `ConfirmationRequest` 携带预览、工具及预备动作的可信包名；全部受管入口通过 `confirm_assessed` 在最终评估后求值授权凭据，再退回原 UI。`security::grants` 使用配置身份绑定的私有状态、跨进程 flock、原子替换与目录同步扣减次数，阻塞 I/O 位于 worker；每次确认重读模板，撤销持久化，批准不记忆为任务或运行许可。Critical、Root 与强确认始终排除；Dangerous 还需配置与显式 CLI 双开关。审计保留 approved_by_grant 与 grant_id。PTY/执行器路径不变。
 
 ```text

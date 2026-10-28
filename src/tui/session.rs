@@ -152,6 +152,11 @@ async fn run_inner(
         config.show_buddha_ascii_art,
         config.show_train_ascii_art,
     )));
+    if config.execute_confirm_policy == crate::config::ConfirmPolicy::FullAccess {
+        push_history(&history, localized_status(config.ui_language,
+            "危险：确认策略为 Full access，所有入口自动批准，包括危险 Root 指令。",
+            "DANGER: Full access confirmation policy auto-approves all interfaces, including destructive Root commands."), &log, "status")?;
+    }
     let output: Arc<dyn OutputSink> = Arc::new(SessionOutput {
         history: history.clone(),
         ascii: config.ascii_symbols,
@@ -166,7 +171,9 @@ async fn run_inner(
     let (confirm_tx, mut confirm_rx) = mpsc::unbounded_channel();
     let (question_tx, mut question_rx) = mpsc::unbounded_channel();
     let run_wide_approval = Arc::new(AtomicBool::new(false));
+    let session_policy = Arc::new(crate::agent::SessionConfirmationPolicy::default());
     let confirmer = SessionConfirmer {
+        policy: session_policy.clone(),
         confirm_tx,
         question_tx,
         run_wide_approval: run_wide_approval.clone(),
@@ -364,6 +371,7 @@ async fn run_inner(
                 .or_else(|| {
                     status_viewer.as_ref().map(|viewer| {
                         viewer.view(super::status::Live {
+                            confirmation_policy: session_policy.get(),
                             busy: active.is_some(),
                             phase: &app.status,
                             session: &session_name,
@@ -904,7 +912,37 @@ async fn run_inner(
                 continue;
             }
             if let Some(pending) = confirmation.as_mut() {
-                if pending.handle_key(key) {
+                let closed = pending.handle_key(key);
+                if let Some(policy) = pending.policy_requested.take() {
+                    let path = config.source.clone();
+                    let saved = tokio::task::spawn_blocking(move || -> Result<()> {
+                        let path = path.context("cannot locate configuration file")?;
+                        let mut updated = crate::config::load_or_default_unvalidated(&path)?;
+                        updated.execute_confirm_policy = policy;
+                        crate::config::save_config(&path, &updated)
+                    })
+                    .await?;
+                    match saved {
+                        Ok(()) => {
+                            session_policy.set(policy);
+                            log.record("confirmation_policy_changed", &format!("{policy:?}"))?;
+                            pending.finish(ConfirmationDecision::SetPolicy(policy));
+                            confirmation = None;
+                            app.status = localized_status(
+                                config.ui_language,
+                                "确认策略已保存，当前会话立即生效",
+                                "Confirmation policy saved and applied to this session",
+                            );
+                        }
+                        Err(_) => {
+                            pending.policy_error = Some(localized_status(
+                                config.ui_language,
+                                "保存失败，策略未修改；可重试或 Esc 返回",
+                                "Save failed; policy unchanged. Retry or Esc to return",
+                            ))
+                        }
+                    }
+                } else if closed {
                     confirmation = None;
                     app.status =
                         localized_status(config.ui_language, "智能体运行中", "agent running");
@@ -1189,6 +1227,19 @@ async fn run_inner(
                                 .strip_prefix("/permission")
                                 .unwrap_or_default()
                                 .trim();
+                            if crate::security::access::full_access_enabled()
+                                || session_policy
+                                    .get()
+                                    .unwrap_or(config.execute_confirm_policy)
+                                    == crate::config::ConfirmPolicy::FullAccess
+                            {
+                                app.status = localized_status(
+                                    config.ui_language,
+                                    "危险：Full access 已开启（含 Root）；在确认策略中改选并保存可关闭；CLI 强制开启需不带 --full-access 重启",
+                                    "DANGER: Full access includes Root; save another confirmation policy to disable; CLI override requires restart without --full-access",
+                                );
+                                continue;
+                            }
                             match argument {
                                 "allow" => {
                                     run_wide_approval.store(true, Ordering::Release);
@@ -1778,7 +1829,7 @@ async fn execute_direct_command_scoped(
     crate::audit::record_assessment(&command, &assessment);
     let mut interactive_override = None;
     let mut approved_command = None;
-    while assessment.requires_confirmation {
+    while crate::agent::confirmation_required(config, confirmer, &assessment) {
         let decision = crate::agent::confirm_assessed(
             config,
             confirmer,
@@ -1789,6 +1840,8 @@ async fn execute_direct_command_scoped(
         crate::audit::record_decision(&decision);
         match decision {
             ConfirmationDecision::Approve
+            | ConfirmationDecision::ApproveByFullAccess
+            | ConfirmationDecision::ApproveBySessionPolicy
             | ConfirmationDecision::ApproveByGrant(_)
             | ConfirmationDecision::ApproveForTask
             | ConfirmationDecision::ApproveForRun => {
@@ -1805,7 +1858,7 @@ async fn execute_direct_command_scoped(
                 approved_command = Some(command.clone());
                 break;
             }
-            ConfirmationDecision::Reject => {
+            ConfirmationDecision::Reject | ConfirmationDecision::SetPolicy(_) => {
                 anyhow::bail!("local command was not executed: confirmation rejected")
             }
             ConfirmationDecision::Edit(edited) => {
@@ -2255,6 +2308,21 @@ impl SettingsEditor {
                 "Group switches reset overrides; enabled tools still require safety approval".into()
             });
         }
+        if self.tab == 2 {
+            lines.push(if self.config.ui_language == UiLanguage::ZhCn {
+                "Full access：所有入口自动批准危险 / 严重 / Root 操作；保存后生效。".into()
+            } else {
+                "Full access auto-approves Dangerous / Critical / Root across all interfaces after saving.".into()
+            });
+            if crate::security::access::full_access_enabled() {
+                lines.push(if self.config.ui_language == UiLanguage::ZhCn {
+                    "--full-access 启动参数强制开启；改选策略后仍需不带该参数重启。".into()
+                } else {
+                    "CLI --full-access overrides the selection; restart without it to disable."
+                        .into()
+                });
+            }
+        }
         if self.tab == 7 {
             lines.extend(if self.config.ui_language == UiLanguage::ZhCn {
                 ["启动、端口和 token 修改后重启协议；后台用 service restart。",
@@ -2286,7 +2354,8 @@ impl SettingsEditor {
             footer: Vec::new(),
             scroll: 0,
             min_height: 11,
-            dangerous: false,
+            dangerous: self.tab == 2
+                && self.config.execute_confirm_policy == crate::config::ConfirmPolicy::FullAccess,
             informational: true,
         }
     }
@@ -2376,7 +2445,18 @@ impl SettingsEditor {
                 let mut fields = vec![
                     (
                         if zh { "确认策略" } else { "Confirmation" },
-                        format!("{:?}", self.config.execute_confirm_policy),
+                        if self.config.execute_confirm_policy
+                            == crate::config::ConfirmPolicy::FullAccess
+                        {
+                            if zh {
+                                "Full access（危险，含 Root）"
+                            } else {
+                                "Full access (DANGER, includes Root)"
+                            }
+                            .into()
+                        } else {
+                            format!("{:?}", self.config.execute_confirm_policy)
+                        },
                     ),
                     (
                         if zh { "安全级别" } else { "Security" },
@@ -2860,7 +2940,7 @@ impl SettingsEditor {
                 self.select_provider(direction);
             }
             (0, 3) => {
-                self.config.api_type = cycle3(
+                self.config.api_type = cycle_values(
                     self.config.api_type,
                     [ApiType::Auto, ApiType::Responses, ApiType::ChatCompletions],
                     direction,
@@ -2871,18 +2951,19 @@ impl SettingsEditor {
             (1, 3) => adjust_usize(&mut self.config.max_agent_steps, direction),
             (1, 4) => adjust_usize(&mut self.config.max_context_turns, direction),
             (2, 0) => {
-                self.config.execute_confirm_policy = cycle3(
+                self.config.execute_confirm_policy = cycle_values(
                     self.config.execute_confirm_policy,
                     [
                         ConfirmPolicy::Always,
                         ConfirmPolicy::RiskOnly,
                         ConfirmPolicy::Never,
+                        ConfirmPolicy::FullAccess,
                     ],
                     direction,
                 )
             }
             (2, 1) => {
-                self.config.security_level = cycle3(
+                self.config.security_level = cycle_values(
                     self.config.security_level,
                     [
                         SecurityLevel::Strict,
@@ -2893,7 +2974,7 @@ impl SettingsEditor {
                 )
             }
             (2, 2) => {
-                self.config.execute_user_mode = cycle3(
+                self.config.execute_user_mode = cycle_values(
                     self.config.execute_user_mode,
                     [
                         ExecuteUserMode::Auto,
@@ -2931,7 +3012,7 @@ impl SettingsEditor {
             }
             (4, 0) => self.config.proxy_enabled = !self.config.proxy_enabled,
             (4, 1) => {
-                self.config.proxy_type = cycle3(
+                self.config.proxy_type = cycle_values(
                     self.config.proxy_type,
                     [ProxyType::Http, ProxyType::Socks5, ProxyType::Socks5h],
                     direction,
@@ -3013,12 +3094,12 @@ fn adjust_usize_step(value: &mut usize, direction: i8, step: usize, minimum: usi
         value.saturating_sub(step).max(minimum)
     };
 }
-fn cycle3<T: Copy + PartialEq>(value: T, values: [T; 3], direction: i8) -> T {
+fn cycle_values<T: Copy + PartialEq, const N: usize>(value: T, values: [T; N], direction: i8) -> T {
     let index = values.iter().position(|item| *item == value).unwrap_or(0);
     values[if direction > 0 {
-        (index + 1) % 3
+        (index + 1) % N
     } else {
-        index.checked_sub(1).unwrap_or(2)
+        index.checked_sub(1).unwrap_or(N - 1)
     }]
 }
 
@@ -3135,6 +3216,7 @@ fn interactive_shell_command() -> &'static str {
 }
 
 struct ConfirmRequest {
+    policy: crate::config::ConfirmPolicy,
     command: String,
     assessment: SecurityAssessment,
     reply: oneshot::Sender<ConfirmationDecision>,
@@ -3146,6 +3228,7 @@ struct QuestionRequest {
 }
 
 struct SessionConfirmer {
+    policy: Arc<crate::agent::SessionConfirmationPolicy>,
     confirm_tx: mpsc::UnboundedSender<ConfirmRequest>,
     question_tx: mpsc::UnboundedSender<QuestionRequest>,
     run_wide_approval: Arc<AtomicBool>,
@@ -3153,6 +3236,9 @@ struct SessionConfirmer {
 
 #[async_trait]
 impl Confirmer for SessionConfirmer {
+    fn confirmation_policy_override(&self) -> Option<crate::config::ConfirmPolicy> {
+        self.policy.get()
+    }
     fn audit_source(&self) -> &'static str {
         "tui"
     }
@@ -3161,6 +3247,16 @@ impl Confirmer for SessionConfirmer {
         command: &crate::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        self.confirm_with_policy(command, assessment, self.policy.get().unwrap_or_default())
+            .await
+    }
+
+    async fn confirm_with_policy(
+        &self,
+        command: &crate::agent::ConfirmationRequest<'_>,
+        assessment: &SecurityAssessment,
+        policy: crate::config::ConfirmPolicy,
+    ) -> Result<ConfirmationDecision> {
         let command = command.preview;
         if self.run_wide_approval.load(Ordering::Acquire) && can_remember_approval(assessment) {
             return Ok(ConfirmationDecision::Approve);
@@ -3168,6 +3264,7 @@ impl Confirmer for SessionConfirmer {
         let (reply, response) = oneshot::channel();
         self.confirm_tx
             .send(ConfirmRequest {
+                policy,
                 command: command.into(),
                 assessment: assessment.clone(),
                 reply,
@@ -3392,9 +3489,13 @@ enum ConfirmationStage {
     Initial,
     Double,
     Edit,
+    Policy,
 }
 
 struct ConfirmationUi {
+    policy_choice: crate::config::ConfirmPolicy,
+    policy_requested: Option<crate::config::ConfirmPolicy>,
+    policy_error: Option<String>,
     request: Option<ConfirmRequest>,
     stage: ConfirmationStage,
     text: String,
@@ -3428,6 +3529,9 @@ const INITIAL_ACTIONS: [InitialAction; 7] = [
 impl ConfirmationUi {
     fn new(request: ConfirmRequest, language: UiLanguage) -> Self {
         Self {
+            policy_choice: request.policy,
+            policy_requested: None,
+            policy_error: None,
             request: Some(request),
             stage: ConfirmationStage::Initial,
             text: String::new(),
@@ -3491,6 +3595,42 @@ impl ConfirmationUi {
         };
         let mut footer = Vec::new();
         match self.stage {
+            ConfirmationStage::Policy => {
+                for policy in [
+                    crate::config::ConfirmPolicy::Always,
+                    crate::config::ConfirmPolicy::RiskOnly,
+                    crate::config::ConfirmPolicy::Never,
+                    crate::config::ConfirmPolicy::FullAccess,
+                ] {
+                    footer.push(format!(
+                        "{} {:?}{}",
+                        if policy == self.policy_choice {
+                            ">"
+                        } else {
+                            " "
+                        },
+                        policy,
+                        if policy == crate::config::ConfirmPolicy::FullAccess {
+                            " — DANGER: all risks / Root"
+                        } else {
+                            ""
+                        }
+                    ));
+                }
+                footer.push(match self.language {
+                    UiLanguage::ZhCn => "↑/↓ 或 ←/→ 选档；Enter 保存并立即应用；Esc 返回".into(),
+                    UiLanguage::En => {
+                        "Arrows select; Enter saves and applies now; Esc returns".into()
+                    }
+                });
+                footer.push(match self.language {
+                    UiLanguage::ZhCn => "Full access 会自动批准当前操作及本会话后续危险 / Root 操作。".into(),
+                    UiLanguage::En => "Full access auto-approves this operation and later Dangerous / Root actions in this session.".into(),
+                });
+                if let Some(error) = &self.policy_error {
+                    footer.push(error.clone());
+                }
+            }
             ConfirmationStage::Initial => footer.extend(self.initial_option_lines(request)),
             ConfirmationStage::Double => {
                 footer.push(match self.language {
@@ -3510,8 +3650,10 @@ impl ConfirmationUi {
             }
         }
         footer.push(match self.language {
-            UiLanguage::ZhCn => "PgUp/PgDn 或滚轮查看长内容".into(),
-            UiLanguage::En => "PgUp/PgDn or wheel scrolls long content".into(),
+            UiLanguage::ZhCn => "P 修改确认档位（立即生效）；PgUp/PgDn 或滚轮查看长内容".into(),
+            UiLanguage::En => {
+                "P: confirmation policy (applies now); PgUp/PgDn or wheel scrolls".into()
+            }
         });
         PopupView {
             title: match self.language {
@@ -3526,12 +3668,23 @@ impl ConfirmationUi {
             dangerous: matches!(
                 request.assessment.risk_level,
                 RiskLevel::Dangerous | RiskLevel::Critical
-            ),
+            ) || (matches!(self.stage, ConfirmationStage::Policy)
+                && self.policy_choice == crate::config::ConfirmPolicy::FullAccess),
             informational: false,
         }
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> bool {
+        if matches!(key.code, KeyCode::Char('p' | 'P'))
+            && !matches!(
+                self.stage,
+                ConfirmationStage::Edit | ConfirmationStage::Policy
+            )
+        {
+            self.stage = ConfirmationStage::Policy;
+            self.policy_error = None;
+            return false;
+        }
         match key.code {
             KeyCode::PageUp => {
                 self.scroll = self.scroll.saturating_sub(5);
@@ -3544,6 +3697,35 @@ impl ConfirmationUi {
             _ => {}
         }
         match self.stage {
+            ConfirmationStage::Policy => match key.code {
+                KeyCode::Left | KeyCode::Up | KeyCode::Right | KeyCode::Down => {
+                    self.policy_choice = cycle_values(
+                        self.policy_choice,
+                        [
+                            crate::config::ConfirmPolicy::Always,
+                            crate::config::ConfirmPolicy::RiskOnly,
+                            crate::config::ConfirmPolicy::Never,
+                            crate::config::ConfirmPolicy::FullAccess,
+                        ],
+                        if matches!(key.code, KeyCode::Left | KeyCode::Up) {
+                            -1
+                        } else {
+                            1
+                        },
+                    );
+                    false
+                }
+                KeyCode::Enter => {
+                    self.policy_requested = Some(self.policy_choice);
+                    false
+                }
+                KeyCode::Esc => {
+                    self.stage = ConfirmationStage::Initial;
+                    self.text.clear();
+                    false
+                }
+                _ => false,
+            },
             ConfirmationStage::Initial => match key.code {
                 KeyCode::Up => {
                     self.move_selection(-1);
@@ -3747,6 +3929,41 @@ impl ConfirmationUi {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_confirmation_cycles_through_full_access_and_preserves_it() -> Result<()> {
+        use crate::config::ConfirmPolicy;
+        let config = Config::default();
+        let mut editor = SettingsEditor::new(&config, 2);
+        editor.selected = 0;
+        editor.adjust(1); // risk_only -> never
+        editor.adjust(1); // never -> full_access
+        assert_eq!(
+            editor.config.execute_confirm_policy,
+            ConfirmPolicy::FullAccess
+        );
+        let view = editor.view(false);
+        assert!(view.dangerous);
+        assert!(view
+            .lines
+            .iter()
+            .any(|line| line.contains("Full access") && line.contains("Root")));
+        let saved = editor.config_with_protocol_port()?;
+        assert_eq!(
+            toml::from_str::<Config>(&toml::to_string(&saved)?)?.execute_confirm_policy,
+            ConfirmPolicy::FullAccess
+        );
+        editor.adjust(1);
+        assert_eq!(editor.config.execute_confirm_policy, ConfirmPolicy::Always);
+        editor.adjust(-1);
+        assert_eq!(
+            editor.config.execute_confirm_policy,
+            ConfirmPolicy::FullAccess
+        );
+        editor.adjust(-1);
+        assert_eq!(editor.config.execute_confirm_policy, ConfirmPolicy::Never);
+        Ok(())
+    }
 
     #[test]
     fn restored_chart_uses_text_values() -> Result<()> {
@@ -4091,6 +4308,7 @@ mod tests {
         (
             ConfirmationUi::new(
                 ConfirmRequest {
+                    policy: crate::config::ConfirmPolicy::RiskOnly,
                     command: command.into(),
                     assessment,
                     reply,
@@ -4265,6 +4483,49 @@ mod tests {
             rejected_response.try_recv(),
             Ok(ConfirmationDecision::Reject)
         );
+    }
+
+    #[test]
+    fn confirmation_popup_policy_selection_waits_for_save_and_can_be_cancelled() {
+        let (mut ui, mut response) = request("touch /tmp/policy-preview-only");
+        assert!(!ui.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE)));
+        assert!(matches!(ui.stage, ConfirmationStage::Policy));
+        assert!(ui
+            .view()
+            .footer
+            .iter()
+            .any(|line| line.contains("FullAccess")));
+        ui.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        ui.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert_eq!(ui.policy_choice, crate::config::ConfirmPolicy::FullAccess);
+        assert!(ui.view().dangerous);
+        assert!(!ui.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
+        assert_eq!(
+            ui.policy_requested.take(),
+            Some(crate::config::ConfirmPolicy::FullAccess)
+        );
+        assert!(matches!(
+            response.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+        ui.finish(ConfirmationDecision::SetPolicy(
+            crate::config::ConfirmPolicy::FullAccess,
+        ));
+        assert_eq!(
+            response.try_recv(),
+            Ok(ConfirmationDecision::SetPolicy(
+                crate::config::ConfirmPolicy::FullAccess
+            ))
+        );
+        let (mut cancelled, mut response) = request("touch /tmp/not-executed");
+        cancelled.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+        cancelled.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(cancelled.stage, ConfirmationStage::Initial));
+        assert!(cancelled.policy_requested.is_none());
+        assert!(matches!(
+            response.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
     }
 
     #[test]

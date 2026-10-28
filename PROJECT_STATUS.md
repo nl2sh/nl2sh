@@ -1,5 +1,31 @@
 # Project Status
 
+## v1.2.0 发布准备
+
+- Cargo 与锁文件同步为 1.2.0，双语更新记录汇总 v1.1.0 之后的原生 MCP/A2A、消息渠道、后台 Shell、作用域授权、Web 配置与 Full access/弹框实时确认策略。发布继续复用 Bridge/JADX v0.2.0、三 ABI、GPG 签名与 APT 快照工作流。
+- TUR 配方在不可变 v1.2.0 标签归档可下载后更新版本及实际 SHA-256；签名产物与正式发布结果以工作流及实际资产核验为准。
+- 发布门禁：格式、默认/包管理器 `cargo check --workspace --all-targets`、按权限及时序分组的完整 Rust 595 项通过、4 项既有忽略；40 项 Web 测试、生产构建、31 项脚本测试、发布 YAML/版本校验、派生参考及 51 对双语文档严格构建/渲染检查通过。合并运行曾出现锁等待/本地请求时序超时，相应用例独立复核通过，验证保留生产安全逻辑。
+
+
+## 审批弹框实时确认策略
+
+- Web 执行审批弹框提供四档快捷选择与“保存并立即应用于本会话”；TUI 审批按 P、方向键、Enter 保存，Esc 返回。保存原 `execute_confirm_policy` 后，通过隔离的会话实时覆盖让当前待决操作及后续调用立即应用，不需重新提交任务。
+- 共享确认边界消费内部策略变化再决定批准，Full access 覆盖危险/Critical/Root，普通档保留修改、Root、strict 与强确认。原评估与命令/Root 能力绑定不改写，取消先行，旧编号/补充信息请求不能改策略；普通档仍需审批时生成新编号并重置强确认，保存失败保留原权限与请求。
+- 会话覆盖不从历史/检查点恢复，其他已运行会话保持策略，新任务读取持久配置。状态展示会话选择，审计新增 `confirmation_policy_changed` / `approved_by_session_policy`。同步双语指南、更新记录及架构；Android PTY、进程组、信号与终端恢复实现不变。
+- 验证：`cargo fmt --all -- --check`、`cargo check`、按权限分组完整 Rust 套件 591 项通过、4 项既有忽略，包含五项 root 能力门控用例。新增回归覆盖当前与后续模拟 Critical/Root 执行、会话隔离、普通档风险边界/strict、取消时策略切换、Web 保存/旧编号拒绝/失败保留/强确认重新开始，以及 TUI P/选档/保存前不批准/Esc 返回。40 项 Web 测试、生产构建、Android API 26 ARMv7 release、双语派生参考与 51 对页面严格构建/渲染检查通过。
+
+
+## Full access 确认策略
+
+- 原 `execute_confirm_policy` 新增 `full_access`，Web 配置页/快捷审批菜单与 TUI“执行与安全”原确认策略均可选择并持久保存。默认仍为 `risk_only`，新 Web/协议/渠道任务加载新策略，运行中任务快照保持；TUI 内保存重载，外部修改需重启 TUI。
+- 该档位在共享确认层自动批准全部风险，包括 Dangerous、Critical、Root 与强确认，保留分类、参数/目标复核、精确命令/Root 绑定、取消及限额。`ApproveByFullAccess` 审计为 `approved_by_full_access`，不消耗作用域授权，不改变执行 UID 或可选工具开关。模型配置工具可读取档位但不能自行开启。
+- `--full-access` / `--dangerously-full-access` 保留为当前进程的强制覆盖，优先于持久配置；关闭时需移除启动参数并保存普通档位。Web 常驻提示与 TUI 危险设置样式明确范围，状态接口分别报告有效 `full_access` 与强制 `full_access_cli`，服务状态读取最新配置，无需重启来应用新任务的配置策略。
+- 同步双语安全模型、确认/CLI/Web 指南、示例与生成参考。Android PTY、进程组、信号与终端恢复实现不变。
+- 验证：配置 TOML/JSON 往返与普通默认、TUI 四档正反循环/危险预览/保存、配置 Full access 的 Agent 模拟 Critical/Root 执行/取消/关闭恢复、CLI 覆盖、模型设置拒绝与不改文件回归通过。原生服务验证 Web 快捷与完整配置 API 保存/关闭、新 MCP Critical 无害命令免确认、相同 PID 即时策略状态及不带 CLI 重启后持久恢复；40 项 Web 测试和生产构建通过。 `cargo fmt --all -- --check`、`cargo check`、按权限分组完整 Rust 套件 584 项通过、4 项既有忽略；五项 Android 能力门控回归以 root 身份通过。双语派生参考、51 对页面与严格 MkDocs/渲染检查通过。Android API 26 ARMv7 release 构建与 API 34 ARMv7 Root 真机运行 ELF/源码身份核对通过；实际 Web 快捷配置保存持久 `full_access`，同一 PID 的状态及原生 MCP 验证 `full_access=true`、`full_access_cli=false`，Dangerous Root 无害命令免人工确认并记录专用审计，其他已有配置值保持。
+
+
+- Web 执行与安全配置补充全部枚举选项含义及七个字段的常驻说明，解释 strict/always 的只读 Shell 审批、结构化工具风险、当前 UID 与提权、超时、Web 管道及危险授权双开关；同步双语 Web 指南和更新记录。仅展示与文档变更，无公共配置、Android 执行、安全确认或 PTY 生命周期变化。 验证：`npm run build --prefix web`、40 项前端测试、`cargo fmt --all -- --check`、`cargo check`、双语页面检查、严格 MkDocs 构建与渲染检查通过。
+
 - Web 配置新增多行 `system_prompt` 补充指令，默认空值；共享 Agent 追加到内置提示词，下一次 Web 任务生效，TUI 重启读取。不改变 Android、执行安全、Root 或 PTY 路径。
 
 
@@ -69,7 +95,7 @@
 - 公共工具 Schema 和双语指南同步；Android API 26+、三 ABI 与 Security → Confirmation → Execution 保持，未改 PTY/终端恢复。
 - 验证：Rust 分权限回归 517 项通过、4 项既有忽略；格式与 all-targets 检查通过，Android API 26 ARMv7/ARM64/x86_64 编译检查通过。双语派生参考、50 对页面、严格 MkDocs 与渲染后检查通过。Helper 39 项单元测试、debug/release 构建与 lint 通过。前次 API 34 组件验收为 1 项通过、1 项因其他应用遮挡跳过；随后独立运行端与 API 35 模拟器端到端验收见下方记录。严格 Clippy 被既有告警阻断。
 
-Last Updated: 2026-10-11
+Last Updated: 2026-10-28
 
 ## Recent Changes
 
@@ -461,12 +487,12 @@ Last Updated: 2026-10-11
 
 ## Current Phase
 
-当前 Cargo 版本为 1.1.0；设备 MCP/A2A 已替代主机网关。实现与验证范围见 Recent Changes 与 Verification Performed；历史版本设备验证不代替当前协议入口的真机验收。
+当前 Cargo 版本为 1.2.0；设备 MCP/A2A 已替代主机网关。实现与验证范围见 Recent Changes 与 Verification Performed；历史版本设备验证不代替当前协议入口的真机验收。
 
 ## Overall Status
 
 - Product positioning: 以 Android 原生 shell 为一等环境、Termux 为兼容环境的类 Hermes AI Agent；核心程序以单个可执行文件交付，提供多轮 Tool Calling 和丰富 TUI，不声称与 Hermes API 或插件兼容。
-- Build status: 当前 Cargo 版本为 1.1.0；构建与测试结果见下方 Verification Performed。
+- Build status: 当前 Cargo 版本为 1.2.0；构建与测试结果见下方 Verification Performed。
 - Test status: 最近按权限分组的验证结果见 Recent Changes 与 Verification Performed；显式 live 测试默认忽略，部分 Android UI/ADB 回归需要 root。
 - Android cross-compile status: GitHub Actions 使用 NDK r28c、API 26 构建 `aarch64-linux-android`、`armv7-linux-androideabi` 与 `x86_64-linux-android` release 产物。
 - Android device validation: 已完成真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵。
@@ -525,7 +551,7 @@ Last Updated: 2026-10-11
 - 命令审批使用固定 `1-7` 列表，支持方向键/Enter 与 `y/a/r/n/e/i/t` 别名；可在当前 Agent 任务内记住完全相同的普通命令，但 Root、Dangerous、Critical 和强确认命令始终禁用该选项，且许可不持久化、不做前缀匹配。
 - 审批区域使用完整风险色边框和统一 `background_alt` 面板背景；阶段切换保持稳定最小高度并清空整个面板，避免列表字符残留到强确认或编辑画面。
 - 审批面板锚定在输入区正上方的左下角；初始审批忽略孤立 Esc 和大写 CSI 尾字符，避免 adb 将方向键拆分后误触拒绝或 always 导致弹窗消失。
-- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.1.0。
+- MIT `LICENSE` 已纳入仓库；Cargo 版本为 1.2.0。
 - 实时 TUI、捕获式工具结果、发给模型的 Tool Result、JSONL 单事件和单文件均有可配置上限；截断会插入明确标记。
 - TUI 输出与历史生命周期已从 session 控制器拆为独立模块，同时保留新的审批菜单和任务级精确命令许可。
 - 真机 root/非 root、修改确认、命令超时和全屏交互程序验证矩阵已完成，覆盖提权与确认链、超时回收，以及全屏程序退出后的终端恢复和 TUI 重绘。

@@ -20,6 +20,10 @@ async fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     let cli = Cli::parse();
+    if cli.full_access {
+        nl2sh::security::access::enable_full_access();
+        eprintln!("DANGER: FULL ACCESS enabled. All interfaces automatically approve every operation, including destructive Root commands. All clients that can reach this process can act with its permissions.");
+    }
     if cli.allow_dangerous_grants {
         nl2sh::security::grants::enable_dangerous_grants();
         eprintln!("WARNING: dangerous approval grants enabled; matching operations may execute without a human prompt.");
@@ -29,6 +33,12 @@ async fn run() -> Result<()> {
         Some(p) => p.clone(),
         None => config::default_config_path()?,
     };
+    if !cli.full_access
+        && config::load_or_default_unvalidated(&path)
+            .is_ok_and(|cfg| cfg.execute_confirm_policy == config::ConfirmPolicy::FullAccess)
+    {
+        eprintln!("DANGER: saved execute_confirm_policy=full_access automatically approves all risks, including destructive Root operations, across every interface.");
+    }
     if let Some(Command::Service { command }) = &cli.command {
         use nl2sh::service::{Operation, Service};
         let service = Service::new(&path)?;
@@ -562,7 +572,10 @@ async fn run_command_scoped(
         .await?;
         nl2sh::audit::record_decision(&decision);
         match decision {
-            ConfirmationDecision::Approve | ConfirmationDecision::ApproveByGrant(_) => {
+            ConfirmationDecision::Approve
+            | ConfirmationDecision::ApproveByFullAccess
+            | ConfirmationDecision::ApproveBySessionPolicy
+            | ConfirmationDecision::ApproveByGrant(_) => {
                 approved_command = Some(command.clone());
                 break;
             }
@@ -580,7 +593,7 @@ async fn run_command_scoped(
                 approved_command = Some(command.clone());
                 break;
             }
-            ConfirmationDecision::Reject => {
+            ConfirmationDecision::Reject | ConfirmationDecision::SetPolicy(_) => {
                 anyhow::bail!("command was not executed: confirmation refused or unavailable")
             }
             ConfirmationDecision::Edit(edited) => {

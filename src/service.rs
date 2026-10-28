@@ -37,6 +37,10 @@ pub enum Operation {
 /// Public status omits the private shutdown token and process identity internals.
 #[derive(Debug, Serialize)]
 pub struct Status {
+    /// Whether the verified service was started with unrestricted development approval.
+    pub full_access: bool,
+    /// Whether a startup flag forces Full access regardless of the saved preference.
+    pub full_access_cli: bool,
     /// Lifecycle protocol version.
     pub protocol: u32,
     /// `ready`, `starting`, or `stopped`.
@@ -58,11 +62,12 @@ impl Status {
     /// Compact human-readable summary.
     pub fn summary(&self) -> String {
         let mut text = format!(
-            "Web: {} pid={} port={} version={}",
+            "Web: {} pid={} port={} version={} full_access={}",
             self.state,
             self.pid.map_or_else(|| "-".into(), |v| v.to_string()),
             self.port.map_or_else(|| "-".into(), |v| v.to_string()),
-            self.version.as_deref().unwrap_or("-")
+            self.version.as_deref().unwrap_or("-"),
+            self.full_access
         );
         if let Some(port) = self.port {
             text.push_str(&format!("\nWeb URL: http://127.0.0.1:{port}"));
@@ -77,6 +82,8 @@ impl Status {
 
 #[derive(Serialize, Deserialize)]
 struct Record {
+    #[serde(default)]
+    full_access: bool,
     protocol: u32,
     pid: u32,
     uid: u32,
@@ -205,7 +212,16 @@ impl Service {
             return Ok(stopped());
         }
         let ready = self.healthy(&record).await;
+        let config_path = self.config.clone();
+        let saved_full_access = tokio::task::spawn_blocking(move || {
+            crate::config::load_or_default_unvalidated(&config_path).is_ok_and(|cfg| {
+                cfg.execute_confirm_policy == crate::config::ConfirmPolicy::FullAccess
+            })
+        })
+        .await?;
         Ok(Status {
+            full_access: record.full_access || saved_full_access,
+            full_access_cli: record.full_access,
             protocol: 1,
             state: if ready { "ready" } else { "starting" },
             pid: Some(record.pid),
@@ -262,6 +278,9 @@ impl Service {
     async fn start(&self, port: u16, strict: bool) -> Result<Status> {
         let status = self.status().await?;
         if status.state == "ready" {
+            if crate::security::access::full_access_enabled() && !status.full_access {
+                bail!("existing service has Full access disabled; use --full-access service restart to change its startup policy")
+            }
             return Ok(status);
         }
         if status.pid.is_some() {
@@ -269,6 +288,9 @@ impl Service {
         }
         let log = private_file(&self.dir.join("service.log"), true)?;
         let mut command = Command::new(std::env::current_exe()?);
+        if crate::security::access::full_access_enabled() {
+            command.arg("--full-access");
+        }
         if crate::security::grants::dangerous_grants_enabled() {
             command.arg("--allow-dangerous-grants");
         }
@@ -404,6 +426,7 @@ impl Service {
         let mut random = [0u8; 32];
         File::open("/dev/urandom")?.read_exact(&mut random)?;
         let record = Record {
+            full_access: crate::security::access::full_access_enabled(),
             protocol: 1,
             pid,
             uid: nix::unistd::geteuid().as_raw(),
@@ -466,6 +489,8 @@ fn private_file(path: &Path, append: bool) -> Result<File> {
 
 fn stopped() -> Status {
     Status {
+        full_access: false,
+        full_access_cli: false,
         protocol: 1,
         state: "stopped",
         pid: None,
@@ -566,6 +591,7 @@ mod tests {
         let pid = std::process::id();
         let metadata = fs::metadata(format!("/proc/{pid}/exe")).unwrap();
         let mut record = Record {
+            full_access: false,
             protocol: 1,
             pid,
             uid: nix::unistd::geteuid().as_raw(),

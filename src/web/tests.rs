@@ -6,11 +6,273 @@ mod tests {
     use crate::config::ApiType;
     use crate::llm::{FinishReason, LlmResponse, ToolCall, ToolResult, Usage};
     use std::io::Read;
+    use std::time::Duration;
     use tempfile::tempdir;
     use wiremock::{
         matchers::{body_string_contains, method, path},
         Mock, MockServer, ResponseTemplate,
     };
+
+    async fn pending_approval_id(current: &WebSession) -> Result<u64> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let id = current
+                    .inner
+                    .lock()
+                    .ok()
+                    .and_then(|inner| match inner.pending {
+                        Some(Pending::Approval { request_id, .. }) => Some(request_id),
+                        _ => None,
+                    });
+                if let Some(id) = id {
+                    return Ok(id);
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await?
+    }
+
+    #[tokio::test]
+    async fn popup_ordinary_policy_reissues_strong_approval_and_rejects_old_ids() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "execute_confirm_policy='always'\n")?;
+        let cfg = config::load_or_default_unvalidated(&path)?;
+        let shared = state(path);
+        let current = session(&shared, "web-test")?;
+        let task = tokio::spawn({
+            let current = current.clone();
+            let shared = shared.clone();
+            async move {
+                let command = "eval 'printf harmless'";
+                crate::agent::confirm_assessed(
+                    &cfg,
+                    &WebConfirmer {
+                        session: current,
+                        state: Some(shared),
+                    },
+                    &crate::agent::ConfirmationRequest::shell(command),
+                    &crate::security::assess(command, &cfg),
+                )
+                .await
+            }
+        });
+        let first = pending_approval_id(&current).await?;
+        post_decision(
+            State(shared.clone()),
+            Json(policy_decision("web-test", first, ConfirmPolicy::RiskOnly)),
+        )
+        .await
+        .map_err(|e| e.error)?;
+        let second = pending_approval_id(&current).await?;
+        assert_ne!(first, second);
+        assert!(!task.is_finished());
+        assert!(matches!(
+            current.inner.lock().map_err(|_| anyhow!("lock"))?.pending,
+            Some(Pending::Approval {
+                policy: ConfirmPolicy::RiskOnly,
+                strong: true,
+                armed: false,
+                ..
+            })
+        ));
+        let decision = |request_id, action: &str| Decision {
+            session_id: "web-test".into(),
+            request_id,
+            action: action.into(),
+            policy: None,
+            text: None,
+            answers: None,
+        };
+        assert!(
+            post_decision(State(shared.clone()), Json(decision(first, "approve")))
+                .await
+                .is_err()
+        );
+        assert!(
+            post_decision(State(shared.clone()), Json(decision(second, "approve")))
+                .await
+                .is_err()
+        );
+        post_decision(State(shared.clone()), Json(decision(second, "arm")))
+            .await
+            .map_err(|e| e.error)?;
+        post_decision(State(shared), Json(decision(second, "approve")))
+            .await
+            .map_err(|e| e.error)?;
+        assert_eq!(task.await??, ConfirmationDecision::ApproveCaptured);
+        Ok(())
+    }
+
+    fn policy_decision(id: &str, request_id: u64, policy: ConfirmPolicy) -> Decision {
+        Decision {
+            session_id: id.into(),
+            request_id,
+            action: "set_policy".into(),
+            policy: Some(policy),
+            text: None,
+            answers: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn popup_policy_saves_and_applies_to_pending_and_later_calls_without_changing_other_sessions(
+    ) -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "execute_confirm_policy='always'\nenable_pty=false\n")?;
+        let cfg = config::load_or_default_unvalidated(&path)?;
+        let shared = state(path.clone());
+        let current = session(&shared, "web-test")?;
+        let target = dir.path().join("pending.txt");
+        let task = tokio::spawn({
+            let cfg = cfg.clone();
+            let current = current.clone();
+            let shared = shared.clone();
+            let target = target.clone();
+            async move {
+                crate::tools::runtime::invoke(
+                    &cfg,
+                    &ShellExecutor::new(cfg.clone()),
+                    &WebConfirmer {
+                        session: current,
+                        state: Some(shared),
+                    },
+                    "apply_patch",
+                    serde_json::json!({"path":target,"old_text":"","new_text":"pending released"}),
+                )
+                .await
+            }
+        });
+        let id = pending_approval_id(&current).await?;
+        let before = std::fs::read(&path)?;
+        assert!(post_decision(
+            State(shared.clone()),
+            Json(policy_decision(
+                "web-test",
+                id + 1,
+                ConfirmPolicy::FullAccess
+            ))
+        )
+        .await
+        .is_err());
+        assert_eq!(std::fs::read(&path)?, before);
+        assert_eq!(current.approval_policy.get(), None);
+        post_decision(
+            State(shared.clone()),
+            Json(policy_decision("web-test", id, ConfirmPolicy::FullAccess)),
+        )
+        .await
+        .map_err(|e| e.error)?;
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), task)
+                .await???
+                .success
+        );
+        assert_eq!(std::fs::read_to_string(&target)?, "pending released");
+        assert_eq!(
+            config::load_or_default_unvalidated(&path)?.execute_confirm_policy,
+            ConfirmPolicy::FullAccess
+        );
+        let confirmer = WebConfirmer {
+            session: current.clone(),
+            state: Some(shared.clone()),
+        };
+        let result = crate::tools::runtime::invoke(&cfg, &ShellExecutor::new(cfg.clone()), &confirmer, "apply_patch", serde_json::json!({"path":target,"old_text":"pending released","new_text":"later call"})).await?;
+        assert!(result.success);
+        assert_eq!(std::fs::read_to_string(&target)?, "later call");
+        assert!(current
+            .inner
+            .lock()
+            .map_err(|_| anyhow!("lock"))?
+            .pending
+            .is_none());
+        let other = web_session(SessionState::empty());
+        assert_eq!(other.approval_policy.get(), None);
+        let assessment = crate::security::assess("touch /tmp/unused", &cfg);
+        let task = tokio::spawn({
+            let other = other.clone();
+            let shared = shared.clone();
+            async move {
+                crate::agent::confirm_assessed(
+                    &cfg,
+                    &WebConfirmer {
+                        session: other,
+                        state: Some(shared),
+                    },
+                    &crate::agent::ConfirmationRequest::shell("touch /tmp/unused"),
+                    &assessment,
+                )
+                .await
+            }
+        });
+        pending_approval_id(&other).await?;
+        other.cancel.send_replace(true);
+        assert_eq!(task.await??, ConfirmationDecision::Reject);
+        assert!(post_decision(
+            State(shared),
+            Json(policy_decision("web-test", id, ConfirmPolicy::Always))
+        )
+        .await
+        .is_err());
+        assert_eq!(
+            config::load_or_default_unvalidated(&path)?.execute_confirm_policy,
+            ConfirmPolicy::FullAccess
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn popup_policy_save_failure_keeps_pending_request_and_live_policy_unchanged(
+    ) -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("config.toml");
+        std::fs::create_dir(&path)?;
+        let shared = state(path);
+        let current = session(&shared, "web-test")?;
+        let (tx, rx) = oneshot::channel();
+        {
+            let mut inner = current.inner.lock().map_err(|_| anyhow!("lock"))?;
+            inner.pending = Some(Pending::Approval {
+                policy: ConfirmPolicy::RiskOnly,
+                request_id: 77,
+                command: "test".into(),
+                risk: "Dangerous".into(),
+                explanation: "test".into(),
+                root: true,
+                strong: true,
+                armed: false,
+            });
+            inner.reply = Some(tx);
+        }
+        assert!(post_decision(
+            State(shared.clone()),
+            Json(policy_decision("web-test", 77, ConfirmPolicy::FullAccess))
+        )
+        .await
+        .is_err());
+        assert_eq!(current.approval_policy.get(), None);
+        assert_eq!(pending_approval_id(&current).await?, 77);
+        post_decision(
+            State(shared),
+            Json(Decision {
+                session_id: "web-test".into(),
+                request_id: 77,
+                action: "reject".into(),
+                policy: None,
+                text: None,
+                answers: None,
+            }),
+        )
+        .await
+        .map_err(|e| e.error)?;
+        assert!(matches!(
+            rx.await?,
+            Reply::Approval(ConfirmationDecision::Reject)
+        ));
+        Ok(())
+    }
 
     #[tokio::test]
     async fn ui_server_starts_configured_protocol_and_shares_owner_connection_details() -> Result<()>
@@ -409,6 +671,7 @@ mod tests {
                 .map_err(|_| anyhow!("web lock poisoned"))?;
             inner.busy = true;
             inner.pending = Some(Pending::Approval {
+                policy: ConfirmPolicy::RiskOnly,
                 request_id,
                 command: "touch /tmp/x".into(),
                 risk: "Mutating".into(),
@@ -456,6 +719,7 @@ mod tests {
                 .map_err(|_| anyhow!("web lock poisoned"))?;
             inner.busy = true;
             inner.pending = Some(Pending::Approval {
+                policy: ConfirmPolicy::RiskOnly,
                 request_id,
                 command: "rm -rf /tmp/test".into(),
                 risk: "Dangerous".into(),
@@ -467,6 +731,7 @@ mod tests {
             inner.reply = Some(reply);
         }
         let decision = |action: &str| Decision {
+            policy: None,
             session_id: "web-test".into(),
             request_id,
             action: action.into(),
@@ -476,6 +741,7 @@ mod tests {
         assert!(post_decision(
             State(shared.clone()),
             Json(Decision {
+                policy: None,
                 request_id: request_id.saturating_add(1),
                 ..decision("arm")
             })
@@ -521,6 +787,7 @@ mod tests {
     #[test]
     fn consecutive_pending_requests_have_distinct_frontend_identities() -> Result<()> {
         let first = Pending::Approval {
+            policy: ConfirmPolicy::RiskOnly,
             request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
             command: "same command".into(),
             risk: "Mutating".into(),
@@ -530,6 +797,7 @@ mod tests {
             armed: false,
         };
         let second = Pending::Approval {
+            policy: ConfirmPolicy::RiskOnly,
             request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
             command: "same command".into(),
             risk: "Mutating".into(),

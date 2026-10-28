@@ -302,6 +302,9 @@ pub(in crate::web) fn approval_explanation(assessment: &SecurityAssessment) -> S
 
 #[async_trait]
 impl Confirmer for WebConfirmer {
+    fn confirmation_policy_override(&self) -> Option<ConfirmPolicy> {
+        self.session.approval_policy.get()
+    }
     fn approval_cancelled(&self) -> bool {
         *self.session.cancel.borrow()
     }
@@ -320,8 +323,23 @@ impl Confirmer for WebConfirmer {
         command: &crate::agent::ConfirmationRequest<'_>,
         assessment: &SecurityAssessment,
     ) -> Result<ConfirmationDecision> {
+        self.confirm_with_policy(
+            command,
+            assessment,
+            self.confirmation_policy_override().unwrap_or_default(),
+        )
+        .await
+    }
+
+    async fn confirm_with_policy(
+        &self,
+        command: &crate::agent::ConfirmationRequest<'_>,
+        assessment: &SecurityAssessment,
+        policy: ConfirmPolicy,
+    ) -> Result<ConfirmationDecision> {
         let command = command.preview;
         let pending = Pending::Approval {
+            policy,
             request_id: PENDING_SEQUENCE.fetch_add(1, Ordering::Relaxed),
             command: command.to_owned(),
             risk: format!("{:?}", assessment.risk_level),

@@ -82,7 +82,7 @@ pub(in crate::web) async fn run_terminal_command_scoped(
     let mut assessment = crate::security::assess(&command, &cfg);
     crate::audit::record_assessment(&command, &assessment);
     let mut approved_command = None;
-    while assessment.requires_confirmation {
+    while crate::agent::confirmation_required(&cfg, &confirmer, &assessment) {
         let decision = crate::agent::confirm_assessed(
             cfg,
             &confirmer,
@@ -93,6 +93,8 @@ pub(in crate::web) async fn run_terminal_command_scoped(
         crate::audit::record_decision(&decision);
         match decision {
             ConfirmationDecision::Approve
+            | ConfirmationDecision::ApproveByFullAccess
+            | ConfirmationDecision::ApproveBySessionPolicy
             | ConfirmationDecision::ApproveByGrant(_)
             | ConfirmationDecision::ApproveCaptured
             | ConfirmationDecision::ApproveInteractive
@@ -101,7 +103,9 @@ pub(in crate::web) async fn run_terminal_command_scoped(
                 approved_command = Some(command.clone());
                 break;
             }
-            ConfirmationDecision::Reject => bail!("command rejected"),
+            ConfirmationDecision::Reject | ConfirmationDecision::SetPolicy(_) => {
+                bail!("command rejected")
+            }
             ConfirmationDecision::Edit(edited) => {
                 command = edited;
                 assessment = crate::security::assess(&command, &cfg);

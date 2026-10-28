@@ -468,3 +468,7 @@ button:disabled { opacity: .45; }
 .channel-invite-qr { display:block; width:min(100%,240px); height:auto; margin:12px auto; background:#fff; }
 
 .config-row textarea { resize: vertical; min-height: 10rem; font: inherit; line-height: 1.5; }
+
+.config-row .config-help { margin-top: .4rem; font-family: inherit; line-height: 1.6; }
+
+.approval fieldset{display:grid;gap:.6rem;min-width:0;border:1px solid var(--border);border-radius:8px;margin:1rem 0;padding:.8rem}.approval fieldset select{width:100%;min-width:0}.approval fieldset p{margin:0}

@@ -3412,7 +3412,7 @@ List requested and declared manifest permissions; does not infer installed grant
 
 ## `nl2sh_config`
 
-Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Writes preserve other fields and comments and do not hot-reload the current task. New Web/protocol tasks reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.
+Manage nl2sh's active configuration with list/get/set/reset. Read persisted settings and the current task snapshot, defaults and write policy before changing a key. Use native JSON values; dotted keys are supported for tool_groups and tool_overrides. reset removes a persisted override. All writes require approval; security, privilege, tool availability, network and audit changes require strong approval. Credentials are redacted and can only be edited by the user in settings. Full access may only be enabled by the owner in TUI/Web settings or the CLI, never by this tool. Writes preserve other fields and comments and do not hot-reload the current task. New Web/protocol tasks reload; restart TUI to apply. Prefer this tool over editing config with shell or apply_patch.
 
 | Descriptor | Value |
 | --- | --- |

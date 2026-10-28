@@ -118,8 +118,8 @@ pub fn run_wizard(path: &Path) -> Result<()> {
     let confirm = prompt(
         label(
             ui_language,
-            "确认策略 (always/risk_only/never)",
-            "Confirmation policy (always/risk_only/never)",
+            "确认策略 (always/risk_only/never/full_access=DANGER)",
+            "Confirmation policy (always/risk_only/never/full_access=DANGER)",
         ),
         "risk_only",
     )?;
@@ -145,6 +145,7 @@ pub fn run_wizard(path: &Path) -> Result<()> {
             ("always", ConfirmPolicy::Always),
             ("risk_only", ConfirmPolicy::RiskOnly),
             ("never", ConfirmPolicy::Never),
+            ("full_access", ConfirmPolicy::FullAccess),
         ],
     )?;
     let execute_user_mode = parse(

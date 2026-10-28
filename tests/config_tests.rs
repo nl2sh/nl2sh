@@ -6,6 +6,26 @@ use std::fs;
 use tempfile::tempdir;
 
 #[test]
+fn full_access_policy_round_trips_and_is_not_the_default() -> anyhow::Result<()> {
+    use nl2sh::config::ConfirmPolicy;
+    assert_eq!(
+        Config::default().execute_confirm_policy,
+        ConfirmPolicy::RiskOnly
+    );
+    let cfg: Config = toml::from_str("execute_confirm_policy = 'full_access'")?;
+    assert_eq!(cfg.execute_confirm_policy, ConfirmPolicy::FullAccess);
+    assert_eq!(
+        toml::from_str::<Config>(&toml::to_string(&cfg)?)?.execute_confirm_policy,
+        ConfirmPolicy::FullAccess
+    );
+    assert_eq!(
+        serde_json::from_value::<Config>(serde_json::to_value(&cfg)?)?.execute_confirm_policy,
+        ConfirmPolicy::FullAccess
+    );
+    Ok(())
+}
+
+#[test]
 fn normal_toml_and_defaults() -> anyhow::Result<()> {
     let dir = tempdir()?;
     let path = dir.path().join("config.toml");

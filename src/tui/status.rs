@@ -17,6 +17,7 @@ pub(super) struct Viewer {
     scroll: u16,
 }
 pub(super) struct Live<'a> {
+    pub confirmation_policy: Option<crate::config::ConfirmPolicy>,
     pub busy: bool,
     pub phase: &'a str,
     pub session: &'a str,
@@ -122,7 +123,11 @@ impl Viewer {
         };
     }
     pub fn view(&self, live: Live<'_>) -> PopupView {
-        let cfg = &self.config;
+        let mut effective = self.config.clone();
+        if let Some(policy) = live.confirmation_policy {
+            effective.execute_confirm_policy = policy;
+        }
+        let cfg = &effective;
         let l = cfg.ui_language;
         let mut lines = vec![
             format!(
@@ -149,13 +154,14 @@ impl Viewer {
                 label(l, "轮上下文", "context turns")
             ),
             format!(
-                "{}: {:?} / {:?} · {:?} · {} {}",
+                "{}: {:?} / {:?} · {:?} · {} {} · Full access: {}",
                 label(l, "安全与执行", "Safety / execution"),
                 cfg.security_level,
                 cfg.execute_confirm_policy,
                 cfg.execute_user_mode,
                 label(l, "普通修改运行期许可", "Run-wide mutation approval"),
-                live.run_permission
+                live.run_permission,
+                crate::security::access::full_access_for(cfg)
             ),
             String::new(),
             format!(
@@ -429,6 +435,7 @@ mod tests {
             scroll: 0,
         };
         let view = viewer.view(Live {
+            confirmation_policy: None,
             busy: true,
             phase: "private-key\u{1b} protocol-private",
             session: "test",

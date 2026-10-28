@@ -1,6 +1,12 @@
 # Changelog
 
-## 2026-10-11
+## [Unreleased]
+
+## [1.2.0] - 2026-10-28
+
+- Added four-policy quick settings to Web/TUI approval dialogs, saving and immediately applying to the current session and pending operation, with session isolation, stale/cancelled-request rejection, failure preservation and ordinary-mode strong review.
+
+- Added persistent `full_access` confirmation policy to the existing Web editor, quick approval menu and TUI selector, automatically approving Dangerous/Critical/Root across all interfaces. Retain ordinary defaults, risk classification, binding and audits. `--full-access` remains a temporary forced override; status distinguishes saved policy and CLI override.
 
 - Add multiline additional system instructions to Web configuration; new tasks use saved changes while retaining built-in tool guidance, security classification, and execution approval.
 
@@ -16,7 +22,7 @@ Device acceptance fixed the two-second UI baseline limit: baseline reads and pos
 
 Added optional UI action postconditions and directed device-clock log windows, preserving approval and identity checks; failed verification never replays actions, and partial trees cannot prove absence.
 
-## [Unreleased]
+- Add short explanations for every Web execution and safety setting, clarifying read-only Shell approval, elevation, timeouts, PTY and dangerous grant scope.
 
 - Added shared Agent/MCP/A2A channel discovery and message sending, compatible WeChat Markdown, native QQ Markdown and interactive approval buttons; channel approval language follows ui_language and defaults to Chinese.
 

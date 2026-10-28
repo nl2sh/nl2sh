@@ -2,6 +2,8 @@ use super::super::*;
 
 #[derive(Serialize)]
 pub(in crate::web) struct QuickSettings {
+    pub(in crate::web) full_access: bool,
+    pub(in crate::web) full_access_cli: bool,
     pub(in crate::web) endpoint: String,
     pub(in crate::web) model: String,
     pub(in crate::web) provider_ready: bool,
@@ -114,6 +116,8 @@ pub(in crate::web) async fn get_quick_settings(
 ) -> ApiResult<Json<QuickSettings>> {
     let cfg = load_config(state.path.clone()).await?;
     Ok(Json(QuickSettings {
+        full_access: crate::security::access::full_access_for(&cfg),
+        full_access_cli: crate::security::access::full_access_enabled(),
         endpoint: cfg.endpoint.clone(),
         model: cfg.model.clone(),
         provider_ready: cfg.provider_is_configured(),

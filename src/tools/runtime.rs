@@ -73,13 +73,14 @@ pub(crate) async fn execute_prepared_operation(
         let decision = decision?;
         crate::audit::decision(&decision);
         match decision {
-            ConfirmationDecision::Approve | ConfirmationDecision::ApproveByGrant(_) | ConfirmationDecision::ApproveForTask
+            ConfirmationDecision::Approve | ConfirmationDecision::ApproveByFullAccess
+            | ConfirmationDecision::ApproveBySessionPolicy | ConfirmationDecision::ApproveByGrant(_) | ConfirmationDecision::ApproveForTask
             | ConfirmationDecision::ApproveCaptured | ConfirmationDecision::ApproveInteractive => {}
             ConfirmationDecision::ApproveForRun if crate::agent::can_remember_approval(&assessment) => {}
             ConfirmationDecision::Edit(_) => return Ok(ToolOutput::refused(
                 "Tool not executed: edit is unavailable for a prepared operation; request a new call.",
             )),
-            ConfirmationDecision::Reject | ConfirmationDecision::ApproveForRun => return Ok(ToolOutput::refused(
+            ConfirmationDecision::Reject | ConfirmationDecision::SetPolicy(_) | ConfirmationDecision::ApproveForRun => return Ok(ToolOutput::refused(
                 "Tool not executed: user rejected the prepared operation.",
             )),
         }
@@ -177,7 +178,7 @@ async fn invoke_scoped(
                     assessment.requires_root,
                     assessment.requires_confirmation,
                 );
-                if !assessment.requires_confirmation {
+                if !crate::agent::confirmation_required(config, confirmer, &assessment) {
                     break (assessment, None);
                 }
                 let preview = if args.background {
@@ -198,6 +199,8 @@ async fn invoke_scoped(
                 crate::audit::decision(&decision);
                 match decision {
                     ConfirmationDecision::Approve
+                    | ConfirmationDecision::ApproveByFullAccess
+                    | ConfirmationDecision::ApproveBySessionPolicy
                     | ConfirmationDecision::ApproveByGrant(_)
                     | ConfirmationDecision::ApproveForTask
                     | ConfirmationDecision::ApproveCaptured

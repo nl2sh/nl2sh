@@ -9,6 +9,22 @@ Interactive startup also listens on `0.0.0.0:9999`, choosing another available p
 Enter multiline instructions in “Configuration → Model and Agent → Additional system prompt” and save, for example response language, style, or standing preferences. The TOML field is `system_prompt`; leave it empty to restore defaults. Instructions are appended to the built-in Agent prompt, preserving tool rules and runtime information. They cannot bypass security classification, execution approval, or Root checks. The setting applies to the shared Agent: the next Web task loads the new value, running tasks retain their snapshot, and TUI sessions need a restart.
 
 
+## Execution and safety settings
+
+“Configuration → Execution and Safety” adds short meanings to dropdown options and persistent explanations beside every field:
+
+| Field | Options and meaning |
+| --- | --- |
+| `execute_confirm_policy` | `always`: confirm every Shell command, including reads; `risk_only`: confirm by risk, usually run reads directly; `never`: minimize confirmation while retaining mandatory approvals.; `full_access`: Full access (DANGER, includes Root), persist automatic approval of every risk across all interfaces. |
+| `security_level` | `strict`: confirm all Shell commands, including reads; `balanced`: usually run reads directly and approve mutations; `unsafe`: legacy permissive preference that retains mandatory approvals. |
+| `execute_user_mode` | `auto`: elevate when local assessment requires it; `normal`: request no su elevation, without dropping existing Root identity; `root`: request Root execution, requiring existing Root or available su and approval for every Shell command. |
+| `execute_timeout_secs` | Ordinary foreground Shell execution limit in seconds, greater than zero; excludes approval waits and terminates/reaps timed-out processes. Background tasks have a separate limit. |
+| `interactive_execute_timeout_secs` | Interactive Shell execution limit in seconds; zero disables this timeout. |
+| `enable_pty` | Use a pseudo-terminal for ordinary terminal execution, or pipes when disabled; Web Agent uses pipes and the interactive terminal uses its dedicated PTY. |
+| `allow_dangerous_grants` | Dangerous grant templates also require the startup flag `--allow-dangerous-grants`; this creates no grants, and templates cannot release Root, Critical, or strong-confirmation operations. |
+
+Either `strict` or `always` sends read-only Shell commands through approval. Choose `balanced` + `risk_only` to run reads automatically; structured tools use their own assessed risk. Mutations and elevation still require approval, and high risk requires a second confirmation; existing matching grants release only their allowed scope. Tasks containing multiple tool calls assess each operation separately. New Web tasks read saved settings; running tasks retain their snapshots. See [safety approvals](security-confirmation.md).
+
 ## MCP / A2A settings
 
 The “MCP / A2A” settings category brings together `protocol_start_with_service` (start with Web/TUI), `protocol_service_port` (0–65535; zero selects an available port), `protocol_token`, and `protocol_auto_approve`. Token input is masked. Leave it empty to generate a token at startup, or enter 32–256 printable ASCII characters without spaces. The `NL2SH_PROTOCOL_TOKEN` environment variable takes priority.
@@ -99,3 +115,7 @@ Click the Tailcat icon and label at the top right. The dialog selects the actual
 Confirming or retrying automatically stops the previous managed Tailcat listener and starts sharing again. The dialog stays open after success or failure until explicitly closed.
 
 See [WeChat and QQ message channels](channels.md) for management. Channel tasks accept one-shot approvals in their originating conversation, independently of MCP/A2A local approvals and protocol auto-approval.
+
+Both the configuration editor and advanced quick approval menu offer `full_access` (Full access, DANGER, includes Root). Saving persists automatic approval of all risks across all interfaces for new tasks. Web displays a danger notice; saving an ordinary preference disables it for new tasks. If CLI `--full-access` forces the policy, the notice explains that restart without the flag is still required. See [development Full access](security-confirmation.md#development-full-access).
+
+The approval dialog offers all four confirmation policies, saving the choice and immediately applying it to the current session and pending operation. Full access auto-approves pending and later Dangerous/Root operations; ordinary modes retain required approval, and failed saves do not change permissions. Other running sessions keep their policies. See [dialog policy changes](security-confirmation.md).

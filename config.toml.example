@@ -42,6 +42,8 @@ llm_request_timeout_secs = 60
 
 execute_timeout_secs = 30
 interactive_execute_timeout_secs = 0
+# always / risk_only / never / full_access
+# DANGER: full_access persists automatic approval of ALL risks and Root across every interface.
 execute_confirm_policy = "risk_only"
 security_level = "balanced"
 # Explicitly auto-approve all device MCP/A2A service operations, including dangerous ones.
